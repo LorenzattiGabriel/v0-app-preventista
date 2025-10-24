@@ -30,7 +30,7 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
       ),
       order_items (
         *,
-        products (
+        products:product_id (
           *
         )
       )

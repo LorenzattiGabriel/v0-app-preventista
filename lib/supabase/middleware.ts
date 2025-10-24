@@ -25,16 +25,14 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // Redirect to login if not authenticated and not on auth pages
-  if (!user && !request.nextUrl.pathname.startsWith("/auth") && request.nextUrl.pathname !== "/") {
-    const url = request.nextUrl.clone()
-    url.pathname = "/auth/login"
-    return NextResponse.redirect(url)
+  // Skip auth check for API routes (especially /api/auth/*)
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return supabaseResponse
   }
 
+  // IMPORTANT: We're using simple authentication with localStorage, not Supabase Auth
+  // So we skip the auth check entirely and let the app handle auth on the client side
+  // The middleware just updates the Supabase session (which will be empty)
+  
   return supabaseResponse
 }

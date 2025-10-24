@@ -34,7 +34,7 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
       ),
       order_items (
         *,
-        products (
+        products:product_id (
           *
         )
       )

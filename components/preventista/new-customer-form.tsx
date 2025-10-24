@@ -59,7 +59,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
       const customerCode = customerCodeData as string
 
       // Create customer
-      const { error: customerError } = await supabase.from("customers").insert({
+      const { data: newCustomer, error: customerError } = await supabase.from("customers").insert({
         code: customerCode,
         commercial_name: commercialName,
         contact_name: contactName,
@@ -81,11 +81,17 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         zone_id: zoneId || null,
         created_by: userId,
         observations: observations || null,
-      })
+      }).select().single()
 
       if (customerError) throw customerError
 
-      router.push("/preventista/customers")
+      // Guardar el ID del cliente recién creado para seleccionarlo automáticamente
+      if (newCustomer) {
+        sessionStorage.setItem('newly_created_customer_id', newCustomer.id)
+      }
+
+      // Redirigir de vuelta a crear pedido
+      router.push("/preventista/orders/new")
       router.refresh()
     } catch (err) {
       console.error("[v0] Error creating customer:", err)
@@ -99,9 +105,9 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="outline" asChild type="button">
-          <Link href="/preventista/dashboard">
+          <Link href="/preventista/orders/new">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
+            Volver al Pedido
           </Link>
         </Button>
       </div>
@@ -329,10 +335,10 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
 
       <div className="flex gap-4 justify-end">
         <Button type="button" variant="outline" asChild>
-          <Link href="/preventista/dashboard">Cancelar</Link>
+          <Link href="/preventista/orders/new">Cancelar</Link>
         </Button>
         <Button type="submit" disabled={isLoading} size="lg">
-          {isLoading ? "Guardando..." : "Guardar Cliente"}
+          {isLoading ? "Guardando..." : "Guardar Cliente y Continuar"}
         </Button>
       </div>
     </form>

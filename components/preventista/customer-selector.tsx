@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -19,6 +19,19 @@ interface CustomerSelectorProps {
 export function CustomerSelector({ customers, onSelect, selectedCustomer }: CustomerSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState("")
+
+  // Detectar si hay un cliente recién creado y seleccionarlo automáticamente
+  useEffect(() => {
+    const newlyCreatedCustomerId = sessionStorage.getItem('newly_created_customer_id')
+    if (newlyCreatedCustomerId && !selectedCustomer) {
+      const newCustomer = customers.find(c => c.id === newlyCreatedCustomerId)
+      if (newCustomer) {
+        onSelect(newCustomer)
+        // Limpiar el sessionStorage
+        sessionStorage.removeItem('newly_created_customer_id')
+      }
+    }
+  }, [customers, selectedCustomer, onSelect])
 
   const filteredCustomers = customers.filter(
     (customer) =>

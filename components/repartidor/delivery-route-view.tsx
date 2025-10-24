@@ -81,6 +81,12 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
         })
       }
 
+      // Abrir Google Maps con ruta hardcodeada
+      // Origen: Córdoba Capital (-31.4201, -64.1888)
+      // Destino: Santa Rosa de Río Primero (-31.1334, -63.5167)
+      const googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/-31.1334,-63.5167`
+      window.open(googleMapsUrl, '_blank')
+
       router.refresh()
     } catch (err) {
       console.error("[v0] Error starting route:", err)
@@ -337,9 +343,31 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
 
                   <div className="flex flex-col gap-2">
                     {order.status !== "ENTREGADO" && route.status === "EN_CURSO" && (
-                      <Button onClick={() => handleOpenDeliveryDialog(order)} size="sm">
-                        Confirmar Entrega
-                      </Button>
+                      <>
+                        <Button onClick={() => handleOpenDeliveryDialog(order)} size="sm">
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Marcar Entregado
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Abrir Google Maps con dirección del cliente
+                            const address = `${order.customers.street} ${order.customers.street_number}, ${order.customers.locality}, ${order.customers.province}, Argentina`
+                            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+                            window.open(mapsUrl, '_blank')
+                          }}
+                        >
+                          <MapPin className="mr-2 h-4 w-4" />
+                          Navegar
+                        </Button>
+                      </>
+                    )}
+                    {order.status === "ENTREGADO" && (
+                      <Badge variant="default" className="justify-center py-2">
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Completado
+                      </Badge>
                     )}
                     <Button variant="outline" size="sm" asChild>
                       <Link href={`/repartidor/orders/${order.id}`}>Ver Detalle</Link>

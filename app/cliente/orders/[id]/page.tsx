@@ -38,7 +38,7 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
       *,
       order_items (
         *,
-        products (
+        products:product_id (
           *
         )
       )

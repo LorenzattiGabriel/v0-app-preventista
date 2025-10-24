@@ -37,7 +37,7 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
           ),
           order_items (
             *,
-            products (
+            products:product_id (
               *
             )
           )
