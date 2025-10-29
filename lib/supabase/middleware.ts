@@ -25,18 +25,36 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Don't check auth for public routes
-  const publicRoutes = ["/", "/auth/login", "/auth/error"]
-  const isPublicRoute = publicRoutes.some((route) => request.nextUrl.pathname === route)
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/auth")
-
-  if (isPublicRoute || isAuthRoute) {
-    return supabaseResponse
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // If user is authenticated and on login page, redirect to dashboard
+  if (user && request.nextUrl.pathname === "/auth/login") {
+    // Get user profile to determine role
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const roleRoutes: Record<string, string> = {
+      preventista: "/preventista/dashboard",
+      encargado_armado: "/armado/dashboard",
+      repartidor: "/repartidor/dashboard",
+      cliente: "/cliente/dashboard",
+      administrativo: "/admin/dashboard",
+    }
+
+    const url = request.nextUrl.clone()
+    url.pathname = profile?.role ? roleRoutes[profile.role] : "/"
+    return NextResponse.redirect(url)
+  }
+
+  // Allow access to auth routes
+  if (request.nextUrl.pathname.startsWith("/auth") || request.nextUrl.pathname === "/") {
+    return supabaseResponse
+  }
 
   // Redirect to login if not authenticated
   if (!user) {

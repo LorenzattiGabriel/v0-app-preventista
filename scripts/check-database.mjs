@@ -82,7 +82,7 @@ if (allOk) {
   
   console.log('\n🚀 La aplicación está lista para usar!')
   console.log('   Ejecuta: npm run dev')
-  console.log('   Login: http://localhost:3000/auth/simple-login')
+  console.log('   Login: http://localhost:3000/auth/login')
   
 } else {
   console.log('⚠️  Algunas tablas tienen errores.')
