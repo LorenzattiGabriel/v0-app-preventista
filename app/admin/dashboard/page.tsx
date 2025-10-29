@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { BarChart3, MapPin, Package, Truck, Users, FileText } from "lucide-react"
+import { LogoutButton } from "@/components/logout-button"
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
@@ -61,11 +62,7 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{profile.full_name}</span>
-            <form action="/auth/logout" method="post">
-              <Button variant="outline" size="sm">
-                Cerrar Sesión
-              </Button>
-            </form>
+            <LogoutButton />
           </div>
         </div>
       </header>

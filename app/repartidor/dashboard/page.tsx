@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Truck, MapPin, CheckCircle, Clock, Package } from "lucide-react"
+import { LogoutButton } from "@/components/logout-button"
 
 export default async function RepartidorDashboardPage() {
   const supabase = await createClient()
@@ -98,11 +99,7 @@ export default async function RepartidorDashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{profile.full_name}</span>
-            <form action="/auth/logout" method="post">
-              <Button variant="outline" size="sm">
-                Cerrar Sesión
-              </Button>
-            </form>
+            <LogoutButton />
           </div>
         </div>
       </header>
