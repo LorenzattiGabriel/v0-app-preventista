@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Package, Users, FileText, Clock } from "lucide-react"
+import { Package, FileText, Clock, Calendar } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 
 export default async function PreventistaDashboardPage() {
@@ -23,6 +23,20 @@ export default async function PreventistaDashboardPage() {
   }
 
   // Get statistics
+  // Calcular inicio de la semana (lunes)
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Si es domingo (0), retroceder 6 días
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() + diff)
+  startOfWeek.setHours(0, 0, 0, 0)
+
+  const { count: weekOrders } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("created_by", user.id)
+    .gte("created_at", startOfWeek.toISOString())
+
   const { count: totalOrders } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
@@ -39,8 +53,6 @@ export default async function PreventistaDashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("created_by", user.id)
     .eq("status", "BORRADOR")
-
-  const { count: totalCustomers } = await supabase.from("customers").select("*", { count: "exact", head: true })
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -67,12 +79,23 @@ export default async function PreventistaDashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Esta Semana</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{weekOrders || 0}</div>
+                <p className="text-xs text-muted-foreground">Pedidos desde el lunes</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Pedidos</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders || 0}</div>
-                <p className="text-xs text-muted-foreground">Pedidos creados por ti</p>
+                <p className="text-xs text-muted-foreground">Todos tus pedidos</p>
               </CardContent>
             </Card>
 
@@ -95,17 +118,6 @@ export default async function PreventistaDashboardPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{draftOrders || 0}</div>
                 <p className="text-xs text-muted-foreground">Pedidos sin confirmar</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Clientes</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalCustomers || 0}</div>
-                <p className="text-xs text-muted-foreground">Clientes registrados</p>
               </CardContent>
             </Card>
           </div>
