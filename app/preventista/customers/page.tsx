@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { PlusCircle } from "lucide-react"
+import { ArrowLeft, PlusCircle } from "lucide-react"
 import { CustomersClient } from "@/components/preventista/customers-client"
 import { Customer } from "@/types/customer"
 
@@ -39,25 +39,29 @@ export default async function PreventistaCustomersPage() {
   return (
     <div className="flex min-h-screen w-full flex-col gap-5">
 
-      <div className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Mis Clientes</h1>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button asChild size="sm" className="h-8 gap-1">
-            <Link href="/preventista/customers/new">
-              <PlusCircle className="h-3.5 w-3.5" />
-              <span className="sr-only sm:not-sr-only">Nuevo Cliente</span>
+      <div className="flex items-center justify-between px-4 sm:px-6 ">
+        <Button variant="outline" asChild>
+          <Link href="/preventista/dashboard">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Volver al Panel
+          </Link>
+        </Button>
 
+        <Button asChild size="sm" className="h-8 gap-1">
+            <Link href="/preventista/customers/new">
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span className="sr-only sm:not-sr-only">Nuevo Cliente</span>
             </Link>
-          </Button>
-        </div>
+        </Button>
       </div>
+
 
       <div className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
         <Card className="w-full">
           <CardHeader>
-            <CardTitle>Clientes</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Clientes</span>
+            </CardTitle>
             <CardDescription>Gestiona tus clientes y visualiza su información.</CardDescription>
           </CardHeader>
           <CardContent>

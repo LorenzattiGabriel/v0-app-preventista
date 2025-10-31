@@ -23,6 +23,7 @@ export default async function PreventistaLayout({
     redirect("/auth/login")
   }
 
+
   return (
     <div className="flex min-h-screen w-full flex-col">
       <Header profile={profile} />

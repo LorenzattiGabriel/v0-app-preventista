@@ -1,12 +1,13 @@
 import { Package } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import Link from "next/link"
+import { HeaderSubtitle } from "./HeaderSubtitle"
 
 interface HeaderProps {
   profile: {
     full_name: string
     role: string
-  }
+  };
 }
 
 export function Header({ profile }: HeaderProps) {
@@ -26,6 +27,7 @@ export function Header({ profile }: HeaderProps) {
             <LogoutButton />
           </div>
         </div>
+        <HeaderSubtitle />
       </header>
       )
 }
