@@ -307,15 +307,15 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
             </RadioGroup>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 ">
             <input
               type="checkbox"
               id="requiresInvoice"
               checked={requiresInvoice}
               onChange={(e) => setRequiresInvoice(e.target.checked)}
-              className="h-4 w-4"
+              className="h-4 w-4 hover:cursor-pointer "
             />
-            <Label htmlFor="requiresInvoice" className="font-normal">
+            <Label htmlFor="requiresInvoice" className="font-normal hover:cursor-pointer ">
               Requiere Factura
             </Label>
           </div>
