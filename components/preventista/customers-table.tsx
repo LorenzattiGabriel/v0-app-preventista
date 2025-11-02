@@ -1,6 +1,13 @@
 import { Customer } from "@/types/customer"
 import { Button } from "../ui/button"
 import { MoreHorizontal } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu"
 
 type CustomersTableProps = {
   customers: Customer[]
@@ -60,10 +67,17 @@ export default function CustomersTable({ customers, onSelectCustomer }: Customer
                 </span>
               </td>
               <td className="p-4 align-middle text-right">
-                <Button variant="ghost" size="icon" onClick={() => onSelectCustomer(customer)}>
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Ver detalles</span>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">Abrir menú</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onSelectCustomer(customer)}>Ver Detalles</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </td>
             </tr>
           ))}
