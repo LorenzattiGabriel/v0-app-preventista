@@ -12,7 +12,7 @@ import { Customer } from "@/types/customer"
 export default async function PreventistaCustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; zone?: string }>
+  searchParams: Promise<{ search?: string; zone?: string; status?: string }>
 }) {
   const supabase = await createClient()
   const params = await searchParams
@@ -51,6 +51,14 @@ export default async function PreventistaCustomersPage({
 
   if (params.zone && params.zone !== "all") {
     query = query.eq("zone_id", params.zone)
+  }
+
+  // Filter by status
+  if (params.status === "inactive") {
+    query = query.eq("is_active", false)
+  } else if (params.status !== "all") {
+    // Default to 'active' if no status is provided
+    query = query.eq("is_active", true)
   }
 
   let { data: customers, error } = await query.order("commercial_name", { ascending: true })
@@ -120,6 +128,16 @@ export default async function PreventistaCustomersPage({
                       {zone.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select name="status" defaultValue={params.status || "all"}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Activos</SelectItem>
+                  <SelectItem value="inactive">Inactivos</SelectItem>
+                  <SelectItem value="all">Activos e Inactivos</SelectItem>
                 </SelectContent>
               </Select>
               <Button type="submit">
