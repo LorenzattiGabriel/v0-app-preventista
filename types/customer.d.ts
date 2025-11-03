@@ -35,5 +35,6 @@ export type Customer = {
     updated_at: string;
 
     // Optional relations
-    zones?: { name: string } | null;
+    zone_name?: string | null;
+
 };

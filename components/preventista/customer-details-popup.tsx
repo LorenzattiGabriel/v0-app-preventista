@@ -75,7 +75,7 @@ export default function CustomerDetailsPopup({ customer, onClose }: CustomerDeta
               <div><p className="font-semibold">Localidad:</p><p className="text-muted-foreground">{customer.locality}</p></div>
               <div><p className="font-semibold">Provincia:</p><p className="text-muted-foreground">{customer.province}</p></div>
               <div><p className="font-semibold">Código Postal:</p><p className="text-muted-foreground">{customer.postal_code || 'N/A'}</p></div>
-              {customer.zones?.name && <div><p className="font-semibold">Zona:</p><p className="text-muted-foreground">{customer.zones.name}</p></div>}
+              <div><p className="font-semibold">Zona:</p><p className="text-muted-foreground">{customer.zone_name || 'N/A'}</p></div>
             </div>
           </div>
 

@@ -53,7 +53,16 @@ export default async function PreventistaCustomersPage({
     query = query.eq("zone_id", params.zone)
   }
 
-  const { data: customers, error } = await query.order("commercial_name", { ascending: true })
+  let { data: customers, error } = await query.order("commercial_name", { ascending: true })
+
+  customers = customers?.map(customer => {
+    const zone = zones?.find(z => z.id === customer.zone_id);
+    return {
+      ...customer,
+      zone_name: zone ? zone.name : null,
+    };
+  }) || [];
+
 
   if (error) {
     console.error("Error fetching customers:", error)

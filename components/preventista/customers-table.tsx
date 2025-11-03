@@ -51,9 +51,9 @@ export default function CustomersTable({ customers, onSelectCustomer }: Customer
               </td>
               <td className="p-4 align-middle text-muted-foreground">{customer.locality}</td>
               <td className="p-4 align-middle text-muted-foreground hidden md:table-cell">
-                {customer.zones?.name ? (
-                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-gray-500/10">
-                    {customer.zones.name}
+                {customer.zone_name ? (
+                  <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-500/10 bg-gray-800 text-gray-300">
+                    {customer.zone_name}
                   </span>
                 ) : (
                   "N/A"
