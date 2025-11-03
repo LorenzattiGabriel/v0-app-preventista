@@ -1,14 +1,21 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowLeft, PlusCircle } from "lucide-react"
+import { ArrowLeft, PlusCircle, Search } from "lucide-react"
 import { CustomersClient } from "@/components/preventista/customers-client"
 import { Customer } from "@/types/customer"
 
-export default async function PreventistaCustomersPage() {
+export default async function PreventistaCustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string; zone?: string }>
+}) {
   const supabase = await createClient()
+  const params = await searchParams
 
   const {
     data: { user },
@@ -24,12 +31,29 @@ export default async function PreventistaCustomersPage() {
     redirect("/auth/login")
   }
 
-  const { data: customers, error } = await supabase
+  // Fetch zones for the filter dropdown, ensuring unique names
+  const { data: zones } = await supabase.from("zones").select("id, name").order("name");
+
+
+  // Build the query with filters
+  let query = supabase
     .from("customers")
     .select("*")
     // .eq("created_by", user.id)
     .order("created_at", { ascending: false })
 
+  // Filter by: commercial_name, code, contact_name
+  if (params.search) {
+    query = query.or(
+      `commercial_name.ilike.%${params.search}%,code.ilike.%${params.search}%,contact_name.ilike.%${params.search}%`,
+    )
+  }
+
+  if (params.zone && params.zone !== "all") {
+    query = query.eq("zone_id", params.zone)
+  }
+
+  const { data: customers, error } = await query.order("commercial_name", { ascending: true })
 
   if (error) {
     console.error("Error fetching customers:", error)
@@ -65,19 +89,52 @@ export default async function PreventistaCustomersPage() {
             <CardDescription>Gestiona tus clientes y visualiza su información.</CardDescription>
           </CardHeader>
           <CardContent>
-            {customers && customers.length > 0 ? (
-              <CustomersClient customers={customers as Customer[]} />
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">Aún no tienes clientes registrados.</p>
-                <Button asChild className="mt-4">
-                  <Link href="/preventista/customers/new">
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Registrar Nuevo Cliente
-                  </Link>
-                </Button>
+            {/* Filters */}
+            <form className="flex flex-col gap-4 sm:flex-row mb-6">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  name="search"
+                  placeholder="Buscar por nombre, código..."
+                  className="pl-10"
+                  defaultValue={params.search}
+                />
               </div>
-            )}
+              <Select name="zone" defaultValue={params.zone || "all"}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Zona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las zonas</SelectItem>
+                  {zones?.map((zone) => (
+                    <SelectItem key={zone.id} value={zone.id}>
+                      {zone.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button type="submit">
+                <Search className="h-4 w-4 mr-2" />
+                Filtrar
+              </Button>
+            </form>
+
+            {/* Customer List */}
+            <CardContent>
+              {customers && customers.length > 0 ? (
+                <CustomersClient customers={customers as Customer[]} />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Aún no tienes clientes registrados.</p>
+                  <Button asChild className="mt-4">
+                    <Link href="/preventista/customers/new">
+                      <PlusCircle className="h-4 w-4 mr-2" />
+                      Registrar Nuevo Cliente
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
           </CardContent>
         </Card>
       </div>
