@@ -107,7 +107,7 @@ export default async function PreventistaCustomersPage({
           </CardHeader>
           <CardContent>
             {/* Filters */}
-            <form className="flex flex-col gap-4 sm:flex-row mb-6">
+            <form action="/preventista/customers" className="flex flex-col gap-4 sm:flex-row mb-6">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input

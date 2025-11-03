@@ -128,8 +128,13 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
       const { subtotal, total } = calculateTotals()
 
       // Generate order number
-      const { data: orderNumberData } = await supabase.rpc("generate_order_number")
+      const { data: orderNumberData, error: orderNumberError  } = await supabase.rpc("generate_order_number")
       const orderNumber = orderNumberData as string
+
+      if (!orderNumber) {
+        console.error("Error generating order number");
+        throw orderNumberError;
+      }
 
       // Create order
       const { data: order, error: orderError } = await supabase
@@ -152,7 +157,10 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
         .select()
         .single()
 
-      if (orderError) throw orderError
+      if (orderError) {
+        console.error("Error creating order");
+        throw orderError;
+      }
 
       // Create order items
       const itemsToInsert = orderItems.map((item) => ({
@@ -173,7 +181,7 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
         order_id: order.id,
         new_status: isDraft ? "BORRADOR" : "PENDIENTE_ARMADO",
         changed_by: userId,
-        change_reason: "Pedido creado",
+        change_reason: isDraft ? "Borrador creado" : "Pedido creado",
       })
 
       router.push("/preventista/dashboard")
