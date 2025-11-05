@@ -2,11 +2,11 @@
 import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.argv[2]
+const SERVICE_ROLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+
 
 if (!SERVICE_ROLE_KEY) {
   console.log('❌ Error: Necesitas proporcionar la SERVICE_ROLE_KEY')
-  console.log('Ejecuta: node scripts/create-happy-path-demo.mjs TU_SERVICE_ROLE_KEY')
   process.exit(1)
 }
 
