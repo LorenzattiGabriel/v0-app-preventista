@@ -200,11 +200,9 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button variant="outline" asChild>
-          <Link href="/preventista/dashboard">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
-          </Link>
+        <Button variant="outline" type="button" onClick={() => router.back()}>          
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver
         </Button>
       </div>
 
