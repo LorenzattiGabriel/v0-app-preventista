@@ -136,7 +136,7 @@ export default async function PreventistaDashboardPage() {
                   <Link href="/preventista/customers/new">Registrar Nuevo Cliente</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/preventista/orders">Ver Mis Pedidos</Link>
+                  <Link href="/preventista/orders/list">Ver Mis Pedidos</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/preventista/customers">Ver Clientes</Link>
