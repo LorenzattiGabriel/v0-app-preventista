@@ -165,7 +165,7 @@ export default async function OrdersPage() {
                 ordersWithCustomerInfo.map((order: Order) => {
                     const draftLink = `/preventista/orders/drafts/${order.id}`;
                     return (
-                      <TableRow key={order.id}>
+                      <TableRow key={order.id} className="hover:bg-muted">
                         <LinkTableCell className="font-medium" href={draftLink}>
                           <span className="hidden sm:inline">{order.customer.code}</span>
                         </LinkTableCell>

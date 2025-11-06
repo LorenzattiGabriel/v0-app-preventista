@@ -24,32 +24,49 @@ interface OrderItem {
   subtotal: number
 }
 
+interface InitialOrderData {
+  selectedCustomer: Customer | null
+  deliveryDate: string
+  priority: OrderPriority
+  orderType: OrderType
+  requiresInvoice: boolean
+  observations: string
+  generalDiscount: number
+  orderItems: OrderItem[]
+}
+
 interface NewOrderFormProps {
   customers: Customer[]
   products: Product[]
   userId: string
+  initialOrderData?: InitialOrderData
 }
 
-export function NewOrderForm({ customers, products, userId }: NewOrderFormProps) {
+export function NewOrderForm({ customers, products, userId, initialOrderData }: NewOrderFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Form state
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [deliveryDate, setDeliveryDate] = useState("")
-  const [priority, setPriority] = useState<OrderPriority>("normal")
-  const [orderType, setOrderType] = useState<OrderType>("presencial")
-  const [requiresInvoice, setRequiresInvoice] = useState(false)
-  const [observations, setObservations] = useState("")
-  const [generalDiscount, setGeneralDiscount] = useState(0)
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialOrderData?.selectedCustomer || null)
+  const [deliveryDate, setDeliveryDate] = useState(initialOrderData?.deliveryDate || "")
+  const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
+  const [orderType, setOrderType] = useState<OrderType>(initialOrderData?.orderType || "presencial")
+  const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
+  const [observations, setObservations] = useState(initialOrderData?.observations || "")
+  const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
+  const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
   // Add product form state
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
+
+  // Initialize order items if provided
+  useState(() => {
+    if (initialOrderData?.orderItems) setOrderItems(initialOrderData.orderItems)
+  })
 
   const handleCustomerSelect = (customer: Customer) => {
     setSelectedCustomer(customer)
