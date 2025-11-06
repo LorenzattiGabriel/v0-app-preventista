@@ -13,6 +13,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  LinkTableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -26,8 +27,9 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, FileText, Edit, Trash2 } from "lucide-react"
+import { MoreHorizontal, PlusCircle, FileText, Edit, Trash2, ArrowLeft } from "lucide-react"
 import { format } from "date-fns"
+import { GoBackButton } from "@/components/ui/go-back-button"
 
 type Order = {
   id: string
@@ -37,7 +39,13 @@ type Order = {
   status: string
   total: number
   created_at: string
-  customer_id: string
+  customer_id: string,
+  customer: {
+    code: string
+    commercial_name: string
+    locality: string
+    customer_type: string
+  }
 }
 
 
@@ -79,35 +87,7 @@ export default async function OrdersPage() {
     // Handle error appropriately
   }
 
-  if (orders === null || orders === undefined ) {
-    return (
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        <div className="flex items-center">
-          <h2 className="font-semibold text-lg md:text-2xl">Pedidos en Borrador</h2>
-          <div className="ml-auto flex items-center gap-2">
-            <Button size="sm" asChild>
-              <Link href="/preventista/orders/new">
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Crear Pedido
-              </Link>
-            </Button>
-          </div>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Pedidos en Borrador</CardTitle>
-            <CardDescription>Pedidos guardados que aún no has confirmado.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8 text-muted-foreground">
-              No se encontraron pedidos en borrador.
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-      
-    )
-  }
+
 
   // customer info
   let queryCustomers = supabase
@@ -115,7 +95,7 @@ export default async function OrdersPage() {
     .select(
       `id, code, commercial_name, locality, customer_type`
     )
-    .in("id", orders.map((order) => order.customer_id))
+    .in("id", (orders !== null && orders !== undefined) ? orders.map((order) => order.customer_id) : [])
 
   const { data: customers, error: errorCustomers } = await queryCustomers
   
@@ -125,27 +105,43 @@ export default async function OrdersPage() {
     // Handle error appropriately
   }
 
-  const pageTitle = "Pedidos en Borrador"
-  const pageDescription = "Pedidos guardados que aún no has confirmado."
+  // Map customers to orders
+  const ordersWithCustomerInfo = orders?.map((order) => {
+    const customer = customers?.find((c) => c.id === order.customer_id)
+    
+    return {
+      ...order, 
+      customer: {
+        code: customer?.code || "N/A",
+        commercial_name: customer?.commercial_name || "N/A",
+        locality: customer?.locality || "N/A",
+        customer_type: customer?.customer_type || "N/A",
+      },
+    }
+  })
+
+
 
   return (
-    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-      <div className="flex items-center">
-        <h2 className="font-semibold text-lg md:text-2xl">{pageTitle}</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" asChild>
-            <Link href="/preventista/orders/new">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Crear Pedido
-            </Link>
-          </Button>
-        </div>
+    <main className="flex flex-1 flex-col gap-4 px-4 md:gap-8 md:px-8">
+      
+      <div className="flex items-center justify-between">
+        <GoBackButton/>
+        
+        <Button size="sm" asChild>
+          <Link href="/preventista/orders/new">
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Crear Pedido
+          </Link>
+        </Button>
       </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>{pageTitle}</CardTitle>
-          <CardDescription>{pageDescription}</CardDescription>
+          <CardTitle>Pedidos en Borrador</CardTitle>
+          <CardDescription>Pedidos guardados que aún no has confirmado.</CardDescription>
         </CardHeader>
+
         <CardContent>
           <Table>
             <TableHeader>
@@ -165,67 +161,69 @@ export default async function OrdersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {orders && orders.length > 0 && orders ? (
-                orders.map((order: Order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">
-                      <span className="hidden sm:inline">{customers?.find((customer) => customer.id === order.customer_id)?.code || "N/A"}</span>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {customers?.find((customer) => customer.id === order.customer_id)?.commercial_name|| "N/A"}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {customers?.find((customer) => customer.id === order.customer_id)?.locality || "N/A"}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell capitalize">
-                      {customers?.find((customer) => customer.id === order.customer_id)?.customer_type || "N/A"}
-                    </TableCell>
-                    <TableCell>{order.order_number}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {format(new Date(order.created_at), "dd/MM/yyyy")}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {format(new Date(order.delivery_date), "dd/MM/yyyy")}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      ${order.total.toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={order.priority === "urgente" || order.priority === "alta" ? "default" : "outline"}
-                      >
-                        {order.priority}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem asChild>
-                            <Link href={`/preventista/orders/drafts/${order.id}`} className="flex items-center">
-                              <Edit className="mr-2 h-4 w-4" />
-                              Editar
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                              <div className="flex items-center text-destructive">
-                                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                                Eliminar
-                              </div>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
+              {ordersWithCustomerInfo && ordersWithCustomerInfo.length > 0 ? (
+                ordersWithCustomerInfo.map((order: Order) => {
+                    const draftLink = `/preventista/orders/drafts/${order.id}`;
+                    return (
+                      <TableRow key={order.id}>
+                        <LinkTableCell className="font-medium" href={draftLink}>
+                          <span className="hidden sm:inline">{order.customer.code}</span>
+                        </LinkTableCell>
+                        <LinkTableCell className="font-medium" href={draftLink}>
+                          {order.customer.commercial_name}
+                        </LinkTableCell>
+                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
+                          {order.customer.locality}
+                        </LinkTableCell>
+                        <LinkTableCell className="hidden lg:table-cell capitalize" href={draftLink}>
+                          {order.customer.customer_type}
+                        </LinkTableCell>
+                        <LinkTableCell href={draftLink}>
+                          {order.order_number}
+                        </LinkTableCell>
+                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
+                          {format(new Date(order.created_at), "dd/MM/yyyy")}
+                        </LinkTableCell>
+                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
+                          {format(new Date(order.delivery_date), "dd/MM/yyyy")}
+                        </LinkTableCell>
+                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
+                          ${order.total.toFixed(2)}
+                        </LinkTableCell>
+                        <LinkTableCell href={draftLink}>
+                          <Badge
+                            variant={order.priority === "urgente" || order.priority === "alta" ? "default" : "outline"}
+                          >
+                            {order.priority}
+                          </Badge>
+                        </LinkTableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button aria-haspopup="true" size="icon" variant="ghost">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Abrir menú</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem asChild>
+                                  <div className="flex items-center text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                                    Eliminar
+                                  </div>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                  )//return
+                  }//map callback
+                )//map
+              ) 
+              : 
+              (
                 <TableRow>
                   <TableCell
                     colSpan={10}

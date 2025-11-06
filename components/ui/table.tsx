@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 const Table = React.forwardRef<
@@ -81,7 +82,7 @@ const TableHead = React.forwardRef<
 ))
 TableHead.displayName = "TableHead"
 
-const TableCell = React.forwardRef<
+const TableCell = React.forwardRef< // This is the plain TableCell
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
@@ -92,6 +93,23 @@ const TableCell = React.forwardRef<
   />
 ))
 TableCell.displayName = "TableCell"
+
+// New LinkTableCell component
+const LinkTableCell = React.forwardRef<
+  HTMLTableCellElement,
+  React.TdHTMLAttributes<HTMLTableCellElement> & { href: string }
+>(({ className, href, children, ...props }, ref) => (
+    <td
+      ref={ref}
+      className={cn("align-middle [&:has([role=checkbox])]:pr-0", className)}
+      {...props}
+    >
+      <Link href={href} className="block w-full h-full p-6">
+        {children}
+      </Link>
+    </td>
+))
+LinkTableCell.displayName = "LinkTableCell"
 
 const TableCaption = React.forwardRef<
   HTMLTableCaptionElement,
@@ -113,5 +131,6 @@ export {
   TableHead,
   TableRow,
   TableCell,
+  LinkTableCell, // Export the new component
   TableCaption,
 }
