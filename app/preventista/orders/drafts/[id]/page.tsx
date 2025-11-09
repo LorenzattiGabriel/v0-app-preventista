@@ -11,6 +11,7 @@ interface DraftOrderPageProps {
 
 export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
   const { id } = await params
+  console.log("id param:", id)
   
   const supabase = await createClient()
   const {
@@ -101,8 +102,7 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
             products={products || []}
             userId={user.id}
             initialOrderData={initialOrderData}
-            // isEditingDraft={true}
-            // draftId={params.id}
+            orderId={id}
           />
         </div>
       </section>

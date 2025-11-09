@@ -80,7 +80,6 @@ export default async function OrdersPage() {
 
 
   const { data: orders, error } = await query
-    console.log("orders query:", orders)
 
   if (error) {
     console.error("Error fetching orders:", error)
@@ -205,15 +204,31 @@ export default async function OrdersPage() {
                                 <span className="sr-only">Abrir menú</span>
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
+
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                              
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/preventista/orders/drafts/${order.id}`} className="flex items-center">
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Editar
+                                  </Link>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem asChild>
+                                  <button className="flex items-center w-full">
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Duplicar
+                                  </button>
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem asChild>
                                   <div className="flex items-center text-destructive">
                                     <Trash2 className="mr-2 h-4 w-4 text-destructive" />
                                     Eliminar
                                   </div>
-                              </DropdownMenuItem>
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
