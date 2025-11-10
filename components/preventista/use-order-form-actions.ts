@@ -206,5 +206,30 @@ export function useOrderFormActions() {
     }
   };
 
-  return { saveOrder, isLoading, error, setError, calculateTotals };
+  const deleteOrder = async (orderId: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const { error: deleteError } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderId);
+
+      if (deleteError) {
+        console.error("Error deleting order:", deleteError);
+        throw deleteError;
+      }
+
+      router.push("/preventista/dashboard");
+      router.refresh();
+    } catch (err) {
+      console.error("[v0] Error deleting order:", err);
+      setError(err instanceof Error ? err.message : "Error al eliminar el pedido");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { saveOrder, deleteDraft: deleteOrder, isLoading, error, setError, calculateTotals };
 }

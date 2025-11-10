@@ -18,18 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, FileText, Edit, Trash2, ArrowLeft } from "lucide-react"
+import { PlusCircle } from "lucide-react"
 import { format } from "date-fns"
 import { GoBackButton } from "@/components/ui/go-back-button"
+import { DraftActions } from "@/components/preventista/draft-actions"
 
 type Order = {
   id: string
@@ -197,40 +190,7 @@ export default async function OrdersPage() {
                           </Badge>
                         </LinkTableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button aria-haspopup="true" size="icon" variant="ghost">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Abrir menú</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                              
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/preventista/orders/drafts/${order.id}`} className="flex items-center">
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Editar
-                                  </Link>
-                                </DropdownMenuItem>
-
-                                <DropdownMenuItem asChild>
-                                  <button className="flex items-center w-full">
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Duplicar
-                                  </button>
-                                </DropdownMenuItem>
-
-                                <DropdownMenuItem asChild>
-                                  <div className="flex items-center text-destructive">
-                                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                                    Eliminar
-                                  </div>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <DraftActions orderId={order.id} />
                         </TableCell>
                       </TableRow>
                   )//return
