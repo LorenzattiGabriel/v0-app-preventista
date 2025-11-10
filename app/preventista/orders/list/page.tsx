@@ -27,24 +27,29 @@ export default async function OrdersListPage() {
   }
 
   // Traemos todos los pedidos asociados a este preventista
-  const { data: pedidos, error } = await supabase
-    .from("orders")
-    .select(`
+  // Traemos todos los pedidos asociados a este preventista
+const { data: pedidos, error } = await supabase
+  .from("orders")
+  .select(`
+    id,
+    order_number,
+    order_date,
+    delivery_date,
+    priority,
+    order_type,
+    status,
+    subtotal,
+    total,
+    requires_invoice,
+    has_shortages,
+    created_by,
+    customer:customers (
       id,
-      order_number,
-      order_date,
-      delivery_date,
-      priority,
-      order_type,
-      status,
-      subtotal,
-      total,
-      requires_invoice,
-      has_shortages,
-      created_by
-    `)
-    .eq("created_by", profile.id)
-    .order("created_at", { ascending: false })
+      commercial_name
+    )
+  `)
+  .eq("created_by", profile.id)
+  .order("created_at", { ascending: false })
 
   if (error) {
     console.error("Error al cargar pedidos:", error)
