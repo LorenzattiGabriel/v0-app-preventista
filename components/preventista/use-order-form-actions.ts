@@ -53,19 +53,19 @@ export function useOrderFormActions() {
   }: SaveOrderParams) => {
     if (!selectedCustomer) {
       setError("Debe seleccionar un cliente")
-      return
+      return null
     }
 
     if (!deliveryDate) {
       setError("Debe seleccionar una fecha de entrega")
-      return
+      return null
     }
 
     if (orderItems.length === 0) {
       setError("Debe agregar al menos un producto")
-      return
+      return null
     }
-
+ 
     setIsLoading(true)
     setError(null)
 
@@ -196,11 +196,12 @@ export function useOrderFormActions() {
         change_reason: isDraft ? (orderId ? "Borrador actualizado" : "Borrador creado") : (orderId ? "Pedido actualizado" : "Pedido creado"),
       });
 
-      router.push("/preventista/dashboard");
-      router.refresh();
+      return orderResult.id; // Return the new order ID on success
+
     } catch (err) {
       console.error("[v0] Error saving order:", err);
       setError(err instanceof Error ? err.message : "Error al guardar el pedido");
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -231,5 +232,62 @@ export function useOrderFormActions() {
     }
   };
 
-  return { saveOrder, deleteDraft: deleteOrder, isLoading, error, setError, calculateTotals };
+  const duplicateDraft = async (orderIdToDuplicate: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+
+      // 1. Fetch the complete original draft data
+      const { data: originalOrder, error: fetchError } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          customers (*),
+          order_items (*)
+        `)
+        .eq("id", orderIdToDuplicate)
+        .single();
+
+      if (fetchError || !originalOrder) {
+        throw new Error("No se pudo encontrar el borrador original para duplicar.");
+      }
+
+      // 2. Prepare the data for the new draft
+      const newOrderParams: SaveOrderParams = {
+        selectedCustomer: originalOrder.customers,
+        deliveryDate: originalOrder.delivery_date,
+        priority: originalOrder.priority,
+        orderType: originalOrder.order_type,
+        requiresInvoice: originalOrder.requires_invoice,
+        observations: `(Copia de ${originalOrder.order_number}) ${originalOrder.observations || ''}`.trim(),
+        generalDiscount: originalOrder.general_discount,
+        orderItems: originalOrder.order_items.map((item: any) => ({
+          productId: item.product_id,
+          quantity: item.quantity_requested,
+          unitPrice: item.unit_price,
+          discount: item.discount,
+          subtotal: item.subtotal
+        })),
+        userId: originalOrder.created_by,
+        isDraft: true,
+        orderId: undefined, // CRUCIAL: Ensure it creates a new order
+      };
+
+      // 3. Call saveOrder to create the new draft
+      const newOrderId = await saveOrder(newOrderParams);
+
+      // 4. Refresh page
+      if (newOrderId) {
+        router.refresh();
+      }
+    } catch (err) {
+      console.error("[v0] Error duplicating draft:", err);
+      setError(err instanceof Error ? err.message : "Error al duplicar el borrador");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { saveOrder, deleteOrder, duplicateDraft, isLoading, error, setError, calculateTotals };
 }

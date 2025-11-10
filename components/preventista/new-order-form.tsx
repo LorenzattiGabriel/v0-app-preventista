@@ -118,7 +118,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   }
 
   const handleSaveOrder = async (isDraft: boolean) => {
-    await saveOrder({
+    // The saveOrder hook now returns the order ID on success
+    const savedOrderId = await saveOrder({
       selectedCustomer,
       deliveryDate,
       priority,
@@ -131,6 +132,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       isDraft,
       orderId, // Pass orderId if editing
     });
+
+    // If the order was saved successfully, redirect to the dashboard
+    if (savedOrderId) {
+      router.push("/preventista/dashboard");
+      router.refresh();
+    }
   }
 
   const { subtotal, total } = calculateTotals(orderItems, generalDiscount)

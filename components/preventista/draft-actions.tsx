@@ -29,10 +29,14 @@ interface DraftActionsProps {
 }
 
 export function DraftActions({ orderId }: DraftActionsProps) {
-  const { deleteDraft, isLoading } = useOrderFormActions()
+  const { deleteOrder: deleteDraft, duplicateDraft, isLoading } = useOrderFormActions()
 
   const handleDelete = async () => {
     await deleteDraft(orderId)
+  }
+
+  const handleDuplicate = async () => {
+    await duplicateDraft(orderId)
   }
 
   return (
@@ -49,8 +53,8 @@ export function DraftActions({ orderId }: DraftActionsProps) {
         <DropdownMenuItem asChild>
           <Link href={`/preventista/orders/drafts/${orderId}`} className="flex items-center"><Edit className="mr-2 h-4 w-4" />Editar</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
-          <button className="flex items-center w-full" onClick={() => alert("Función no implementada")}><FileText className="mr-2 h-4 w-4" />Duplicar</button>
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={handleDuplicate}>
+          <FileText className="mr-2 h-4 w-4" />{isLoading ? "Duplicando..." : "Duplicar"}
         </DropdownMenuItem>
         <AlertDialog>
           <AlertDialogTrigger asChild>
