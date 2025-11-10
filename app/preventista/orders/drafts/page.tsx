@@ -32,8 +32,7 @@ type Order = {
   status: string
   total: number
   created_at: string
-  customer_id: string,
-  customer: {
+  customers: {
     code: string
     commercial_name: string
     locality: string
@@ -41,7 +40,18 @@ type Order = {
   }
 }
 
-
+const getPriorityVariant = (priority: Order['priority']): "default" | "secondary" | "destructive" | "outline" => {
+  switch (priority) {
+    case 'urgente':
+      return 'destructive';
+    case 'alta':
+      return 'default';
+    case 'media':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+};
 
 export default async function OrdersPage() {
   const supabase = await createClient()
@@ -56,63 +66,30 @@ export default async function OrdersPage() {
 
   let query = supabase
     .from("orders")
-    .select(
-      `id, 
-      order_number, 
-      delivery_date, 
-      priority, status, 
-      total, 
+    .select(`
+      id,
+      order_number,
+      delivery_date,
+      priority,
+      status,
+      total,
       created_at,
-      customer_id
-    `
-    )
+      customers (
+        code,
+        commercial_name,
+        locality,
+        customer_type
+      )
+    `)
     .eq("created_by", user.id)
     .order("created_at", { ascending: false })
     .eq("status", "BORRADOR")
-
-
 
   const { data: orders, error } = await query
 
   if (error) {
     console.error("Error fetching orders:", error)
-    // Handle error appropriately
   }
-
-
-
-  // customer info
-  let queryCustomers = supabase
-    .from("customers")
-    .select(
-      `id, code, commercial_name, locality, customer_type`
-    )
-    .in("id", (orders !== null && orders !== undefined) ? orders.map((order) => order.customer_id) : [])
-
-  const { data: customers, error: errorCustomers } = await queryCustomers
-  
-
-  if (errorCustomers) {
-    console.error("Error fetching customers:", errorCustomers)
-    // Handle error appropriately
-  }
-
-  // Map customers to orders
-  const ordersWithCustomerInfo = orders?.map((order) => {
-    const customer = customers?.find((c) => c.id === order.customer_id)
-    
-    return {
-      ...order, 
-      customer: {
-        code: customer?.code || "N/A",
-        commercial_name: customer?.commercial_name || "N/A",
-        locality: customer?.locality || "N/A",
-        customer_type: customer?.customer_type || "N/A",
-      },
-    }
-  })
-
-
 
   return (
     <main className="flex flex-1 flex-col gap-4 px-4 md:gap-8 md:px-8">
@@ -135,70 +112,94 @@ export default async function OrdersPage() {
         </CardHeader>
 
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="hidden sm:table-cell">Código Cliente</TableHead>
-                <TableHead>Nombre Comercial</TableHead>
-                <TableHead className="hidden md:table-cell">Localidad</TableHead>
-                <TableHead className="hidden lg:table-cell">Tipo Cliente</TableHead>
-                <TableHead>N° Pedido</TableHead>
-                <TableHead className="hidden md:table-cell">F. Creación</TableHead>
-                <TableHead className="hidden md:table-cell">F. Entrega</TableHead>
-                <TableHead className="hidden md:table-cell">Total</TableHead>
-                <TableHead>Prioridad</TableHead>
-                <TableHead>
-                  <span className="sr-only">Acciones</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ordersWithCustomerInfo && ordersWithCustomerInfo.length > 0 ? (
-                ordersWithCustomerInfo.map((order: Order) => {
-                    const draftLink = `/preventista/orders/drafts/${order.id}`;
-                    return (
-                      <TableRow key={order.id} className="hover:bg-muted">
-                        <LinkTableCell className="font-medium" href={draftLink}>
-                          <span className="hidden sm:inline">{order.customer.code}</span>
-                        </LinkTableCell>
-                        <LinkTableCell className="font-medium" href={draftLink}>
-                          {order.customer.commercial_name}
-                        </LinkTableCell>
-                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
-                          {order.customer.locality}
-                        </LinkTableCell>
-                        <LinkTableCell className="hidden lg:table-cell capitalize" href={draftLink}>
-                          {order.customer.customer_type}
-                        </LinkTableCell>
-                        <LinkTableCell href={draftLink}>
-                          {order.order_number}
-                        </LinkTableCell>
-                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
-                          {format(new Date(order.created_at), "dd/MM/yyyy")}
-                        </LinkTableCell>
-                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
-                          {format(new Date(order.delivery_date), "dd/MM/yyyy")}
-                        </LinkTableCell>
-                        <LinkTableCell className="hidden md:table-cell" href={draftLink}>
-                          ${order.total.toFixed(2)}
-                        </LinkTableCell>
-                        <LinkTableCell href={draftLink}>
-                          <Badge
-                            variant={order.priority === "urgente" || order.priority === "alta" ? "default" : "outline"}
-                          >
-                            {order.priority}
-                          </Badge>
-                        </LinkTableCell>
-                        <TableCell>
-                          <DraftActions orderId={order.id} />
-                        </TableCell>
-                      </TableRow>
-                  )//return
-                  }//map callback
-                )//map
-              ) 
-              : 
-              (
+          {/* Mobile Card View */}
+          <div className="grid gap-4 md:hidden">
+            {orders && orders.length > 0 ? (
+              orders.map((order: any) => (
+                <Card key={order.id} className="p-0">
+                  <Link href={`/preventista/orders/drafts/${order.id}`} className="block p-4">
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="font-semibold">{order.customers?.commercial_name || 'N/A'}</div>
+                        <div className="font-bold text-lg">${order.total.toFixed(2)}</div>
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        Pedido #{order.order_number}
+                      </div>
+                      <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
+                        <div>Creado: {format(new Date(order.created_at), "dd/MM/yyyy")}</div>
+                        <div>Entrega: {format(new Date(order.delivery_date), "dd/MM/yyyy")}</div>
+                      </div>
+                  </Link>
+                  <div className="px-4 pb-4 flex justify-between items-center">
+                    <Badge variant={getPriorityVariant(order.priority)} className="capitalize">
+                      {order.priority}
+                    </Badge>
+                    <div className="mt-0">
+                      <DraftActions orderId={order.id} />
+                    </div>
+                  </div>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center text-muted-foreground py-12">
+                No se encontraron pedidos.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre Comercial</TableHead>
+                  <TableHead className="hidden sm:table-cell">F. Creación</TableHead>
+                  <TableHead className="hidden sm:table-cell">F. Entrega</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Total</TableHead>
+                  <TableHead>Prioridad</TableHead>
+                  <TableHead className="hidden lg:table-cell">Código Cliente</TableHead>
+                  <TableHead className="hidden lg:table-cell">Localidad</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Acciones</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders && orders.length > 0 ? (
+                  orders.map((order: any) => {
+                      const draftLink = `/preventista/orders/drafts/${order.id}`;
+                      return (
+                        <TableRow key={order.id} className="hover:bg-muted">
+                          <LinkTableCell className="font-medium" href={draftLink}>
+                            {order.customers?.commercial_name || 'N/A'}
+                          </LinkTableCell>
+                          <LinkTableCell className="hidden sm:table-cell" href={draftLink}>
+                            {format(new Date(order.created_at), "dd/MM/yyyy")}
+                          </LinkTableCell>
+                          <LinkTableCell className="hidden sm:table-cell" href={draftLink}>
+                            {format(new Date(order.delivery_date), "dd/MM/yyyy")}
+                          </LinkTableCell>
+                          <LinkTableCell className="hidden md:table-cell text-right" href={draftLink}>
+                            ${order.total.toFixed(2)}
+                          </LinkTableCell>
+                          <LinkTableCell href={draftLink}>
+                            <Badge variant={getPriorityVariant(order.priority)} className="capitalize">
+                              {order.priority}
+                            </Badge>
+                          </LinkTableCell>
+                          <LinkTableCell className="hidden lg:table-cell" href={draftLink}>
+                            <span className="text-muted-foreground">{order.customers?.code || 'N/A'}</span>
+                          </LinkTableCell>
+                          <LinkTableCell className="hidden lg:table-cell" href={draftLink}>
+                            {order.customers?.locality || 'N/A'}
+                          </LinkTableCell>
+                          <TableCell>
+                            <DraftActions orderId={order.id} />
+                          </TableCell>
+                        </TableRow>
+                    )
+                  })
+                ) : (
                 <TableRow>
                   <TableCell
                     colSpan={10}
@@ -207,9 +208,10 @@ export default async function OrdersPage() {
                     No se encontraron pedidos.
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </main>

@@ -29,7 +29,7 @@ interface DraftActionsProps {
 }
 
 export function DraftActions({ orderId }: DraftActionsProps) {
-  const { deleteOrder: deleteDraft, duplicateDraft, isLoading } = useOrderFormActions()
+  const { isLoading, deleteOrder: deleteDraft, duplicateDraft, isDeleting, isDuplicating } = useOrderFormActions()
 
   const handleDelete = async () => {
     await deleteDraft(orderId)
@@ -50,17 +50,17 @@ export function DraftActions({ orderId }: DraftActionsProps) {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Acciones</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild disabled={isDuplicating || isDeleting}>
           <Link href={`/preventista/orders/drafts/${orderId}`} className="flex items-center"><Edit className="mr-2 h-4 w-4" />Editar</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={handleDuplicate}>
-          <FileText className="mr-2 h-4 w-4" />{isLoading ? "Duplicando..." : "Duplicar"}
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={handleDuplicate} disabled={isDuplicating || isDeleting}>
+          <FileText className="mr-2 h-4 w-4" />{isDuplicating ? "Duplicando..." : "Duplicar"}
         </DropdownMenuItem>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={isDeleting || isDuplicating}>
               <Trash2 className="mr-2 h-4 w-4" />
-              {isLoading ? "Eliminando..." : "Eliminar"}
+              {isDeleting ? "Eliminando..." : "Eliminar"}
             </DropdownMenuItem>
           </AlertDialogTrigger>
           <AlertDialogContent>

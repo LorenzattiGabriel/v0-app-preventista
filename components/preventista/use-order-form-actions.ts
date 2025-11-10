@@ -30,6 +30,8 @@ interface SaveOrderParams {
 export function useOrderFormActions() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const calculateTotals = (items: OrderItem[], discount: number) => {
@@ -208,7 +210,7 @@ export function useOrderFormActions() {
   };
 
   const deleteOrder = async (orderId: string) => {
-    setIsLoading(true);
+    setIsDeleting(true);
     setError(null);
     try {
       const supabase = createClient();
@@ -222,18 +224,17 @@ export function useOrderFormActions() {
         throw deleteError;
       }
 
-      router.push("/preventista/dashboard");
       router.refresh();
     } catch (err) {
       console.error("[v0] Error deleting order:", err);
       setError(err instanceof Error ? err.message : "Error al eliminar el pedido");
     } finally {
-      setIsLoading(false);
+      setIsDeleting(false);
     }
   };
 
   const duplicateDraft = async (orderIdToDuplicate: string) => {
-    setIsLoading(true);
+    setIsDuplicating(true);
     setError(null);
     try {
       const supabase = createClient();
@@ -285,9 +286,9 @@ export function useOrderFormActions() {
       console.error("[v0] Error duplicating draft:", err);
       setError(err instanceof Error ? err.message : "Error al duplicar el borrador");
     } finally {
-      setIsLoading(false);
+      setIsDuplicating(false);
     }
   };
 
-  return { saveOrder, deleteOrder, duplicateDraft, isLoading, error, setError, calculateTotals };
+  return { saveOrder, deleteOrder, duplicateDraft, isLoading, isDeleting, isDuplicating, error, setError, calculateTotals };
 }
