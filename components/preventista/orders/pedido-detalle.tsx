@@ -46,13 +46,9 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <h4 className="font-semibold text-sm text-muted-foreground">Fecha de Creación</h4>
+              <h4 className="font-semibold text-sm text-muted-foreground">Cliente</h4>
               <p className="text-lg">
-                {new Date(pedido.order_date).toLocaleDateString("es-AR", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric"
-                })}
+                {pedido.customer?.commercial_name ?? "Sin cliente"}
               </p>
             </div>
 

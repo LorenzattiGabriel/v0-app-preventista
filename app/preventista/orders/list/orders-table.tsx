@@ -197,55 +197,86 @@ export function OrdersTable({ pedidos }: { pedidos: any[] }) {
                         </div>
                     </div>
 
-                    {/*   --- TABLA ---   */}
-                    <table className="w-full text-sm">
-                        <thead className="text-left text-gray-600 border-b">
-                            <tr>
-                                <th className="py-2">Código</th>
-                                <th className="py-2">Cliente</th>
-                                <th className="py-2">Fecha Pedido</th>
-                                <th className="py-2">Fecha Entrega</th>
-                                <th className="py-2">Prioridad</th>
-                                <th className="py-2">Estado</th>
-                                <th className="py-2 text-right">Total</th>
-                                <th className="py-2 text-center">Factura</th>
-                                <th className="py-2 text-center">Detalle</th>
-                            </tr>
-                        </thead>
 
-                        <tbody>
-                            {pedidosFiltrados.length === 0 ? (
+
+                    {/* VISTA MOBILE */}
+                    <div className="md:hidden space-y-4">
+                        {pedidosFiltrados.map((p) => (
+                            <Card key={p.id} className="p-4 shadow-sm rounded-2xl">
+                                <div className="flex justify-between items-center">
+                                    <div className="font-semibold">{p.customer?.commercial_name ?? "Sin cliente"}</div>
+                                    <div className="text-right font-bold">${p.total.toLocaleString()}</div>
+                                </div>
+
+                                <p className="text-sm text-muted-foreground">Pedido {p.order_number}</p>
+
+                                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                    <span>Creado: {new Date(p.order_date).toLocaleDateString("es-AR")}</span>
+                                    <span>Entrega: {p.delivery_date ? new Date(p.delivery_date).toLocaleDateString("es-AR") : "-"}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between mt-3">
+                                    <Badge className={getPriorityColor(p.priority)}>{p.priority.toUpperCase()}</Badge>
+                                    <Button variant="outline" size="sm" onClick={() => { setSelectedOrder(p); setIsModalOpen(true); }}>
+                                        Ver
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+
+
+                    {/*   --- TABLA ---   */}
+                    <div className="hidden md:block">
+                        <table className="w-full text-sm">
+                            <thead className="text-left text-gray-600 border-b">
                                 <tr>
-                                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
-                                        No se encontraron pedidos con los filtros aplicados
-                                    </td>
+                                    <th className="py-2">Código</th>
+                                    <th className="py-2">Cliente</th>
+                                    {/*  <th className="py-2">Fecha Pedido</th>  */}
+                                    <th className="py-2">Fecha Entrega</th>
+                                    <th className="py-2">Prioridad</th>
+                                    <th className="py-2">Estado</th>
+                                    <th className="py-2 text-right">Total</th>
+                                    <th className="py-2 text-center">Factura</th>
+                                    <th className="py-2 text-center">Detalle</th>
                                 </tr>
-                            ) : (
-                                pedidosFiltrados.map((p) => (
-                                    <tr key={p.id} className="border-b hover:bg-muted/50">
-                                        <td>{p.order_number}</td>
-                                        <td>{p.customer?.commercial_name ?? "Sin cliente"}</td>
-                                        <td>{new Date(p.order_date).toLocaleDateString("es-AR")}</td>
-                                        <td>{p.delivery_date ? new Date(p.delivery_date).toLocaleDateString("es-AR") : "-"}</td>
-                                        <td><Badge className={getPriorityColor(p.priority)}>{p.priority.toUpperCase()}</Badge></td>
-                                        <td className="text-xs">{p.status.replace(/_/g, " ")}</td>
-                                        <td className="text-right font-medium">${p.total.toLocaleString()}</td>
-                                        <td className="text-center">{p.requires_invoice ? "Sí" : "No"}</td>
-                                        <td className="text-center">
-                                            <Button variant="outline" size="sm" onClick={() => {
-                                                setSelectedOrder(p)
-                                                setIsModalOpen(true)
-                                            }}>
-                                                Ver
-                                            </Button>
+                            </thead>
+
+                            <tbody>
+                                {pedidosFiltrados.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                                            No se encontraron pedidos con los filtros aplicados
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
+                                ) : (
+                                    pedidosFiltrados.map((p) => (
+                                        <tr key={p.id} className="border-b hover:bg-muted/50">
+                                            <td>{p.order_number}</td>
+                                            <td>{p.customer?.commercial_name ?? "Sin cliente"}</td>
+                                            {/*  <td>{new Date(p.order_date).toLocaleDateString("es-AR")}</td>  */}
+                                            <td>{p.delivery_date ? new Date(p.delivery_date).toLocaleDateString("es-AR") : "-"}</td>
+                                            <td><Badge className={getPriorityColor(p.priority)}>{p.priority.toUpperCase()}</Badge></td>
+                                            <td className="text-xs">{p.status.replace(/_/g, " ")}</td>
+                                            <td className="text-right font-medium">${p.total.toLocaleString()}</td>
+                                            <td className="text-center">{p.requires_invoice ? "Sí" : "No"}</td>
+                                            <td className="text-center">
+                                                <Button variant="outline" size="sm" onClick={() => {
+                                                    setSelectedOrder(p)
+                                                    setIsModalOpen(true)
+                                                }}>
+                                                    Ver
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
 
-                    </table>
+                        </table>
 
+                    </div>
                 </CardContent>
             </Card >
 
