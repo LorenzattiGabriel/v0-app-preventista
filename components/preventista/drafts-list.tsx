@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { ArrowDown, ArrowUp } from "lucide-react"
 
@@ -31,6 +31,8 @@ import {
   LinkTableCell,
 } from "@/components/ui/table"
 import { DraftActions } from "@/components/preventista/draft-actions"
+import { DraftsFilters } from "./drafts-filters"
+import { X } from "lucide-react"
 
 type Order = {
   id: string
@@ -63,9 +65,48 @@ const getPriorityVariant = (priority: Order['priority']): "default" | "secondary
   }
 };
 
-export function DraftsList({ orders, searchParams }: { orders: any, searchParams: { [key: string]: string | string[] | undefined } }) {
+const FilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
+  <Badge variant="secondary" className="flex items-center gap-1 pr-1">
+    {label}
+    <button onClick={onRemove} className="rounded-full hover:bg-background/50 p-0.5">
+      <X className="h-3 w-3 cursor-pointer hover:text-destructive hover:rotate-95 transition-transform transition-duration-550" />
+      <span className="sr-only">Remove filter</span>
+    </button>
+  </Badge>
+);
+
+export function DraftsList({ orders, searchParams, localities }: { orders: any, searchParams: { [key: string]: string | string[] | undefined }, localities: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  const createQueryString = (paramsToRemove: string | string[]) => {
+    const params = new URLSearchParams(searchParams as any);
+    if (Array.isArray(paramsToRemove)) {
+      paramsToRemove.forEach(p => params.delete(p));
+    } else {
+      params.delete(paramsToRemove);
+    }
+    return params.toString();
+  }
+
+  const activeFilters = Object.entries(searchParams).filter(([key, value]) => value && !['sortBy', 'sortOrder'].includes(key));
+
+  const getFilterLabel = (key: string, value: string | string[] | undefined): string | null => {
+    if (!value) return null;
+    switch (key) {
+      case 'q': return `Búsqueda: "${value}"`;
+      case 'priorities': return `Prioridades: ${value}`;
+      case 'localities': return `Localidades: ${value}`;
+      case 'deliveryDateFrom': return `Entrega desde: ${value}`;
+      case 'deliveryDateTo': return `Entrega hasta: ${value}`;
+      case 'createdAtFrom': return `Creado desde: ${value}`;
+      case 'createdAtTo': return `Creado hasta: ${value}`;
+      case 'totalMin': return `Total min: $${value}`;
+      case 'totalMax': return `Total max: $${value}`;
+      default: return null;
+    }
+  };
+
 
   const SortableHeader = ({ field, label, className }: { field: SortableField, label: string, className?: string }) => {
     const currentSortBy = searchParams.sortBy as string;
@@ -124,15 +165,41 @@ export function DraftsList({ orders, searchParams }: { orders: any, searchParams
     );
   }
 
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <div>
-          <CardTitle>Pedidos en Borrador</CardTitle>
-          <CardDescription>Pedidos guardados que aún no has confirmado.</CardDescription>
+  const FilterSection = () => (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-4 px-4 pt-4 md:px-0 md:pt-0">
+        <DraftsFilters localities={localities} />
+      </div>
+      {activeFilters.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg bg-muted p-4">
+          <span className="text-sm font-medium px-2 py-2">Filtros Activos:</span>
+          {activeFilters.map(([key, value]) => {
+            const label = getFilterLabel(key, value);
+            if (!label) return null;
+            return (
+              <FilterChip key={key} label={label} onRemove={() => router.replace(`${pathname}?${createQueryString(key)}`)} />
+            )
+          })}
+          <Button variant="ghost" size="sm" className="h-auto p-1 text-destructive hover:text-destructive" onClick={() => router.replace(pathname)}>
+            Limpiar Todo
+          </Button>
         </div>
-        <div className="md:hidden"><MobileSortControl /></div>
-      </CardHeader>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {/* Filter Section */}
+      <FilterSection />
+      <Card>
+        <CardHeader className="flex-row items-center">
+          <div>
+            <CardTitle>Pedidos en Borrador</CardTitle>
+            <CardDescription>Pedidos guardados que aún no has confirmado.</CardDescription>
+          </div>
+          <div className="md:hidden"><MobileSortControl /></div>
+        </CardHeader>
 
       <CardContent>
         {/* Mobile Card View */}
@@ -166,7 +233,7 @@ export function DraftsList({ orders, searchParams }: { orders: any, searchParams
             ))
           ) : (
             <div className="text-center text-muted-foreground py-12">
-              No se encontraron pedidos.
+              No se encontraron pedidos con los filtros aplicados.
             </div>
           )}
         </div>
@@ -229,7 +296,7 @@ export function DraftsList({ orders, searchParams }: { orders: any, searchParams
                     colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No se encontraron pedidos.
+                    No se encontraron pedidos con los filtros aplicados.
                   </TableCell>
                 </TableRow>
               )}
@@ -237,6 +304,7 @@ export function DraftsList({ orders, searchParams }: { orders: any, searchParams
           </Table>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </>
   )
 }

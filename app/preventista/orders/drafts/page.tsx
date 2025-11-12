@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { PlusCircle } from "lucide-react"
 import { GoBackButton } from "@/components/ui/go-back-button"
-import { DraftsList } from "@/components/preventista/drafts-list"
+import { DraftsList } from "@/components/preventista/drafts-list" // This will be modified later
 
 type Order = {
   id: string
@@ -40,10 +40,22 @@ export default async function OrdersPage({
   const params = await searchParams;
   const sortBy = (await params.sortBy as SortableField) || 'created_at';
   const sortOrder = (await params.sortOrder as string) || 'desc';
+  const q = await params.q as string;
+  const priorities = await params.priorities as string;
+  const localities = await params.localities as string;
+  const deliveryDateFrom = await params.deliveryDateFrom as string;
+  const deliveryDateTo = await params.deliveryDateTo as string;
+  const createdAtFrom = await params.createdAtFrom as string;
+  const createdAtTo = await params.createdAtTo as string;
+  const totalMin = await params.totalMin as string;
+  const totalMax = await params.totalMax as string;
   
   // Validate sortOrder to prevent injection
   const validSortOrder = ['asc', 'desc'].includes(sortOrder) ? sortOrder : 'desc';
   
+  // Fetch distinct localities for the filter dropdown
+  const { data: distinctLocalitiesData } = await supabase.rpc('get_distinct_localities_for_user', { user_id_param: user.id });
+  const distinctLocalities = distinctLocalitiesData || [];
   let query = supabase
     .from("orders")
     .select(`
@@ -63,6 +75,43 @@ export default async function OrdersPage({
     `)
     .eq("created_by", user.id);
 
+  // Apply filtering
+  if (q) {
+    query = query.or(`commercial_name.ilike.%${q}%,code.ilike.%${q}%)`, {referencedTable: "customers"});
+    query = query.not('customers', 'is', null);;
+  }
+
+  if (priorities) {
+    query = query.in('priority', priorities.split(','));
+  }
+
+  if (localities) {
+    query = query.in('customers(locality)', localities.split(','));
+  }
+
+  if (deliveryDateFrom) {
+    query = query.gte('delivery_date', deliveryDateFrom);
+  }
+
+  if (deliveryDateTo) {
+    query = query.lte('delivery_date', deliveryDateTo);
+  }
+
+  if (createdAtFrom) {
+    query = query.gte('created_at', `${createdAtFrom}T00:00:00`);
+  }
+
+  if (createdAtTo) {
+    query = query.lte('created_at', `${createdAtTo}T23:59:59`);
+  }
+
+  if (totalMin) {
+    query = query.gte('total', Number(totalMin));
+  }
+
+  if (totalMax) {
+    query = query.lte('total', Number(totalMax));
+  }
   // Apply sorting
   if (sortBy.includes('.')) {
       // Apply sorting
@@ -79,7 +128,7 @@ export default async function OrdersPage({
 
   query = query.eq("status", "BORRADOR");
   const { data: orders, error } = await query
-
+  console.log(orders)
   if (error) {
     console.error("Error fetching orders:", error)
   }
@@ -95,7 +144,7 @@ export default async function OrdersPage({
           </Link>
         </Button>
       </div>
-      <DraftsList orders={orders || []} searchParams={params} />
+      <DraftsList orders={orders || []} searchParams={params} localities={distinctLocalities} />
     </main>
   )
 }
