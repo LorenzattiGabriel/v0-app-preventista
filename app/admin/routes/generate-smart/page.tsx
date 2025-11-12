@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { RouteGeneratorForm } from "@/components/admin/route-generator-form"
+import { SmartRouteGenerator } from "@/components/admin/smart-route-generator"
 
-export default async function GenerateRoutesPage() {
+export default async function GenerateSmartRoutesPage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -29,7 +29,7 @@ export default async function GenerateRoutesPage() {
     .eq("is_active", true)
     .order("full_name")
 
-  // Get all pending orders (filter by date will be done in the form)
+  // Get all pending orders (filter will be done in the component)
   const { data: pendingOrders } = await supabase
     .from("orders")
     .select(
@@ -50,13 +50,13 @@ export default async function GenerateRoutesPage() {
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-background">
         <div className="container flex h-16 items-center px-4">
-          <h1 className="text-xl font-semibold">Generar Rutas Automáticas</h1>
+          <h1 className="text-xl font-semibold">Generar Rutas Inteligentes</h1>
         </div>
       </header>
 
       <main className="flex-1 bg-muted/40 p-6">
-        <div className="container mx-auto max-w-6xl">
-          <RouteGeneratorForm
+        <div className="container mx-auto max-w-4xl">
+          <SmartRouteGenerator
             zones={zones || []}
             drivers={drivers || []}
             pendingOrders={pendingOrders || []}
@@ -67,3 +67,5 @@ export default async function GenerateRoutesPage() {
     </div>
   )
 }
+
+

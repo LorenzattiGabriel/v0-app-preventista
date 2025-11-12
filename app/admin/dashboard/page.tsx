@@ -146,11 +146,11 @@ export default async function AdminDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Gestión de Rutas</CardTitle>
-                <CardDescription>Genera y administra rutas de entrega</CardDescription>
+                <CardDescription>Genera y administra rutas de entrega optimizadas</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button asChild className="w-full" size="lg">
-                  <Link href="/admin/routes/generate">Generar Rutas Automáticas</Link>
+                  <Link href="/admin/routes/generate-smart">Generar Rutas Inteligentes</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/routes">Ver Todas las Rutas</Link>
