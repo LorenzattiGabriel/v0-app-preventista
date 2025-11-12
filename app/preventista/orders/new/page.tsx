@@ -29,17 +29,11 @@ export default async function NewOrderPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-background">
-        <div className="container flex h-16 items-center px-4">
-          <h1 className="text-xl font-semibold">Crear Nuevo Pedido</h1>
-        </div>
-      </header>
-
-      <main className="flex-1 bg-muted/40 p-6">
+      <section className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto max-w-5xl">
           <NewOrderForm customers={customers || []} products={products || []} userId={user.id} />
         </div>
-      </main>
+      </section>
     </div>
   )
 }

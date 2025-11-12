@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import type { Zone, CustomerType, IvaCondition } from "@/lib/types/database"
 import { ArrowLeft, MapPin, Loader2 } from "lucide-react"
-import Link from "next/link"
+import { useNavigationHistory } from "@/contexts/navigation-history-context"
 
 // Tipos de Google Maps están disponibles globalmente con @types/google.maps
 
@@ -44,6 +44,7 @@ function useGoogleMapsScript() {
 
 export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   const router = useRouter()
+  const { previousPath } = useNavigationHistory()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isGoogleMapsLoaded = useGoogleMapsScript()
@@ -314,8 +315,8 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         sessionStorage.setItem('newly_created_customer_id', newCustomer.id)
       }
 
-      // Redirigir de vuelta a crear pedido
-      router.push("/preventista/orders/new")
+      // Redirect back to the previous page, or a default if not specified
+      router.push(previousPath || "/preventista/dashboard")
       router.refresh()
     } catch (err) {
       console.error("[v0] Error creating customer:", err)
@@ -325,14 +326,25 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
     }
   }
 
+  const getBackLinkText = () => {
+    switch (previousPath) {
+      case "/preventista/orders/new":
+        return "Volver a Crear Nuevo Pedido"
+      case "/preventista/dashboard":
+        return "Volver al Panel"
+      case "/preventista/customers":
+        return "Volver a Ver Mis Clientes"
+      default:
+        return "Volver"
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button variant="outline" asChild type="button">
-          <Link href="/preventista/orders/new">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver al Pedido
-          </Link>
+        <Button variant="outline" type="button" onClick={() => router.back()}>          
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {getBackLinkText()}
         </Button>
       </div>
 
@@ -620,8 +632,8 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
       </Card>
 
       <div className="flex gap-4 justify-end">
-        <Button type="button" variant="outline" asChild>
-          <Link href="/preventista/orders/new">Cancelar</Link>
+        <Button type="button" variant="outline" onClick={() => router.back()}>
+          Cancelar
         </Button>
         <Button type="submit" disabled={isLoading} size="lg">
           {isLoading ? "Guardando..." : "Guardar Cliente y Continuar"}

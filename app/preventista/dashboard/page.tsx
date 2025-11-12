@@ -56,18 +56,7 @@ export default async function PreventistaDashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-background">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Package className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Sistema de Gestión - Preventista</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">{profile.full_name}</span>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+
 
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto space-y-6">
