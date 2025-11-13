@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 
@@ -11,11 +11,21 @@ interface GoBackButtonProps {
 }
 
 export function GoBackButton({ fallbackHref = "/preventista/dashboard", text = "Volver" }: GoBackButtonProps) {
-  const router = useRouter()
+  const router = useRouter();
+  const pathname = usePathname();
 
   const handleGoBack = () => {
-    if (window.history.length > 1) {
-      router.back()
+    // Check if document.referrer is available and from the same origin
+    const canGoBack =
+      typeof window !== "undefined" &&
+      document.referrer &&
+      new URL(document.referrer).origin === window.location.origin;
+
+    // Check if the previous path is different from the current one
+    const isDifferentPage = canGoBack && new URL(document.referrer).pathname !== pathname;
+
+    if (isDifferentPage) {
+      router.back();
     } else {
       router.push(fallbackHref)
     }

@@ -59,6 +59,8 @@ export function DraftsFilters({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [isPriorityPopoverOpen, setIsPriorityPopoverOpen] = useState(false)
+  const [stagedPriorities, setStagedPriorities] = useState<Set<string>>(new Set())
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFiltersState>({} as AdvancedFiltersState)
 
   const createQueryString = useCallback(
@@ -94,6 +96,13 @@ export function DraftsFilters({
     }
   }, [isSheetOpen, searchParams])
 
+  // Initialize staged priorities when the popover opens
+  useEffect(() => {
+    if (isPriorityPopoverOpen) {
+      setStagedPriorities(new Set(searchParams.get("priorities")?.split(",").filter(Boolean)))
+    }
+  }, [isPriorityPopoverOpen, searchParams])
+
   const q = searchParams.get("q") ?? ""
   const priorities = new Set(searchParams.get("priorities")?.split(",").filter(Boolean))
 
@@ -118,6 +127,12 @@ export function DraftsFilters({
     router.replace(`${pathname}?${createQueryString({ [paramName]: newValue })}`)
   }
 
+  const applyPriorityFilters = () => {
+    const newValue = Array.from(stagedPriorities).join(",")
+    router.replace(`${pathname}?${createQueryString({ priorities: newValue })}`)
+    setIsPriorityPopoverOpen(false)
+  }
+
   const applyAdvancedFilters = () => {
     const params: Record<string, string | null> = {
       deliveryDateFrom: advancedFilters.deliveryDate?.from ? format(advancedFilters.deliveryDate.from, "yyyy-MM-dd") : null,
@@ -133,12 +148,12 @@ export function DraftsFilters({
     setIsSheetOpen(false)
   }
 
-  const activeFiltersCount = [
-    q,
-    searchParams.get("priorities"),
+  const advancedFiltersCount = [
     searchParams.get("localities"),
     searchParams.get("deliveryDateFrom"),
+    searchParams.get("deliveryDateTo"),
     searchParams.get("createdAtFrom"),
+    searchParams.get("createdAtTo"),
     searchParams.get("totalMin"),
     searchParams.get("totalMax"),
   ].filter(Boolean).length
@@ -158,7 +173,7 @@ export function DraftsFilters({
       />
 
       {/* Priority Multi-Select */}
-      <Popover>
+      <Popover open={isPriorityPopoverOpen} onOpenChange={setIsPriorityPopoverOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="h-9 gap-1">
             Prioridad
@@ -174,11 +189,21 @@ export function DraftsFilters({
                 {priorityOptions.map((option) => (
                   <CommandItem
                     key={option.value}
-                    onSelect={() => handleMultiSelectToggle("priorities", priorities, option.value)}
+                    onSelect={() => {
+                      setStagedPriorities(prev => {
+                        const newSet = new Set(prev)
+                        if (newSet.has(option.value)) {
+                          newSet.delete(option.value)
+                        } else {
+                          newSet.add(option.value)
+                        }
+                        return newSet
+                      })
+                    }}
                   >
                     <div
                       className={`mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary ${
-                        priorities.has(option.value)
+                        stagedPriorities.has(option.value)
                           ? "bg-primary text-primary-foreground"
                           : "opacity-50 [&_svg]:invisible"
                       }`}
@@ -190,6 +215,9 @@ export function DraftsFilters({
                 ))}
               </CommandGroup>
             </CommandList>
+            <div className="p-2 border-t">
+              <Button onClick={applyPriorityFilters} className="w-full h-8">Aplicar</Button>
+            </div>
           </Command>
         </PopoverContent>
       </Popover>
@@ -200,7 +228,7 @@ export function DraftsFilters({
           <Button variant="outline" className="h-9 gap-1.5">
             <Filter className="h-4 w-4" />
             Filtros
-            {activeFiltersCount > 0 && <Badge>{activeFiltersCount}</Badge>}
+            {advancedFiltersCount > 0 && <Badge>{advancedFiltersCount}</Badge>}
           </Button>
         </SheetTrigger>
         <SheetContent side="left">

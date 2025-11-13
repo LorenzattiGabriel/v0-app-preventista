@@ -54,8 +54,9 @@ export default async function OrdersPage({
   const validSortOrder = ['asc', 'desc'].includes(sortOrder) ? sortOrder : 'desc';
   
   // Fetch distinct localities for the filter dropdown
-  const { data: distinctLocalitiesData } = await supabase.rpc('get_distinct_localities_for_user', { user_id_param: user.id });
+  const { data: distinctLocalitiesData, error: localitiesError } = await supabase.rpc('get_distinct_localities_for_user', { user_id_param: null });
   const distinctLocalities = distinctLocalitiesData || [];
+  
   let query = supabase
     .from("orders")
     .select(`
@@ -78,7 +79,7 @@ export default async function OrdersPage({
   // Apply filtering
   if (q) {
     query = query.or(`commercial_name.ilike.%${q}%,code.ilike.%${q}%)`, {referencedTable: "customers"});
-    query = query.not('customers', 'is', null);;
+    query = query.not('customers', 'is', null);
   }
 
   if (priorities) {
@@ -86,7 +87,8 @@ export default async function OrdersPage({
   }
 
   if (localities) {
-    query = query.in('customers(locality)', localities.split(','));
+    query = query.in('customers.locality', localities.split(','));
+    query = query.not('customers', 'is', null);
   }
 
   if (deliveryDateFrom) {
