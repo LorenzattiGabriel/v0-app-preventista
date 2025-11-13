@@ -190,3 +190,5 @@ Cada usuario es redirigido automáticamente a su dashboard según su rol:
 ## ⚠️ Nota Importante
 
 Este sistema usa autenticación simplificada con contraseñas en texto plano para facilitar el prototipado. **NO usar en producción**. Para producción, implementar autenticación segura con Supabase Auth o similar.
+
+building
