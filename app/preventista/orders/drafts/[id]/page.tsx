@@ -77,6 +77,7 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
 
   // Prepare initial form data from the draft order
   const initialOrderData = {
+    orderNumber: order.order_number,
     selectedCustomer: customers?.find((c) => c.id === order.customer_id) || null,
     deliveryDate: order.delivery_date,
     priority: order.priority,

@@ -26,6 +26,7 @@ interface OrderItem {
 }
 
 interface InitialOrderData {
+  orderNumber: string
   selectedCustomer: Customer | null
   deliveryDate: string
   priority: OrderPriority
@@ -145,8 +146,10 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
   return (
     <div className="space-y-6">
+
       <div className="flex items-center justify-between">
         <GoBackButton/>
+        <h2 className="text-2xl font-medium">Borrador de Pedido: {initialOrderData?.orderNumber || ""}</h2>
       </div>
 
       {error && (
