@@ -8,7 +8,6 @@ import { revalidatePath } from 'next/cache'
 export async function revalidateDashboard() {
   revalidatePath('/admin/dashboard')
   revalidatePath('/admin/routes')
-  revalidatePath('/admin/routes/history')
   revalidatePath('/admin/routes/generate-smart')
 }
 
