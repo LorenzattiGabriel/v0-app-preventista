@@ -15,17 +15,19 @@ export function GoBackButton({ fallbackHref = "/preventista/dashboard", text = "
   const pathname = usePathname();
 
   const handleGoBack = () => {
-    // Check if document.referrer is available and from the same origin
-    const canGoBack =
-      typeof window !== "undefined" &&
-      document.referrer &&
-      new URL(document.referrer).origin === window.location.origin;
+    const hasHistory = typeof window !== "undefined" && window.history.length > 1;
+    const isSameOrigin = hasHistory && document.referrer.startsWith(window.location.origin);
 
-    // Check if the previous path is different from the current one
-    const isDifferentPage = canGoBack && new URL(document.referrer).pathname !== pathname;
-
-    if (isDifferentPage) {
-      router.back();
+    if (isSameOrigin) {
+      const referrerUrl = new URL(document.referrer);
+      // If the previous URL has query params, navigate to its path without them.
+      // This is useful for returning from a detail page to a filtered list.
+      if (referrerUrl.search) {
+        router.push(referrerUrl.pathname);
+      } else {
+        // Otherwise, just go back as normal.
+        router.back();
+      }
     } else {
       router.push(fallbackHref)
     }
