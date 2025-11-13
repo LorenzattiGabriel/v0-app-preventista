@@ -10,9 +10,12 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Zone, Profile } from "@/lib/types/database"
-import { ArrowLeft, MapPin, Truck, Package, Loader2 } from "lucide-react"
+import { ArrowLeft, MapPin, Truck, Package, Loader2, ExternalLink, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { generateRouteFromOrders, reorderOrdersByOptimization } from "@/lib/services/rutasInteligentesService"
+import { RutasInteligentesError } from "@/lib/services/rutasInteligentesClient"
 
 interface RouteGeneratorFormProps {
   zones: Zone[]
@@ -26,8 +29,10 @@ interface GeneratedRoute {
   zoneId: string
   orders: any[]
   suggestedDriver?: string
-  totalDistance: number
-  estimatedDuration: number
+  totalDistance: number // km REALES del microservicio
+  estimatedDuration: number // minutos REALES del microservicio
+  googleMapsUrl?: string // URL de Google Maps optimizada
+  optimizedRouteData?: any // Datos completos de la ruta
 }
 
 export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: RouteGeneratorFormProps) {
@@ -58,6 +63,8 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
     setError(null)
 
     try {
+      console.log('🚀 Iniciando generación de rutas inteligentes...')
+
       // Filter orders by selected zones and date
       const filteredOrders = pendingOrders.filter(
         (order) =>
@@ -71,10 +78,33 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
         return
       }
 
+      console.log(`📦 ${filteredOrders.length} pedidos filtrados`)
+
+      // 🆕 FILTRAR PEDIDOS CON COORDENADAS
+      const ordersWithCoordinates = filteredOrders.filter(
+        order => order.customers.latitude && order.customers.longitude
+      )
+
+      const ordersWithoutCoordinates = filteredOrders.filter(
+        order => !order.customers.latitude || !order.customers.longitude
+      )
+
+      console.log(`✅ ${ordersWithCoordinates.length} con coordenadas`)
+      console.log(`⚠️ ${ordersWithoutCoordinates.length} sin coordenadas`)
+
+      if (ordersWithCoordinates.length === 0) {
+        setError(
+          "Ningún pedido tiene coordenadas guardadas. " +
+          "Registra las ubicaciones de los clientes en la sección de Preventistas primero."
+        )
+        setIsGenerating(false)
+        return
+      }
+
       // Group orders by zone
       const ordersByZone: { [key: string]: any[] } = {}
 
-      filteredOrders.forEach((order) => {
+      ordersWithCoordinates.forEach((order) => {
         const zoneId = order.customers.zone_id || "sin_zona"
         if (!ordersByZone[zoneId]) {
           ordersByZone[zoneId] = []
@@ -82,40 +112,62 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
         ordersByZone[zoneId].push(order)
       })
 
-      // Generate routes
+      // Generate routes using microservice
       const routes: GeneratedRoute[] = []
 
       for (const [zoneId, orders] of Object.entries(ordersByZone)) {
         const zone = zones.find((z) => z.id === zoneId)
         const zoneName = zone?.name || "Sin Zona"
 
-        // Sort orders by priority (urgente first)
-        const sortedOrders = orders.sort((a, b) => {
-          const priorityOrder = { urgente: 0, alta: 1, media: 2, normal: 3, baja: 4 }
-          return (
-            priorityOrder[a.priority as keyof typeof priorityOrder] -
-            priorityOrder[b.priority as keyof typeof priorityOrder]
+        console.log(`🔄 Optimizando ruta para zona: ${zoneName} (${orders.length} pedidos)`)
+
+        try {
+          // 🌟 LLAMAR AL MICROSERVICIO DE RUTAS INTELIGENTES
+          const optimizedRoute = await generateRouteFromOrders(orders)
+
+          // Reordenar pedidos según optimización
+          const reorderedOrders = reorderOrdersByOptimization(
+            optimizedRoute.optimizedOrder,
+            orders
           )
-        })
 
-        // Split into routes if exceeds max orders
-        const numRoutes = Math.ceil(sortedOrders.length / maxOrdersPerRoute)
-
-        for (let i = 0; i < numRoutes; i++) {
-          const routeOrders = sortedOrders.slice(i * maxOrdersPerRoute, (i + 1) * maxOrdersPerRoute)
-
-          // Simple distance estimation (in real app, use Google Maps API)
-          const estimatedDistance = routeOrders.length * 2.5 // ~2.5km per delivery
-          const estimatedDuration = routeOrders.length * avgDeliveryTime + routeOrders.length * 5 // delivery time + travel time
+          // Extraer distancia y duración REALES
+          const distanceKm = optimizedRoute.routes[0].distance.value / 1000 // metros a km
+          const durationMinutes = optimizedRoute.routes[0].duration.value / 60 // segundos a minutos
 
           routes.push({
-            zone: numRoutes > 1 ? `${zoneName} (${i + 1}/${numRoutes})` : zoneName,
+            zone: zoneName,
             zoneId: zoneId,
-            orders: routeOrders,
-            totalDistance: estimatedDistance,
-            estimatedDuration: estimatedDuration,
+            orders: reorderedOrders,
+            totalDistance: distanceKm, // ✅ REAL del microservicio
+            estimatedDuration: durationMinutes, // ✅ REAL del microservicio
+            googleMapsUrl: optimizedRoute.googleMapsUrl, // ✅ Link directo a Google Maps
+            optimizedRouteData: optimizedRoute, // ✅ Guardar toda la data
           })
+
+          console.log(`✅ Ruta optimizada para ${zoneName}:`, {
+            distance: optimizedRoute.routes[0].distance.text,
+            duration: optimizedRoute.routes[0].duration.text,
+            orders: reorderedOrders.length,
+          })
+        } catch (error) {
+          console.error(`❌ Error al optimizar ruta para ${zoneName}:`, error)
+          
+          if (error instanceof RutasInteligentesError) {
+            setError(`Error en zona ${zoneName}: ${error.message}`)
+          } else {
+            setError(`Error al optimizar ruta para ${zoneName}. Intenta nuevamente.`)
+          }
+          
+          setIsGenerating(false)
+          return
         }
+      }
+
+      if (routes.length === 0) {
+        setError("No se pudieron generar rutas. Verifica que los clientes tengan coordenadas válidas.")
+        setIsGenerating(false)
+        return
       }
 
       // Auto-assign drivers if available
@@ -128,6 +180,16 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
           }
         }
       })
+
+      console.log(`✅ ${routes.length} rutas generadas exitosamente`)
+      
+      // Mostrar warning si hay pedidos sin coordenadas
+      if (ordersWithoutCoordinates.length > 0) {
+        setError(
+          `⚠️ Se generaron ${routes.length} rutas con ${ordersWithCoordinates.length} pedidos. ` +
+          `${ordersWithoutCoordinates.length} pedidos fueron omitidos por no tener coordenadas.`
+        )
+      }
 
       setGeneratedRoutes(routes)
     } catch (err) {
@@ -161,7 +223,7 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
         })
         const routeCode = routeCodeData as string
 
-        // Create route
+        // 🆕 Create route with REAL data from microservice
         const { data: createdRoute, error: routeError } = await supabase
           .from("routes")
           .insert({
@@ -171,8 +233,9 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
             scheduled_date: deliveryDate,
             scheduled_start_time: startTime,
             scheduled_end_time: endTime,
-            total_distance: route.totalDistance,
-            estimated_duration: route.estimatedDuration,
+            total_distance: route.totalDistance, // ✅ REAL del microservicio
+            estimated_duration: route.estimatedDuration, // ✅ REAL del microservicio
+            optimized_route: route.optimizedRouteData || null, // ✅ Guardar toda la data de la ruta
             status: "PLANIFICADO",
             created_by: userId,
           })
@@ -181,18 +244,20 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
 
         if (routeError) throw routeError
 
-        // Create route_orders
+        // Create route_orders in OPTIMIZED order
         for (let j = 0; j < route.orders.length; j++) {
           const order = route.orders[j]
 
           const { error: routeOrderError } = await supabase.from("route_orders").insert({
             route_id: createdRoute.id,
             order_id: order.id,
-            delivery_order: j + 1,
+            delivery_order: j + 1, // El orden YA está optimizado por el microservicio
           })
 
           if (routeOrderError) throw routeOrderError
         }
+
+        console.log(`✅ Ruta ${routeCode} creada exitosamente`)
       }
 
       router.push("/admin/routes")
@@ -338,47 +403,79 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
             <CardContent className="space-y-4">
               {generatedRoutes.map((route, index) => (
                 <div key={index} className="border rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">Ruta {index + 1}</h3>
-                        <Badge variant="outline">{route.zone}</Badge>
+                  <div className="space-y-4">
+                    {/* Header con info y asignación de repartidor */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold">Ruta {index + 1}</h3>
+                          <Badge variant="outline">{route.zone}</Badge>
+                          {route.googleMapsUrl && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-700">
+                              ✅ Optimizada
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Package className="h-4 w-4" />
+                            <span>{route.orders.length} pedidos</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            <span>{route.totalDistance.toFixed(1)} km</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>
+                              {Math.floor(route.estimatedDuration / 60)}h {Math.floor(route.estimatedDuration % 60)}min
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Package className="h-4 w-4" />
-                          <span>{route.orders.length} pedidos</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          <span>{route.totalDistance.toFixed(1)} km</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span>
-                            {Math.floor(route.estimatedDuration / 60)}h {route.estimatedDuration % 60}min
-                          </span>
-                        </div>
+
+                      <div className="w-64">
+                        <Label htmlFor={`driver-${index}`}>Repartidor</Label>
+                        <Select
+                          value={routeDrivers[index]}
+                          onValueChange={(value) => setRouteDrivers({ ...routeDrivers, [index]: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar repartidor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {drivers.map((driver) => (
+                              <SelectItem key={driver.id} value={driver.id}>
+                                {driver.full_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
-                    <div className="w-64">
-                      <Label htmlFor={`driver-${index}`}>Repartidor</Label>
-                      <Select
-                        value={routeDrivers[index]}
-                        onValueChange={(value) => setRouteDrivers({ ...routeDrivers, [index]: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar repartidor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {drivers.map((driver) => (
-                            <SelectItem key={driver.id} value={driver.id}>
-                              {driver.full_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* 🆕 Botón de Google Maps */}
+                    {route.googleMapsUrl && (
+                      <Alert className="bg-blue-50 border-blue-200">
+                        <MapPin className="h-4 w-4 text-blue-600" />
+                        <AlertDescription className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-blue-900">
+                            Ruta optimizada lista para navegación GPS
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              window.open(route.googleMapsUrl, '_blank')
+                            }}
+                            className="ml-4"
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Abrir en Google Maps
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   <div className="border-t pt-4">

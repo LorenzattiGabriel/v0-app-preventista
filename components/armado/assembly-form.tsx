@@ -433,13 +433,13 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
             <AlertDialogDescription>
               {hasShortages ? (
                 <div className="space-y-2">
-                  <p>Este pedido tiene productos faltantes. ¿Está seguro de confirmar el armado?</p>
+                  <span className="block">Este pedido tiene productos faltantes. ¿Está seguro de confirmar el armado?</span>
                   <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
-                    <p className="font-medium">Diferencia en total: ${difference.toFixed(2)}</p>
+                    <span className="font-medium block">Diferencia en total: ${difference.toFixed(2)}</span>
                   </div>
                 </div>
               ) : (
-                <p>¿Está seguro de confirmar el armado de este pedido? El pedido pasará a estado PENDIENTE_ENTREGA.</p>
+                <>¿Está seguro de confirmar el armado de este pedido? El pedido pasará a estado PENDIENTE_ENTREGA.</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

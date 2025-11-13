@@ -81,11 +81,41 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
         })
       }
 
-      // Abrir Google Maps con ruta hardcodeada
-      // Origen: Córdoba Capital (-31.4201, -64.1888)
-      // Destino: Santa Rosa de Río Primero (-31.1334, -63.5167)
-      const googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/-31.1334,-63.5167`
-      window.open(googleMapsUrl, '_blank')
+      // 🆕 Usar URL de Google Maps optimizada del microservicio
+      let googleMapsUrl = null
+      
+      // Intentar obtener la URL del optimized_route (generada por microservicio)
+      if (route.optimized_route?.googleMapsUrl) {
+        googleMapsUrl = route.optimized_route.googleMapsUrl
+        console.log('✅ Usando ruta optimizada del microservicio')
+      } else {
+        // Fallback: Construir URL manualmente con coordenadas de los clientes
+        const coordinates = route.route_orders
+          .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
+          .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
+          .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
+
+        if (coordinates.length > 0) {
+          // Punto de partida (primer pedido o depósito default)
+          const startPoint = coordinates.length > 0 ? coordinates[0] : '-31.4201,-64.1888'
+          
+          // Construir URL con todos los puntos
+          if (coordinates.length > 1) {
+            googleMapsUrl = `https://www.google.com/maps/dir/${coordinates.join('/')}/`
+          } else {
+            googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${startPoint}/`
+          }
+          console.log('⚠️ Usando ruta manual (sin optimización)')
+        } else {
+          console.warn('⚠️ No se encontraron coordenadas para la ruta')
+        }
+      }
+
+      if (googleMapsUrl) {
+        window.open(googleMapsUrl, '_blank')
+      } else {
+        setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
+      }
 
       router.refresh()
     } catch (err) {
