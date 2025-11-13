@@ -125,7 +125,7 @@ export default async function PreventistaDashboardPage() {
                   <Link href="/preventista/customers/new">Registrar Nuevo Cliente</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/preventista/orders/list">Ver Mis Pedidos</Link>
+                  <Link href="/preventista/orders">Ver Mis Pedidos</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/preventista/customers">Ver Clientes</Link>
@@ -141,7 +141,7 @@ export default async function PreventistaDashboardPage() {
               <CardContent>
                 {draftOrders && draftOrders > 0 ? (
                   <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/preventista/orders?status=BORRADOR">Ver Borradores ({draftOrders})</Link>
+                    <Link href="/preventista/orders/drafts">Ver Borradores ({draftOrders})</Link>
                   </Button>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-4">No hay borradores pendientes</p>

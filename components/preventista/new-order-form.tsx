@@ -14,7 +14,8 @@ import type { Customer, Product, OrderPriority, OrderType } from "@/lib/types/da
 import { Plus, Trash2, ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
-
+import { useOrderFormActions } from "./use-order-form-actions"
+import { GoBackButton } from "../ui/go-back-button"
 interface OrderItem {
   productId: string
   productName: string
@@ -24,32 +25,51 @@ interface OrderItem {
   subtotal: number
 }
 
+interface InitialOrderData {
+  orderNumber: string
+  selectedCustomer: Customer | null
+  deliveryDate: string
+  priority: OrderPriority
+  orderType: OrderType
+  requiresInvoice: boolean
+  observations: string
+  generalDiscount: number
+  orderItems: OrderItem[]
+}
+
 interface NewOrderFormProps {
   customers: Customer[]
   products: Product[]
   userId: string
+  initialOrderData?: InitialOrderData
+  orderId?: string // Added for editing existing orders
 }
 
-export function NewOrderForm({ customers, products, userId }: NewOrderFormProps) {
+export function NewOrderForm({ customers, products, userId, initialOrderData, orderId }: NewOrderFormProps) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+
+  const { saveOrder, isLoading, error, setError, calculateTotals } = useOrderFormActions()
 
   // Form state
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [deliveryDate, setDeliveryDate] = useState("")
-  const [priority, setPriority] = useState<OrderPriority>("normal")
-  const [orderType, setOrderType] = useState<OrderType>("presencial")
-  const [requiresInvoice, setRequiresInvoice] = useState(false)
-  const [observations, setObservations] = useState("")
-  const [generalDiscount, setGeneralDiscount] = useState(0)
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialOrderData?.selectedCustomer || null)
+  const [deliveryDate, setDeliveryDate] = useState(initialOrderData?.deliveryDate || "")
+  const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
+  const [orderType, setOrderType] = useState<OrderType>(initialOrderData?.orderType || "presencial")
+  const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
+  const [observations, setObservations] = useState(initialOrderData?.observations || "")
+  const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
+  const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
   // Add product form state
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
+
+  // Initialize order items if provided
+  useState(() => {
+    if (initialOrderData?.orderItems) setOrderItems(initialOrderData.orderItems)
+  })
 
   const handleCustomerSelect = (customer: Customer) => {
     setSelectedCustomer(customer)
@@ -98,106 +118,38 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
     setOrderItems(orderItems.filter((_, i) => i !== index))
   }
 
-  const calculateTotals = () => {
-    const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
-    const total = subtotal - generalDiscount
-    return { subtotal, total }
-  }
+  const handleSaveOrder = async (isDraft: boolean) => {
+    // The saveOrder hook now returns the order ID on success
+    const savedOrderId = await saveOrder({
+      selectedCustomer,
+      deliveryDate,
+      priority,
+      orderType,
+      requiresInvoice,
+      observations,
+      generalDiscount,
+      orderItems,
+      userId,
+      isDraft,
+      orderId, // Pass orderId if editing
+    });
 
-  const handleSubmit = async (isDraft: boolean) => {
-    if (!selectedCustomer) {
-      setError("Debe seleccionar un cliente")
-      return
-    }
-
-    if (!deliveryDate) {
-      setError("Debe seleccionar una fecha de entrega")
-      return
-    }
-
-    if (orderItems.length === 0) {
-      setError("Debe agregar al menos un producto")
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const supabase = createClient()
-      const { subtotal, total } = calculateTotals()
-
-      // Generate order number
-      const { data: orderNumberData } = await supabase.rpc("generate_order_number")
-      const orderNumber = orderNumberData as string
-
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          order_number: orderNumber,
-          customer_id: selectedCustomer.id,
-          order_date: new Date().toISOString().split("T")[0],
-          delivery_date: deliveryDate,
-          priority,
-          order_type: orderType,
-          status: isDraft ? "BORRADOR" : "PENDIENTE_ARMADO",
-          subtotal,
-          general_discount: generalDiscount,
-          total,
-          requires_invoice: requiresInvoice,
-          created_by: userId,
-          observations,
-        })
-        .select()
-        .single()
-
-      if (orderError) throw orderError
-
-      // Create order items
-      const itemsToInsert = orderItems.map((item) => ({
-        order_id: order.id,
-        product_id: item.productId,
-        quantity_requested: item.quantity,
-        unit_price: item.unitPrice,
-        discount: item.discount,
-        subtotal: item.subtotal,
-      }))
-
-      const { error: itemsError } = await supabase.from("order_items").insert(itemsToInsert)
-
-      if (itemsError) throw itemsError
-
-      // Create order history entry
-      await supabase.from("order_history").insert({
-        order_id: order.id,
-        new_status: isDraft ? "BORRADOR" : "PENDIENTE_ARMADO",
-        changed_by: userId,
-        change_reason: "Pedido creado",
-      })
-
-      router.push("/preventista/dashboard")
-      router.refresh()
-    } catch (err) {
-      console.error("[v0] Error creating order:", err)
-      setError(err instanceof Error ? err.message : "Error al crear el pedido")
-    } finally {
-      setIsLoading(false)
+    // If the order was saved successfully, redirect to the dashboard
+    if (savedOrderId) {
+      router.push("/preventista/dashboard");
+      router.refresh();
     }
   }
 
-  const { subtotal, total } = calculateTotals()
+  const { subtotal, total } = calculateTotals(orderItems, generalDiscount)
   const selectedProduct = products.find((p) => p.id === selectedProductId)
 
   return (
     <div className="space-y-6">
+
       <div className="flex items-center justify-between">
-        <Button variant="outline" asChild>
-          <Link href="/preventista/dashboard">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
-          </Link>
-        </Button>
+        <GoBackButton/>
+        <h2 className="text-2xl font-medium">Borrador de Pedido: {initialOrderData?.orderNumber || ""}</h2>
       </div>
 
       {error && (
@@ -475,11 +427,11 @@ export function NewOrderForm({ customers, products, userId }: NewOrderFormProps)
       </Card>
 
       <div className="flex gap-4 justify-end">
-        <Button variant="outline" onClick={() => handleSubmit(true)} disabled={isLoading}>
+        <Button variant="outline" onClick={() => handleSaveOrder(true)} disabled={isLoading}>
           <Save className="mr-2 h-4 w-4" />
-          Guardar Borrador
+          {isLoading ? "Guardando Borrador..." : "Guardar Borrador"}
         </Button>
-        <Button onClick={() => handleSubmit(false)} disabled={isLoading} size="lg">
+        <Button onClick={() => handleSaveOrder(false)} disabled={isLoading} size="lg">
           {isLoading ? "Creando..." : "Confirmar Pedido"}
         </Button>
       </div>
