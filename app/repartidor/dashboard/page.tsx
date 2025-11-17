@@ -25,7 +25,7 @@ export default async function RepartidorDashboardPage() {
 
   // Get today's date
   const today = new Date().toISOString().split("T")[0]
-
+  console.log("today:" , today)
   // Get statistics
   const { count: todayRoutes } = await supabase
     .from("routes")

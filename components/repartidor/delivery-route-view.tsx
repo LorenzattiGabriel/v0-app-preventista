@@ -87,9 +87,25 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
       // Intentar obtener la URL del optimized_route (generada por microservicio)
       if (route.optimized_route?.googleMapsUrl) {
         googleMapsUrl = route.optimized_route.googleMapsUrl
-        console.log('✅ Usando ruta optimizada del microservicio')
+        console.log('✅ Usando URL de ruta optimizada del microservicio')
+      } else if (route.optimized_route?.origin && route.optimized_route?.destinations) {
+        // Fallback 1: Construir URL desde el objeto de ruta optimizada
+        console.log('🛠️ Construyendo URL desde objeto de ruta optimizada')
+        const origin = `${route.optimized_route.origin.lat},${route.optimized_route.origin.lng}`
+        
+        // Waypoints (puntos intermedios) si existen
+        const waypoints = (route.optimized_route.waypoints || [])
+          .map((wp: any) => `${wp.lat},${wp.lng}`)
+          .join('|')
+
+        // El último destino es el punto final
+        const destination = route.optimized_route.destinations.length > 0
+          ? `${route.optimized_route.destinations[route.optimized_route.destinations.length - 1].lat},${route.optimized_route.destinations[route.optimized_route.destinations.length - 1].lng}`
+          : origin
+
+        googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoints}`
       } else {
-        // Fallback: Construir URL manualmente con coordenadas de los clientes
+        // Fallback 2: Construir URL manualmente con coordenadas de los clientes (sin optimizar)
         const coordinates = route.route_orders
           .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
           .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
@@ -105,7 +121,7 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
           } else {
             googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${startPoint}/`
           }
-          console.log('⚠️ Usando ruta manual (sin optimización)')
+          console.log('⚠️ Usando ruta manual (fallback, sin optimización)')
         } else {
           console.warn('⚠️ No se encontraron coordenadas para la ruta')
         }
