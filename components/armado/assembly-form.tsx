@@ -44,9 +44,10 @@ interface AssemblyFormProps {
   order: any
   products: any[]
   userId: string
+  isLocked: boolean
 }
 
-export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
+export function AssemblyForm({ order, products, userId, isLocked }: AssemblyFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,6 +73,8 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
 
   const [assemblyNotes, setAssemblyNotes] = useState(order.assembly_notes || "")
   const [startTime] = useState(order.assembly_started_at || new Date().toISOString())
+
+
 
   const handleItemChange = (index: number, field: keyof AssemblyItem, value: any) => {
     const newItems = [...assemblyItems]
@@ -219,7 +222,7 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
         </Button>
 
         {order.status === "PENDIENTE_ARMADO" && (
-          <Button onClick={handleStartAssembly} disabled={isLoading}>
+          <Button onClick={handleStartAssembly} disabled={isLoading || isLocked}>
             <Package className="mr-2 h-4 w-4" />
             Iniciar Armado
           </Button>
@@ -302,8 +305,10 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
                     min="0"
                     max={item.quantityRequested}
                     value={item.quantityAssembled}
-                    onChange={(e) => handleItemChange(index, "quantityAssembled", Number.parseInt(e.target.value) || 0)}
-                    disabled={order.status === "PENDIENTE_ARMADO"}
+                    onChange={(e) =>
+                      handleItemChange(index, "quantityAssembled", Number.parseInt(e.target.value) || 0)
+                    }
+                    disabled={isLocked}
                   />
                 </div>
 
@@ -313,7 +318,7 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
                       id={`shortage-${index}`}
                       checked={item.isShortage}
                       onCheckedChange={(checked) => handleItemChange(index, "isShortage", checked)}
-                      disabled={order.status === "PENDIENTE_ARMADO"}
+                      disabled={isLocked}
                     />
                     <Label htmlFor={`shortage-${index}`} className="font-normal">
                       Marcar como faltante
@@ -328,8 +333,10 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
                     <Label htmlFor={`reason-${index}`}>Motivo del Faltante</Label>
                     <Select
                       value={item.shortageReason}
-                      onValueChange={(value) => handleItemChange(index, "shortageReason", value as ShortageReason)}
-                      disabled={order.status === "PENDIENTE_ARMADO"}
+                      onValueChange={(value) =>
+                        handleItemChange(index, "shortageReason", value as ShortageReason)
+                      }
+                      disabled={isLocked}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar motivo" />
@@ -352,7 +359,7 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
                       value={item.shortageNotes}
                       onChange={(e) => handleItemChange(index, "shortageNotes", e.target.value)}
                       rows={2}
-                      disabled={order.status === "PENDIENTE_ARMADO"}
+                      disabled={isLocked}
                     />
                   </div>
                 </div>
@@ -372,7 +379,7 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
             value={assemblyNotes}
             onChange={(e) => setAssemblyNotes(e.target.value)}
             rows={3}
-            disabled={order.status === "PENDIENTE_ARMADO"}
+            disabled={isLocked}
           />
         </CardContent>
       </Card>
@@ -410,13 +417,13 @@ export function AssemblyForm({ order, products, userId }: AssemblyFormProps) {
             <Button
               variant="outline"
               onClick={() => router.push("/armado/dashboard")}
-              disabled={isLoading || order.status === "PENDIENTE_ARMADO"}
+              disabled={isLoading || isLocked}
             >
               Pausar Armado
             </Button>
             <Button
               onClick={() => setShowConfirmDialog(true)}
-              disabled={isLoading || order.status === "PENDIENTE_ARMADO"}
+              disabled={isLoading || isLocked}
               size="lg"
             >
               <CheckCircle className="mr-2 h-4 w-4" />

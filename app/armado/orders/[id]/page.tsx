@@ -43,8 +43,14 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
     redirect("/armado/dashboard")
   }
 
+  const isLocked =
+    order.status === "EN_ARMADO" &&
+    order.assembled_by &&
+    order.assembled_by !== user.id;
+
   // Get all products for substitution
   const { data: products } = await supabase.from("products").select("*").eq("is_active", true).order("name")
+
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -56,7 +62,12 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
 
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto max-w-5xl">
-          <AssemblyForm order={order} products={products || []} userId={user.id} />
+          <AssemblyForm
+            order={order}
+            products={products || []}
+            userId={user.id}
+            isLocked={isLocked}
+          />
         </div>
       </main>
     </div>
