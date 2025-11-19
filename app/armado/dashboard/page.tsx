@@ -23,23 +23,6 @@ export default async function ArmadoDashboardPage() {
     redirect("/auth/login")
   }
 
-  // Get statistics
-  const { count: pendingOrders } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "PENDIENTE_ARMADO")
-
-  const { count: inProgressOrders } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "EN_ARMADO")
-
-  const { count: completedToday } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("assembled_by", user.id)
-    .gte("assembly_completed_at", new Date().toISOString().split("T")[0])
-
   // Get pending orders with customer info
   const { data: orders } = await supabase
     .from("orders")
@@ -188,7 +171,7 @@ export default async function ArmadoDashboardPage() {
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{pendingOrders || 0}</div>
+                <div className="text-3xl font-bold">{pending.length}</div>
                 <p className="text-xs text-muted-foreground">Por armar</p>
               </CardContent>
             </Card>
@@ -199,7 +182,7 @@ export default async function ArmadoDashboardPage() {
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{inProgressOrders || 0}</div>
+                <div className="text-3xl font-bold">{inProgress.length}</div>
                 <p className="text-xs text-muted-foreground">Armando ahora</p>
               </CardContent>
             </Card>
@@ -210,8 +193,8 @@ export default async function ArmadoDashboardPage() {
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{completedToday || 0}</div>
-                <p className="text-xs text-muted-foreground">Armados por ti</p>
+                <div className="text-3xl font-bold">{finishedToday.length}</div>
+                <p className="text-xs text-muted-foreground">Finalizados hoy</p>
               </CardContent>
             </Card>
           </div>
