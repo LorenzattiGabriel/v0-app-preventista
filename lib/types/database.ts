@@ -91,6 +91,12 @@ export interface Product {
   is_active: boolean
   created_at: string
   updated_at: string
+  barcode?: string
+  iva_aliquot: number
+  category_margin: number
+  product_margin: number
+  location?: string
+  supplier?: string
 }
 
 export interface Order {
