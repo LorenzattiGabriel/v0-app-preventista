@@ -206,20 +206,7 @@ URL Admin: /admin/orders?has_shortages=true
 URL Cliente: /cliente/orders?has_shortages=true
 ```
 
----
-
-## 📊 Resumen de Implementación
-
-| Funcionalidad | Archivo | Estado |
-|---------------|---------|--------|
-| Descuento en Armado | `assembly-form.tsx` | ✅ Implementado |
-| Manejo de Faltantes | `assembly-form.tsx` | ✅ Implementado |
-| Producto Sustituto | `assembly-form.tsx` | ✅ Implementado |
-| Cancelación (antes armado) | `use-order-form-actions.ts` | ✅ Implementado |
-| Cancelación (después armado) | - | ⚠️ **Falta usar `stockService`** |
-| Devoluciones | - | ❌ No implementado |
-| Verificar Stock Disponible | `stockService.ts` | ✅ Implementado |
-
+--
 ---
 
 ## 🛠️ Servicios Disponibles
