@@ -6,6 +6,9 @@ import { DeliveryReport } from "@/components/admin/delivery-report"
 import { PerformanceReport } from "@/components/admin/performance-report"
 import { FinancialReport } from "@/components/admin/financial-report"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
 import { subMonths, startOfMonth, endOfMonth } from "date-fns"
 
 export default async function ReportsPage({
@@ -22,6 +25,14 @@ export default async function ReportsPage({
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <Button variant="outline" asChild>
+            <Link href="/admin/dashboard">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver al Dashboard
+            </Link>
+          </Button>
+        </div>
         <h1 className="text-3xl font-bold mb-2">Reportes y Análisis</h1>
         <p className="text-muted-foreground">Análisis detallado de operaciones y rendimiento del sistema</p>
       </div>
