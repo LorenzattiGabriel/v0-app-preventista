@@ -232,6 +232,33 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
     try {
       const supabase = createClient()
 
+      // 🆕 CRITICAL-4: Validate no duplicate orders in active routes
+      const orderIds = generatedRoute.orders.map(o => o.id)
+      
+      // Check if any of these orders are already in an active route (PLANIFICADO or EN_CURSO)
+      const { data: existingRouteOrders, error: checkError } = await supabase
+        .from("route_orders")
+        .select(`
+          order_id,
+          routes!inner(id, route_code, status)
+        `)
+        .in("order_id", orderIds)
+        .in("routes.status", ["PLANIFICADO", "EN_CURSO"])
+
+      if (checkError) throw checkError
+
+      if (existingRouteOrders && existingRouteOrders.length > 0) {
+        // Get order numbers for better error message
+        const duplicateOrderIds = existingRouteOrders.map(ro => ro.order_id)
+        const duplicateOrders = generatedRoute.orders.filter(o => duplicateOrderIds.includes(o.id))
+        const orderNumbers = duplicateOrders.map(o => o.order_number).join(", ")
+        const routeCodes = Array.from(new Set(existingRouteOrders.map(ro => (ro.routes as any).route_code))).join(", ")
+        
+        setError(`Los siguientes pedidos ya están en rutas activas (${routeCodes}): ${orderNumbers}. Por favor, elimínalos de la ruta o quita los pedidos duplicados.`)
+        setIsCreating(false)
+        return
+      }
+
       // Generate route code
       const { data: routeCodeData } = await supabase.rpc("generate_route_code", {
         route_date: deliveryDate,
