@@ -6,8 +6,19 @@ import { DeliveryReport } from "@/components/admin/delivery-report"
 import { PerformanceReport } from "@/components/admin/performance-report"
 import { FinancialReport } from "@/components/admin/financial-report"
 import { Skeleton } from "@/components/ui/skeleton"
+import { subMonths, startOfMonth, endOfMonth } from "date-fns"
 
-export default function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>
+}) {
+  const params = await searchParams
+
+  // Default to current month if no dates provided
+  const fromDate = params.from ? new Date(params.from) : startOfMonth(new Date())
+  const toDate = params.to ? new Date(params.to) : endOfMonth(new Date())
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8">
@@ -25,7 +36,7 @@ export default function ReportsPage() {
 
         <TabsContent value="orders" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <OrdersReport />
+            <OrdersReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 
@@ -43,7 +54,7 @@ export default function ReportsPage() {
 
         <TabsContent value="financial" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <FinancialReport />
+            <FinancialReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
       </Tabs>

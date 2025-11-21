@@ -1,77 +1,51 @@
-"use client"
-
-import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Download, Package, TrendingUp, AlertCircle, CheckCircle } from "lucide-react"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { cn } from "@/lib/utils"
+import { Package, TrendingUp, AlertCircle, CheckCircle, TrendingDown } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Legend } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { createClient } from "@/lib/supabase/server"
+import { createReportsService } from "@/lib/services/reportsService"
+import { cn } from "@/lib/utils"
+import { ReportDateFilter } from "./report-date-filter"
+import { ExportReportButton } from "./export-report-button"
 
-export function OrdersReport() {
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: new Date(new Date().setDate(new Date().getDate() - 30)),
-    to: new Date(),
-  })
+interface OrdersReportProps {
+  startDate: Date
+  endDate: Date
+}
 
-  // Mock data - replace with real data from Supabase
-  const stats = {
-    totalOrders: 1247,
-    completedOrders: 1089,
-    pendingOrders: 98,
-    cancelledOrders: 60,
-    avgOrderValue: 15420.5,
-    totalRevenue: 19229543.5,
-  }
+export async function OrdersReport({ startDate, endDate }: OrdersReportProps) {
+  const supabase = await createClient()
+  const reportsService = createReportsService(supabase)
 
-  const ordersByDay = [
-    { date: "Lun", orders: 45, completed: 42 },
-    { date: "Mar", orders: 52, completed: 48 },
-    { date: "Mié", orders: 48, completed: 45 },
-    { date: "Jue", orders: 61, completed: 58 },
-    { date: "Vie", orders: 55, completed: 51 },
-    { date: "Sáb", orders: 38, completed: 35 },
-    { date: "Dom", orders: 28, completed: 26 },
-  ]
+  const { stats, ordersByDay, ordersByStatus } = await reportsService.getOrdersReport(startDate, endDate)
 
-  const ordersByStatus = [
-    { status: "Entregado", count: 1089, percentage: 87.3 },
-    { status: "En Reparto", count: 45, percentage: 3.6 },
-    { status: "Pendiente", count: 53, percentage: 4.2 },
-    { status: "Cancelado", count: 60, percentage: 4.8 },
-  ]
+  // Calculate percentage changes
+  const totalOrdersChange = stats.previousPeriodTotal
+    ? ((stats.totalOrders - stats.previousPeriodTotal) / stats.previousPeriodTotal) * 100
+    : 0
+
+  const avgValueChange = stats.previousPeriodAvg
+    ? ((stats.avgOrderValue - stats.previousPeriodAvg) / stats.previousPeriodAvg) * 100
+    : 0
 
   return (
     <div className="space-y-6">
       {/* Date Range Selector */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle>Reporte de Pedidos</CardTitle>
               <CardDescription>Análisis detallado de pedidos en el período seleccionado</CardDescription>
             </div>
             <div className="flex gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("justify-start text-left font-normal")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
-                    {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar mode="range" selected={dateRange} locale={es} />
-                </PopoverContent>
-              </Popover>
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
-              </Button>
+              <ReportDateFilter startDate={startDate} endDate={endDate} />
+              <ExportReportButton
+                reportType="orders"
+                data={{ stats, ordersByDay, ordersByStatus }}
+                startDate={startDate}
+                endDate={endDate}
+              />
             </div>
           </div>
         </CardHeader>
@@ -85,9 +59,20 @@ export function OrdersReport() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+12.5%</span> vs mes anterior
+            <div className="text-2xl font-bold">{stats.totalOrders.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {totalOrdersChange >= 0 ? (
+                <>
+                  <TrendingUp className="h-3 w-3 text-green-600" />
+                  <span className="text-green-600">+{totalOrdersChange.toFixed(1)}%</span>
+                </>
+              ) : (
+                <>
+                  <TrendingDown className="h-3 w-3 text-red-600" />
+                  <span className="text-red-600">{totalOrdersChange.toFixed(1)}%</span>
+                </>
+              )}{" "}
+              vs período anterior
             </p>
           </CardContent>
         </Card>
@@ -98,9 +83,9 @@ export function OrdersReport() {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.completedOrders}</div>
+            <div className="text-2xl font-bold">{stats.completedOrders.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {((stats.completedOrders / stats.totalOrders) * 100).toFixed(1)}% del total
+              {stats.totalOrders > 0 ? ((stats.completedOrders / stats.totalOrders) * 100).toFixed(1) : 0}% del total
             </p>
           </CardContent>
         </Card>
@@ -111,9 +96,9 @@ export function OrdersReport() {
             <AlertCircle className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingOrders}</div>
+            <div className="text-2xl font-bold">{stats.pendingOrders.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {((stats.pendingOrders / stats.totalOrders) * 100).toFixed(1)}% del total
+              {stats.totalOrders > 0 ? ((stats.pendingOrders / stats.totalOrders) * 100).toFixed(1) : 0}% del total
             </p>
           </CardContent>
         </Card>
@@ -124,9 +109,20 @@ export function OrdersReport() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.avgOrderValue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+8.2%</span> vs mes anterior
+            <div className="text-2xl font-bold">${stats.avgOrderValue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {avgValueChange >= 0 ? (
+                <>
+                  <TrendingUp className="h-3 w-3 text-green-600" />
+                  <span className="text-green-600">+{avgValueChange.toFixed(1)}%</span>
+                </>
+              ) : (
+                <>
+                  <TrendingDown className="h-3 w-3 text-red-600" />
+                  <span className="text-red-600">{avgValueChange.toFixed(1)}%</span>
+                </>
+              )}{" "}
+              vs período anterior
             </p>
           </CardContent>
         </Card>
@@ -137,27 +133,33 @@ export function OrdersReport() {
         <Card>
           <CardHeader>
             <CardTitle>Pedidos por Día</CardTitle>
-            <CardDescription>Comparación de pedidos totales vs completados</CardDescription>
+            <CardDescription>Últimos 7 días con datos</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={{
-                orders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
-                completed: { label: "Completados", color: "hsl(var(--chart-2))" },
-              }}
-              className="h-[300px]"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={ordersByDay}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Legend />
-                  <Bar dataKey="orders" fill="var(--color-orders)" name="Pedidos" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="completed" fill="var(--color-completed)" name="Completados" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
+            {ordersByDay.length > 0 ? (
+              <ChartContainer
+                config={{
+                  orders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
+                  completed: { label: "Completados", color: "hsl(var(--chart-2))" },
+                }}
+                className="h-[300px]"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={ordersByDay}>
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Legend />
+                    <Bar dataKey="orders" fill="var(--color-orders)" name="Pedidos" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="completed" fill="var(--color-completed)" name="Completados" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                No hay datos para el período seleccionado
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -167,30 +169,36 @@ export function OrdersReport() {
             <CardDescription>Porcentaje de pedidos por estado</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {ordersByStatus.map((item) => (
-                <div key={item.status} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{item.status}</span>
-                    <span className="text-muted-foreground">
-                      {item.count} ({item.percentage}%)
-                    </span>
+            {stats.totalOrders > 0 ? (
+              <div className="space-y-4">
+                {ordersByStatus.map((item) => (
+                  <div key={item.status} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{item.status}</span>
+                      <span className="text-muted-foreground">
+                        {item.count.toLocaleString()} ({item.percentage.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          item.status === "Entregado" && "bg-green-500",
+                          item.status === "En Reparto" && "bg-blue-500",
+                          item.status === "Pendiente" && "bg-yellow-500",
+                          item.status === "Cancelado" && "bg-red-500",
+                        )}
+                        style={{ width: `${item.percentage}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={cn(
-                        "h-full rounded-full",
-                        item.status === "Entregado" && "bg-green-500",
-                        item.status === "En Reparto" && "bg-blue-500",
-                        item.status === "Pendiente" && "bg-yellow-500",
-                        item.status === "Cancelado" && "bg-red-500",
-                      )}
-                      style={{ width: `${item.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                No hay datos para el período seleccionado
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
