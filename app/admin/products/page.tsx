@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createProductsService, PRODUCTS_PER_PAGE } from "@/lib/services/productsService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Package, AlertTriangle, Archive, FolderOpen } from "lucide-react"
+import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX } from "lucide-react"
 import { ProductsFilters } from "@/components/admin/products-filters"
 import { ProductsList } from "@/components/admin/products-list"
 import { ProductsPagination } from "@/components/admin/products-pagination"
@@ -75,7 +75,7 @@ export default async function ProductsPage({
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Productos</CardTitle>
@@ -102,12 +102,23 @@ export default async function ProductsPage({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium">Sin Stock</CardTitle>
+            <PackageX className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.lowStockProducts}</div>
-            <p className="text-xs text-muted-foreground">Requieren atención</p>
+            <div className="text-2xl font-bold text-red-600">{stats.outOfStockProducts}</div>
+            <p className="text-xs text-muted-foreground">Stock = 0</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.lowStockProducts}</div>
+            <p className="text-xs text-muted-foreground">Menor a mínimo</p>
           </CardContent>
         </Card>
 

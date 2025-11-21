@@ -16,6 +16,7 @@ import {
   Star,
   History,
 } from "lucide-react"
+import { CancelOrderButton } from "@/components/admin/cancel-order-button"
 
 export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -176,6 +177,14 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                 Volver a Pedidos
               </Link>
             </Button>
+            
+            {/* Cancel Order Button */}
+            <CancelOrderButton
+              orderId={order.id}
+              orderNumber={order.order_number}
+              status={order.status}
+              wasAssembled={["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION"].includes(order.status)}
+            />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">

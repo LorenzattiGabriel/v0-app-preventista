@@ -18,6 +18,7 @@ export interface ProductStats {
   totalProducts: number
   activeProducts: number
   lowStockProducts: number
+  outOfStockProducts: number
   totalCategories: number
 }
 
@@ -106,13 +107,15 @@ class ProductsService {
         totalProducts: 0,
         activeProducts: 0,
         lowStockProducts: 0,
+        outOfStockProducts: 0,
         totalCategories: 0,
       }
     }
 
     const totalProducts = products?.length || 0
     const activeProducts = products?.filter((p) => p.is_active).length || 0
-    const lowStockProducts = products?.filter((p) => p.current_stock <= p.min_stock).length || 0
+    const lowStockProducts = products?.filter((p) => p.current_stock <= p.min_stock && p.current_stock > 0).length || 0
+    const outOfStockProducts = products?.filter((p) => p.current_stock === 0).length || 0
     const categories = new Set(products?.map((p) => p.category).filter(Boolean))
     const totalCategories = categories.size
 
@@ -120,6 +123,7 @@ class ProductsService {
       totalProducts,
       activeProducts,
       lowStockProducts,
+      outOfStockProducts,
       totalCategories,
     }
   }
