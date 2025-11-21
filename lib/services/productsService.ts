@@ -46,11 +46,37 @@ class ProductsService {
       query = query.eq("is_active", filters.is_active === "true")
     }
 
+    // For low stock filter, we need to get all products and filter in JavaScript
+    // because Supabase doesn't support comparing two columns directly
     if (filters.low_stock) {
-      query = query.lt("current_stock", this.supabase.rpc("min_stock"))
+      const { data: allProducts, error } = await query.order("name", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching products:", error)
+        throw error
+      }
+
+      // Filter products where current_stock <= min_stock
+      const lowStockProducts = (allProducts || []).filter(
+        (product) => product.current_stock <= product.min_stock
+      )
+
+      // Manual pagination
+      const total = lowStockProducts.length
+      const totalPages = Math.ceil(total / perPage)
+      const from = (page - 1) * perPage
+      const to = from + perPage
+      const paginatedProducts = lowStockProducts.slice(from, to)
+
+      return {
+        products: paginatedProducts,
+        total,
+        page,
+        totalPages,
+      }
     }
 
-    // Pagination
+    // Normal pagination for non-low-stock queries
     const from = (page - 1) * perPage
     const to = from + perPage - 1
 

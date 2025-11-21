@@ -172,7 +172,7 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
 
       if (orderError) throw orderError
 
-      // Update order items
+      // Update order items and product stock
       for (const item of assemblyItems) {
         const { error: itemError } = await supabase
           .from("order_items")
@@ -187,6 +187,37 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
           .eq("id", item.id)
 
         if (itemError) throw itemError
+
+        // Update product stock - decrease by assembled quantity
+        if (item.quantityAssembled > 0) {
+          const productIdToUpdate = item.isSubstituted && item.substitutedProductId 
+            ? item.substitutedProductId 
+            : item.productId
+
+          // Get current stock
+          const { data: product, error: productFetchError } = await supabase
+            .from("products")
+            .select("current_stock")
+            .eq("id", productIdToUpdate)
+            .single()
+
+          if (productFetchError) {
+            console.error("Error fetching product stock:", productFetchError)
+            continue // Don't fail the whole operation if stock update fails
+          }
+
+          // Update stock
+          const newStock = Math.max(0, (product?.current_stock || 0) - item.quantityAssembled)
+          const { error: stockError } = await supabase
+            .from("products")
+            .update({ current_stock: newStock })
+            .eq("id", productIdToUpdate)
+
+          if (stockError) {
+            console.error("Error updating product stock:", stockError)
+            // Don't fail the whole operation if stock update fails
+          }
+        }
       }
 
       // Create order history entry

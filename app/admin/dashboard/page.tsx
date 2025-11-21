@@ -203,6 +203,21 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
             <Card>
               <CardHeader>
+                <CardTitle>Catálogo de Productos</CardTitle>
+                <CardDescription>Administra productos e inventario</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/products">
+                    <Package className="mr-2 h-4 w-4" />
+                    Ver Productos
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Gestión de Usuarios</CardTitle>
                 <CardDescription>Administra usuarios y permisos</CardDescription>
               </CardHeader>
