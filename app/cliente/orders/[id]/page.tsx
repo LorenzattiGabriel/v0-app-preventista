@@ -163,6 +163,29 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                 )}
               </div>
 
+              {/* 🆕 MEDIUM-1b: Show delivery code to client when order is ready for delivery */}
+              {order.delivery_code && (order.status === "PENDIENTE_ENTREGA" || order.status === "EN_REPARTICION") && (
+                <div className="bg-green-50 dark:bg-green-950 border-2 border-green-400 dark:border-green-600 rounded-lg p-6 shadow-sm">
+                  <div className="flex flex-col items-center gap-3">
+                    <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    <div className="text-center">
+                      <p className="font-bold text-green-900 dark:text-green-100 text-lg">Código de Verificación</p>
+                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        El repartidor te pedirá este código al entregar tu pedido
+                      </p>
+                      <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-green-300 dark:border-green-700">
+                        <p className="text-4xl font-mono font-bold text-green-700 dark:text-green-400 tracking-widest">
+                          {order.delivery_code}
+                        </p>
+                      </div>
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-3">
+                        ⚠️ No compartas este código hasta que recibas tu pedido
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {order.status === "EN_REPARTICION" && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
                   <Truck className="h-5 w-5 text-blue-600" />

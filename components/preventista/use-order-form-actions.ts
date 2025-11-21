@@ -143,6 +143,15 @@ export function useOrderFormActions() {
         // Delete existing order items and insert new ones
         await supabase.from("order_items").delete().eq("order_id", orderId);
       } else {
+        // 🆕 MEDIUM-1a: Generate 4-digit delivery code if not a draft
+        let deliveryCode: string | undefined = undefined;
+        if (!isDraft) {
+          const { data: codeData, error: codeError } = await supabase.rpc("generate_delivery_code");
+          if (!codeError && codeData) {
+            deliveryCode = codeData as string;
+          }
+        }
+
         // Create new order
         const { data, error: createError } = await supabase
           .from("orders")
@@ -160,6 +169,7 @@ export function useOrderFormActions() {
             requires_invoice: requiresInvoice,
             created_by: userId,
             observations,
+            delivery_code: deliveryCode, // 🆕 MEDIUM-1a: 4-digit code for delivery verification
           })
           .select()
           .single();
@@ -298,11 +308,16 @@ export function useOrderFormActions() {
     try {
       const supabase = createClient();
 
+      // 🆕 MEDIUM-1a: Generate delivery code when confirming draft
+      const { data: codeData, error: codeError } = await supabase.rpc("generate_delivery_code");
+      const deliveryCode = (!codeError && codeData) ? (codeData as string) : undefined;
+
       // Update order status from BORRADOR to PENDIENTE_ARMADO
       const { error: updateError } = await supabase
         .from("orders")
         .update({
           status: "PENDIENTE_ARMADO",
+          delivery_code: deliveryCode, // 🆕 MEDIUM-1a: Add delivery code
         })
         .eq("id", orderId)
         .eq("status", "BORRADOR"); // Only confirm if it's still a draft

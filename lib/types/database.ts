@@ -124,6 +124,9 @@ export interface Order {
   observations?: string
   assembly_notes?: string
   delivery_notes?: string
+  delivery_code?: string // 🆕 MEDIUM-1: 4-digit code for delivery verification
+  no_delivery_reason?: string // 🆕 MEDIUM-2: Reason for non-delivery
+  no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
   updated_at: string
 }
 

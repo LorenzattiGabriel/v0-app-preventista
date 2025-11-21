@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag } from "lucide-react"
 import Link from "next/link"
 import {
@@ -32,11 +33,21 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [showDeliveryDialog, setShowDeliveryDialog] = useState(false)
+  
+  // 🆕 MEDIUM-3: Route summary state
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false)
+  const [routeSummary, setRouteSummary] = useState<any>(null)
 
   // Delivery form state
   const [wasCollected, setWasCollected] = useState(false)
   const [collectedAmount, setCollectedAmount] = useState("")
   const [deliveryNotes, setDeliveryNotes] = useState("")
+  
+  // 🆕 MEDIUM-1c & MEDIUM-2: New states for delivery verification and non-delivery
+  const [deliveryCode, setDeliveryCode] = useState("")
+  const [cannotDeliver, setCannotDeliver] = useState(false)
+  const [noDeliveryReason, setNoDeliveryReason] = useState("")
+  const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
 
   const handleStartRoute = async () => {
     setIsLoading(true)
@@ -131,11 +142,73 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     setWasCollected(false)
     setCollectedAmount("")
     setDeliveryNotes("")
+    // 🆕 MEDIUM-1c & MEDIUM-2: Reset new fields
+    setDeliveryCode("")
+    setCannotDeliver(false)
+    setNoDeliveryReason("")
+    setNoDeliveryNotes("")
     setShowDeliveryDialog(true)
   }
 
   const handleConfirmDelivery = async () => {
     if (!selectedOrder) return
+
+    // 🆕 MEDIUM-2: Handle non-delivery case
+    if (cannotDeliver) {
+      if (!noDeliveryReason) {
+        setError("Debe seleccionar un motivo de no-entrega")
+        return
+      }
+
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const supabase = createClient()
+
+        // Update order with non-delivery info (keep EN_REPARTICION status)
+        const { error: orderError } = await supabase
+          .from("orders")
+          .update({
+            no_delivery_reason: noDeliveryReason,
+            no_delivery_notes: noDeliveryNotes || null,
+          })
+          .eq("id", selectedOrder.id)
+
+        if (orderError) throw orderError
+
+        // Create history entry
+        await supabase.from("order_history").insert({
+          order_id: selectedOrder.id,
+          previous_status: "EN_REPARTICION",
+          new_status: "EN_REPARTICION", // Status doesn't change
+          changed_by: userId,
+          change_reason: `No se pudo entregar: ${noDeliveryReason}`,
+        })
+
+        setShowDeliveryDialog(false)
+        setSelectedOrder(null)
+        router.refresh()
+      } catch (err) {
+        console.error("[v0] Error recording non-delivery:", err)
+        setError(err instanceof Error ? err.message : "Error al registrar la no-entrega")
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    // 🆕 MEDIUM-1c: Validate delivery code if order has one
+    if (selectedOrder.delivery_code) {
+      if (!deliveryCode) {
+        setError("Debe ingresar el código de entrega proporcionado por el cliente")
+        return
+      }
+      if (deliveryCode !== selectedOrder.delivery_code) {
+        setError(`Código incorrecto. El cliente debe proporcionar el código correcto.`)
+        return
+      }
+    }
 
     setIsLoading(true)
     setError(null)
@@ -188,6 +261,41 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     }
   }
 
+  // 🆕 MEDIUM-3: Show route summary before completing
+  const handleShowRouteSummary = () => {
+    const supabase = createClient()
+    
+    // Calculate summary statistics
+    const orders = route.route_orders.map((ro: any) => ro.orders)
+    const delivered = orders.filter((o: any) => o.status === "ENTREGADO")
+    const notDelivered = orders.filter((o: any) => o.status !== "ENTREGADO" && o.no_delivery_reason)
+    
+    const totalExpected = orders.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
+    
+    // Get collected amounts from route_orders
+    const totalCollected = route.route_orders
+      .filter((ro: any) => ro.was_collected)
+      .reduce((sum: number, ro: any) => sum + (ro.collected_amount || 0), 0)
+    
+    const summary = {
+      totalOrders: orders.length,
+      deliveredCount: delivered.length,
+      notDeliveredCount: notDelivered.length,
+      totalExpected,
+      totalCollected,
+      difference: totalExpected - totalCollected,
+      notDeliveredOrders: notDelivered.map((o: any) => ({
+        orderNumber: o.order_number,
+        customer: o.customers?.commercial_name || o.customers?.name,
+        reason: o.no_delivery_reason,
+        notes: o.no_delivery_notes,
+      })),
+    }
+    
+    setRouteSummary(summary)
+    setShowSummaryDialog(true)
+  }
+
   const handleCompleteRoute = async () => {
     setIsLoading(true)
     setError(null)
@@ -205,6 +313,7 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
 
       if (routeError) throw routeError
 
+      setShowSummaryDialog(false)
       router.push("/repartidor/dashboard")
       router.refresh()
     } catch (err) {
@@ -245,7 +354,7 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
         )}
 
         {route.status === "EN_CURSO" && allDelivered && (
-          <Button onClick={handleCompleteRoute} disabled={isLoading} size="lg">
+          <Button onClick={handleShowRouteSummary} disabled={isLoading} size="lg">
             <Flag className="mr-2 h-4 w-4" />
             Finalizar Ruta
           </Button>
@@ -411,58 +520,248 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
       </Card>
 
       <Dialog open={showDeliveryDialog} onOpenChange={setShowDeliveryDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Confirmar Entrega</DialogTitle>
+            <DialogTitle>{cannotDeliver ? "Registrar No-Entrega" : "Confirmar Entrega"}</DialogTitle>
             <DialogDescription>
               {selectedOrder?.order_number} - {selectedOrder?.customers?.commercial_name}
             </DialogDescription>
           </DialogHeader>
 
+          {error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm border border-destructive/20">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-4 py-4">
-            <div className="flex items-center space-x-2">
+            {/* 🆕 MEDIUM-2: Cannot Deliver Toggle */}
+            <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
               <Checkbox
-                id="collected"
-                checked={wasCollected}
-                onCheckedChange={(checked) => setWasCollected(checked as boolean)}
+                id="cannot-deliver"
+                checked={cannotDeliver}
+                onCheckedChange={(checked) => setCannotDeliver(checked as boolean)}
               />
-              <Label htmlFor="collected" className="font-normal">
-                Se cobró el pedido
+              <Label htmlFor="cannot-deliver" className="font-medium">
+                No se pudo entregar
               </Label>
             </div>
 
-            {wasCollected && (
-              <div className="space-y-2">
-                <Label htmlFor="amount">Importe Cobrado ($)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder={selectedOrder?.total?.toFixed(2)}
-                  value={collectedAmount}
-                  onChange={(e) => setCollectedAmount(e.target.value)}
-                />
-              </div>
-            )}
+            {cannotDeliver ? (
+              // 🆕 MEDIUM-2: Non-delivery form
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="no-delivery-reason">Motivo de No-Entrega *</Label>
+                  <Select value={noDeliveryReason} onValueChange={setNoDeliveryReason}>
+                    <SelectTrigger id="no-delivery-reason">
+                      <SelectValue placeholder="Seleccionar motivo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cliente_ausente">Cliente Ausente</SelectItem>
+                      <SelectItem value="cliente_rechazo">Cliente Rechazó el Pedido</SelectItem>
+                      <SelectItem value="direccion_incorrecta">Dirección Incorrecta</SelectItem>
+                      <SelectItem value="sin_acceso">Sin Acceso al Domicilio</SelectItem>
+                      <SelectItem value="comercio_cerrado">Comercio Cerrado</SelectItem>
+                      <SelectItem value="otro">Otro Motivo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Observaciones (opcional)</Label>
-              <Textarea
-                id="notes"
-                placeholder="Notas sobre la entrega..."
-                value={deliveryNotes}
-                onChange={(e) => setDeliveryNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="no-delivery-notes">Detalles Adicionales</Label>
+                  <Textarea
+                    id="no-delivery-notes"
+                    placeholder="Describe la situación con más detalle..."
+                    value={noDeliveryNotes}
+                    onChange={(e) => setNoDeliveryNotes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </>
+            ) : (
+              // Normal delivery form
+              <>
+                {/* 🆕 MEDIUM-1c: Delivery Code Verification */}
+                {selectedOrder?.delivery_code && (
+                  <div className="space-y-2 p-4 bg-green-50 dark:bg-green-950 border-2 border-green-300 dark:border-green-700 rounded-lg">
+                    <Label htmlFor="delivery-code" className="font-bold text-green-900 dark:text-green-100">
+                      Código de Verificación *
+                    </Label>
+                    <p className="text-sm text-green-700 dark:text-green-300 mb-2">
+                      Solicita al cliente el código de 4 dígitos
+                    </p>
+                    <Input
+                      id="delivery-code"
+                      type="text"
+                      maxLength={4}
+                      placeholder="####"
+                      value={deliveryCode}
+                      onChange={(e) => setDeliveryCode(e.target.value.replace(/\D/g, ""))}
+                      className="text-center text-2xl font-mono font-bold tracking-widest"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="collected"
+                    checked={wasCollected}
+                    onCheckedChange={(checked) => setWasCollected(checked as boolean)}
+                  />
+                  <Label htmlFor="collected" className="font-normal">
+                    Se cobró el pedido
+                  </Label>
+                </div>
+
+                {wasCollected && (
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">Importe Cobrado ($)</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      placeholder={selectedOrder?.total?.toFixed(2)}
+                      value={collectedAmount}
+                      onChange={(e) => setCollectedAmount(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Observaciones (opcional)</Label>
+                  <Textarea
+                    id="notes"
+                    placeholder="Notas sobre la entrega..."
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeliveryDialog(false)}>
+            <Button variant="outline" onClick={() => setShowDeliveryDialog(false)} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button onClick={handleConfirmDelivery} disabled={isLoading}>
-              {isLoading ? "Confirmando..." : "Confirmar Entrega"}
+            <Button 
+              onClick={handleConfirmDelivery} 
+              disabled={isLoading}
+              variant={cannotDeliver ? "destructive" : "default"}
+            >
+              {isLoading ? "Procesando..." : (cannotDeliver ? "Registrar No-Entrega" : "Confirmar Entrega")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🆕 MEDIUM-3: Route Summary Dialog */}
+      <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Resumen de Ruta</DialogTitle>
+            <DialogDescription>
+              {route.route_code} - Revisa los detalles antes de finalizar
+            </DialogDescription>
+          </DialogHeader>
+
+          {routeSummary && (
+            <div className="space-y-6 py-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{routeSummary.totalOrders}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {routeSummary.deliveredCount} entregados, {routeSummary.notDeliveredCount} no entregados
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Total Cobrado</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-600">
+                      ${routeSummary.totalCollected.toFixed(2)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      de ${routeSummary.totalExpected.toFixed(2)} esperado
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Difference Alert */}
+              {routeSummary.difference !== 0 && (
+                <div 
+                  className={`p-4 rounded-lg border-2 ${
+                    routeSummary.difference > 0 
+                      ? 'bg-yellow-50 border-yellow-300 dark:bg-yellow-950 dark:border-yellow-700'
+                      : 'bg-green-50 border-green-300 dark:bg-green-950 dark:border-green-700'
+                  }`}
+                >
+                  <p className="font-medium">
+                    {routeSummary.difference > 0 
+                      ? `⚠️ Falta cobrar: $${routeSummary.difference.toFixed(2)}`
+                      : `✅ Cobrado completo (exceso de $${Math.abs(routeSummary.difference).toFixed(2)})`
+                    }
+                  </p>
+                </div>
+              )}
+
+              {/* Not Delivered Orders */}
+              {routeSummary.notDeliveredCount > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-muted-foreground">
+                    Pedidos No Entregados ({routeSummary.notDeliveredCount})
+                  </h3>
+                  <div className="space-y-2">
+                    {routeSummary.notDeliveredOrders.map((order: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-muted rounded-lg border">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-sm">{order.orderNumber}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer}</p>
+                          </div>
+                          <Badge variant="destructive" className="text-xs">
+                            {order.reason?.replace(/_/g, ' ')}
+                          </Badge>
+                        </div>
+                        {order.notes && (
+                          <p className="text-xs text-muted-foreground mt-2 italic">
+                            "{order.notes}"
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {routeSummary.deliveredCount === routeSummary.totalOrders && (
+                <div className="bg-green-50 dark:bg-green-950 border-2 border-green-300 dark:border-green-700 rounded-lg p-4 text-center">
+                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                  <p className="font-bold text-green-900 dark:text-green-100">
+                    ¡Todos los pedidos fueron entregados!
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowSummaryDialog(false)} disabled={isLoading}>
+              Revisar Entregas
+            </Button>
+            <Button onClick={handleCompleteRoute} disabled={isLoading}>
+              {isLoading ? "Finalizando..." : "Confirmar y Finalizar"}
             </Button>
           </DialogFooter>
         </DialogContent>
