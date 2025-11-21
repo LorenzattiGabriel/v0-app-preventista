@@ -286,29 +286,50 @@
 
 ---
 
-## 🚨 RESUMEN: Lo Crítico que Falta para el Happy Path
+## ✅ CRÍTICO IMPLEMENTADO (Commit 5063b4b)
 
-### 🔴 ALTA PRIORIDAD (Bloquea el flujo):
+### 🟢 ALTA PRIORIDAD (COMPLETADO):
 
-1. **Estado `EN_ARMADO` faltante**
-   - **Problema**: Varios armadores pueden tomar el mismo pedido
-   - **Solución**: Al abrir un pedido, marcarlo como EN_ARMADO
-   - **Archivo**: `app/armado/orders/[id]/page.tsx`
+1. **✅ Estado `EN_ARMADO` implementado**
+   - **Solución**: Al abrir un pedido, se marca automáticamente como EN_ARMADO
+   - **Implementado en**: `app/armado/orders/[id]/page.tsx`
+   - **Funcionalidad**: 
+     - Auto-lock al abrir pedido
+     - Guarda `assembled_by` y `assembly_started_at`
+     - Muestra mensaje de bloqueo si otro armador lo tiene abierto
+     - Banner amarillo con nombre del usuario que lo tiene bloqueado
    
-2. **Botón "Liberar Pedido" en armado**
-   - **Problema**: Si el armador abre un pedido por error, queda bloqueado
-   - **Solución**: Botón para volver de EN_ARMADO → PENDIENTE_ARMADO
-   - **Archivo**: `components/armado/assembly-form.tsx`
+2. **✅ Botón "Liberar Pedido" implementado**
+   - **Solución**: Botón que cambia de EN_ARMADO → PENDIENTE_ARMADO y limpia assembled_by
+   - **Implementado en**: `components/armado/assembly-form.tsx`
+   - **Funcionalidad**:
+     - Libera el pedido para que otro armador lo tome
+     - Limpia `assembled_by` (null)
+     - Crea entrada en order_history
+     - Solo visible para el armador que tiene el pedido bloqueado
 
-3. **Conversión BORRADOR → PENDIENTE_ARMADO**
-   - **Problema**: No está claro cuándo un borrador se confirma
-   - **Solución**: Botón "Confirmar Pedido" en vista de borradores
-   - **Archivo**: Crear `app/preventista/orders/drafts/page.tsx`
+3. **✅ Conversión BORRADOR → PENDIENTE_ARMADO implementada**
+   - **Solución**: Botón "Confirmar Pedido" en acciones del borrador
+   - **Implementado en**: 
+     - `components/preventista/draft-actions.tsx`
+     - `components/preventista/use-order-form-actions.ts`
+   - **Funcionalidad**:
+     - Botón verde con ícono CheckCircle
+     - Dialog de confirmación
+     - Cambia estado a PENDIENTE_ARMADO
+     - Crea entrada en order_history
+     - Ya existía vista de borradores en `app/preventista/orders/drafts/page.tsx`
 
-4. **Validación de pedidos duplicados en rutas**
-   - **Problema**: Un pedido puede estar en múltiples rutas
-   - **Solución**: Validar en `route-generator-form.tsx` antes de crear ruta
-   - **Archivo**: `components/admin/route-generator-form.tsx`
+4. **✅ Validación de pedidos duplicados en rutas implementada**
+   - **Solución**: Validación antes de crear rutas que verifica route_orders existentes
+   - **Implementado en**: 
+     - `components/admin/smart-route-generator.tsx`
+     - `components/admin/route-generator-form.tsx`
+   - **Funcionalidad**:
+     - Verifica si pedidos ya están en rutas PLANIFICADO o EN_CURSO
+     - Muestra error detallado con números de pedido y códigos de ruta
+     - Previene creación si hay duplicados
+     - Funciona en ambos generadores (inteligente y manual)
 
 ### 🟡 MEDIA PRIORIDAD (Mejora UX):
 
