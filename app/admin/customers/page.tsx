@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import Link from "next/link"
-import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2 } from "lucide-react"
+import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2, Plus } from "lucide-react"
 
 export default async function AdminCustomersPage({
   searchParams,
@@ -121,6 +121,12 @@ export default async function AdminCustomersPage({
               <Link href="/admin/dashboard">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Volver al Dashboard
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/admin/customers/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo Cliente
               </Link>
             </Button>
           </div>

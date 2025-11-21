@@ -1,176 +1,159 @@
-import { Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { UserPlus, Search, MoreVertical } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Skeleton } from "@/components/ui/skeleton"
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+import { ArrowLeft, UserPlus } from 'lucide-react'
+import { UsersFilters } from '@/components/admin/users-filters'
+import { UsersList } from '@/components/admin/users-list'
+import { UsersPagination } from '@/components/admin/users-pagination'
+import { createUsersService } from '@/lib/services/usersService'
 
-export default function UsersPage() {
-  return (
-    <div className="container mx-auto p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Gestión de Usuarios</h1>
-          <p className="text-muted-foreground">Administrar usuarios y permisos del sistema</p>
-        </div>
-        <Button>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Nuevo Usuario
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Usuarios del Sistema</CardTitle>
-              <CardDescription>17 usuarios activos</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar usuarios..." className="pl-8 w-[300px]" />
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<UsersSkeleton />}>
-            <UsersTable />
-          </Suspense>
-        </CardContent>
-      </Card>
-    </div>
-  )
+interface SearchParams {
+  role?: string
+  search?: string
+  status?: string
+  page?: string
 }
 
-function UsersTable() {
-  // Mock data - replace with real data from Supabase
-  const users = [
-    {
-      id: 1,
-      name: "Carlos Administrador",
-      email: "admin@distribuidora.com",
-      role: "administrativo",
-      phone: "351-6660001",
-      active: true,
-    },
-    {
-      id: 2,
-      name: "Juan Preventista",
-      email: "preventista1@distribuidora.com",
-      role: "preventista",
-      phone: "351-6660003",
-      active: true,
-    },
-    {
-      id: 3,
-      name: "Pedro Armador",
-      email: "armado1@distribuidora.com",
-      role: "encargado_armado",
-      phone: "351-6660006",
-      active: true,
-    },
-    {
-      id: 4,
-      name: "Carlos Méndez",
-      email: "repartidor1@distribuidora.com",
-      role: "repartidor",
-      phone: "351-6661111",
-      active: true,
-    },
-    {
-      id: 5,
-      name: "José Pérez",
-      email: "cliente1@email.com",
-      role: "cliente",
-      phone: "351-5551234",
-      active: true,
-    },
-  ]
+interface PageProps {
+  searchParams: Promise<SearchParams>
+}
 
-  const getRoleBadge = (role: string) => {
-    const variants: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-      administrativo: { label: "Administrativo", variant: "default" },
-      preventista: { label: "Preventista", variant: "secondary" },
-      encargado_armado: { label: "Armado", variant: "outline" },
-      repartidor: { label: "Repartidor", variant: "secondary" },
-      cliente: { label: "Cliente", variant: "outline" },
-    }
-    return variants[role] || { label: role, variant: "outline" }
+/**
+ * Admin Users Page
+ * Displays and manages all system users with filtering and pagination
+ */
+export default async function AdminUsersPage({ searchParams }: PageProps) {
+  const params = await searchParams
+  const supabase = await createClient()
+
+  // Authentication check
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
   }
 
+  // Authorization check
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile || profile.role !== 'administrativo') {
+    redirect('/auth/login')
+  }
+
+  // Fetch users using service
+  const usersService = createUsersService(supabase)
+  
+  const isActive = 
+    params.status === 'active' ? true : 
+    params.status === 'inactive' ? false : 
+    undefined
+
+  const { users, totalCount, totalPages, currentPage } = await usersService.getUsers({
+    role: params.role,
+    search: params.search,
+    isActive,
+    page: params.page ? parseInt(params.page) : 1,
+  })
+
+  // Fetch statistics
+  const stats = await usersService.getUserStats()
+
   return (
-    <div className="space-y-4">
-      {users.map((user) => {
-        const roleBadge = getRoleBadge(user.role)
-        return (
-          <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-            <div className="flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-sm font-medium">{user.name.charAt(0)}</span>
-              </div>
-              <div>
-                <p className="font-medium">{user.name}</p>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <Badge variant={roleBadge.variant}>{roleBadge.label}</Badge>
-              <p className="text-sm text-muted-foreground w-32">{user.phone}</p>
-              <Badge variant={user.active ? "default" : "secondary"}>{user.active ? "Activo" : "Inactivo"}</Badge>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>Ver detalles</DropdownMenuItem>
-                  <DropdownMenuItem>Editar</DropdownMenuItem>
-                  <DropdownMenuItem>Cambiar contraseña</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-red-600">Desactivar</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+    <div className="flex min-h-screen flex-col">
+      <header className="border-b bg-background">
+        <div className="container flex h-16 items-center justify-between px-4">
+          <h1 className="text-xl font-semibold">Gestión de Usuarios</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">{profile.full_name}</span>
+            <form action="/auth/logout" method="post">
+              <Button variant="outline" size="sm">
+                Cerrar Sesión
+              </Button>
+            </form>
           </div>
-        )
-      })}
+        </div>
+      </header>
+
+      <main className="flex-1 bg-muted/40 p-6">
+        <div className="container mx-auto space-y-6">
+          {/* Back Button & New User Button */}
+          <div className="flex items-center justify-between">
+            <Button variant="outline" asChild>
+              <Link href="/admin/dashboard">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Volver al Dashboard
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/admin/users/new">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Nuevo Usuario
+              </Link>
+            </Button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <StatsCard title="Total Usuarios" value={stats.total} />
+            <StatsCard title="Usuarios Activos" value={stats.active} />
+            <StatsCard 
+              title="Administrativos" 
+              value={stats.byRole.administrativo || 0} 
+            />
+          </div>
+
+          {/* Users List with Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Usuarios del Sistema</CardTitle>
+              <CardDescription>
+                Gestiona y visualiza todos los usuarios del sistema
+                {totalCount > 0 && ` - ${totalCount} usuarios encontrados`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Filters */}
+                <UsersFilters />
+
+                {/* Users List */}
+                <UsersList users={users} />
+
+                {/* Pagination */}
+                <UsersPagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalCount={totalCount}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     </div>
   )
 }
 
-function UsersSkeleton() {
+/**
+ * Stats Card Component
+ */
+function StatsCard({ title, value }: { title: string; value: number }) {
   return (
-    <div className="space-y-4">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-5 w-20" />
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-5 w-16" />
-          </div>
-        </div>
-      ))}
-    </div>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
   )
 }
