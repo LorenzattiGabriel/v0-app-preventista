@@ -297,9 +297,8 @@ Renderizado de componentes con datos
 - [x] Crear componente de lista
 - [x] Refactorizar página principal
 - [x] Verificar linting
-- [ ] Testing unitario
 - [ ] Testing E2E
-- [ ] Deployment a Vercel
+
 
 ---
 
