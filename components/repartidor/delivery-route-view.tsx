@@ -45,6 +45,16 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     try {
       const supabase = createClient()
 
+      // Check if there is another route in progress
+      const { count: inProgressCount, error: countError } = await supabase
+        .from("routes")
+        .select("*", { count: "exact", head: true })
+        .eq("driver_id", userId)
+        .eq("status", "EN_CURSO")
+
+      if (countError) throw countError
+      if (inProgressCount && inProgressCount > 0) throw new Error("Ya tienes otra ruta en curso. Complétala antes de iniciar una nueva.")
+
       // Update route status
       const { error: routeError } = await supabase
         .from("routes")
