@@ -163,48 +163,42 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                 )}
               </div>
 
-              {/* 🆕 MEDIUM-1b: Show delivery code to client - visible after order is confirmed */}
-              {order.delivery_code && order.status !== "BORRADOR" && order.status !== "CANCELADO" && (
+              {/* 🆕 Show delivery evidence (photo + name) after delivery */}
+              {order.status === "ENTREGADO" && order.delivery_photo_url && order.received_by_name && (
                 <div className="bg-green-50 dark:bg-green-950 border-2 border-green-400 dark:border-green-600 rounded-lg p-6 shadow-sm">
-                  <div className="flex flex-col items-center gap-3">
-                    <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-                    <div className="text-center">
-                      <p className="font-bold text-green-900 dark:text-green-100 text-lg">
-                        📱 Tu Código de Verificación
-                      </p>
-                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                        El repartidor te pedirá este código al entregar tu pedido
-                      </p>
-                      <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-green-300 dark:border-green-700">
-                        <p className="text-5xl font-mono font-bold text-green-700 dark:text-green-400 tracking-widest">
-                          {order.delivery_code}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      <div>
+                        <p className="font-bold text-green-900 dark:text-green-100 text-lg">
+                          📸 Evidencia de Entrega
+                        </p>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Tu pedido fue entregado exitosamente
                         </p>
                       </div>
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-3">
-                        ⚠️ No compartas este código hasta que recibas tu pedido
-                      </p>
-                      {(order.status === "PENDIENTE_ARMADO" || order.status === "EN_ARMADO") && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Tu pedido está siendo preparado. Guarda este código para cuando llegue el repartidor.
-                        </p>
-                      )}
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Show message if code is not available yet */}
-              {!order.delivery_code && order.status !== "BORRADOR" && order.status !== "CANCELADO" && (
-                <div className="bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg p-4">
-                  <div className="flex items-center gap-3">
-                    <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    <div>
-                      <p className="font-medium text-blue-900 dark:text-blue-100">
-                        Código de verificación pendiente
-                      </p>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">
-                        Tu código de verificación se generará pronto. Lo verás aquí cuando esté disponible.
-                      </p>
+                    
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-green-300 dark:border-green-700">
+                      <div className="space-y-4">
+                        {/* Delivery Photo */}
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-2">Foto de entrega:</p>
+                          <img
+                            src={order.delivery_photo_url}
+                            alt="Evidencia de entrega"
+                            className="w-full max-w-md mx-auto rounded-lg border-2 border-gray-300 dark:border-gray-600"
+                          />
+                        </div>
+                        
+                        {/* Received By Name */}
+                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-300 dark:border-gray-700">
+                          <p className="text-sm font-medium text-muted-foreground">Recibido por:</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+                            {order.received_by_name}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

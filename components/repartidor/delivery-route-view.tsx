@@ -43,8 +43,10 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
   const [collectedAmount, setCollectedAmount] = useState("")
   const [deliveryNotes, setDeliveryNotes] = useState("")
   
-  // 🆕 MEDIUM-1c & MEDIUM-2: New states for delivery verification and non-delivery
-  const [deliveryCode, setDeliveryCode] = useState("")
+  // 🆕 New states for delivery evidence and non-delivery
+  const [deliveryPhoto, setDeliveryPhoto] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [receivedByName, setReceivedByName] = useState("")
   const [cannotDeliver, setCannotDeliver] = useState(false)
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
@@ -142,12 +144,38 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     setWasCollected(false)
     setCollectedAmount("")
     setDeliveryNotes("")
-    // 🆕 MEDIUM-1c & MEDIUM-2: Reset new fields
-    setDeliveryCode("")
+    // 🆕 Reset delivery evidence fields
+    setDeliveryPhoto(null)
+    setPhotoPreview(null)
+    setReceivedByName("")
     setCannotDeliver(false)
     setNoDeliveryReason("")
     setNoDeliveryNotes("")
     setShowDeliveryDialog(true)
+  }
+
+  // 🆕 Handle photo selection
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError("Por favor selecciona una imagen válida")
+        return
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("La imagen no puede ser mayor a 5MB")
+        return
+      }
+      setDeliveryPhoto(file)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
   }
 
   const handleConfirmDelivery = async () => {
@@ -198,16 +226,14 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
       return
     }
 
-    // 🆕 MEDIUM-1c: Validate delivery code if order has one
-    if (selectedOrder.delivery_code) {
-      if (!deliveryCode) {
-        setError("Debe ingresar el código de entrega proporcionado por el cliente")
-        return
-      }
-      if (deliveryCode !== selectedOrder.delivery_code) {
-        setError(`Código incorrecto. El cliente debe proporcionar el código correcto.`)
-        return
-      }
+    // 🆕 Validate delivery evidence (photo + name)
+    if (!deliveryPhoto) {
+      setError("Debe tomar una foto de la entrega")
+      return
+    }
+    if (!receivedByName.trim()) {
+      setError("Debe ingresar el nombre de quien recibió el pedido")
+      return
     }
 
     setIsLoading(true)
@@ -216,13 +242,37 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     try {
       const supabase = createClient()
 
-      // Update order
+      // 1. Upload photo to Supabase Storage
+      const fileExt = deliveryPhoto.name.split('.').pop()
+      const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('delivery')
+        .upload(filePath, deliveryPhoto, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error("Error uploading photo:", uploadError)
+        throw new Error("Error al subir la foto de entrega")
+      }
+
+      // 2. Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('delivery')
+        .getPublicUrl(filePath)
+
+      // 3. Update order with delivery evidence
       const { error: orderError } = await supabase
         .from("orders")
         .update({
           status: "ENTREGADO",
           delivered_at: new Date().toISOString(),
           delivery_notes: deliveryNotes || null,
+          delivery_photo_url: publicUrl,
+          received_by_name: receivedByName.trim(),
         })
         .eq("id", selectedOrder.id)
 
@@ -581,26 +631,47 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
             ) : (
               // Normal delivery form
               <>
-                {/* 🆕 MEDIUM-1c: Delivery Code Verification */}
-                {selectedOrder?.delivery_code && (
-                  <div className="space-y-2 p-4 bg-green-50 dark:bg-green-950 border-2 border-green-300 dark:border-green-700 rounded-lg">
-                    <Label htmlFor="delivery-code" className="font-bold text-green-900 dark:text-green-100">
-                      Código de Verificación *
-                    </Label>
-                    <p className="text-sm text-green-700 dark:text-green-300 mb-2">
-                      Solicita al cliente el código de 4 dígitos
-                    </p>
-                    <Input
-                      id="delivery-code"
-                      type="text"
-                      maxLength={4}
-                      placeholder="####"
-                      value={deliveryCode}
-                      onChange={(e) => setDeliveryCode(e.target.value.replace(/\D/g, ""))}
-                      className="text-center text-2xl font-mono font-bold tracking-widest"
-                    />
-                  </div>
-                )}
+                {/* 🆕 Delivery Photo Evidence */}
+                <div className="space-y-2 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
+                  <Label htmlFor="delivery-photo" className="font-bold text-blue-900 dark:text-blue-100">
+                    📸 Foto de Entrega *
+                  </Label>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
+                    Toma una foto del pedido entregado
+                  </p>
+                  <Input
+                    id="delivery-photo"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    className="cursor-pointer"
+                  />
+                  {photoPreview && (
+                    <div className="mt-2">
+                      <img
+                        src={photoPreview}
+                        alt="Preview"
+                        className="w-full max-w-xs mx-auto rounded-lg border-2 border-blue-300"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* 🆕 Received By Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="received-by" className="font-medium">
+                    Nombre de quien recibe *
+                  </Label>
+                  <Input
+                    id="received-by"
+                    type="text"
+                    placeholder="Ej: Juan Pérez"
+                    value={receivedByName}
+                    onChange={(e) => setReceivedByName(e.target.value)}
+                    className="text-lg"
+                  />
+                </div>
 
                 <div className="flex items-center space-x-2">
                   <Checkbox
