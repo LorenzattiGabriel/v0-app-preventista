@@ -5,8 +5,23 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { BarChart3, MapPin, Package, Truck, Users, FileText } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
+import { RatingsMetrics } from "@/components/admin/ratings-metrics"
+import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
+import { Suspense } from "react"
 
-export default async function AdminDashboardPage() {
+interface SearchParams {
+  start_date?: string
+  end_date?: string
+}
+
+interface PageProps {
+  searchParams: Promise<SearchParams>
+}
+
+
+
+export default async function AdminDashboardPage({ searchParams }: PageProps) {
+  const params = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -190,6 +205,21 @@ export default async function AdminDashboardPage() {
 
             <Card>
               <CardHeader>
+                <CardTitle>Catálogo de Productos</CardTitle>
+                <CardDescription>Administra productos e inventario</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/products">
+                    <Package className="mr-2 h-4 w-4" />
+                    Ver Productos
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Gestión de Usuarios</CardTitle>
                 <CardDescription>Administra usuarios y permisos</CardDescription>
               </CardHeader>
@@ -202,6 +232,31 @@ export default async function AdminDashboardPage() {
                 </Button>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Customer Satisfaction Metrics */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-semibold tracking-tight">Satisfacción del Cliente</h3>
+              <p className="text-muted-foreground">Métricas de calificaciones y experiencia del cliente</p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-4">
+              <div className="lg:col-span-1">
+                <RatingsDateFilter />
+              </div>
+              <div className="lg:col-span-3">
+                <Suspense 
+                  key={`${params.start_date}-${params.end_date}`}
+                  fallback={<div className="text-center py-8 text-muted-foreground">Cargando métricas...</div>}
+                >
+                  <RatingsMetrics 
+                    startDate={params.start_date} 
+                    endDate={params.end_date}
+                  />
+                </Suspense>
+              </div>
+            </div>
           </div>
         </div>
       </main>

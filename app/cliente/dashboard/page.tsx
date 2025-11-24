@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Package, Clock, CheckCircle, Truck } from "lucide-react"
+import { Package, Clock, CheckCircle, Truck, AlertTriangle } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default async function ClienteDashboardPage() {
   const supabase = await createClient()
@@ -70,6 +71,14 @@ export default async function ClienteDashboardPage() {
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
     .limit(5)
+
+  // Count orders with shortages
+  const { count: ordersWithShortages } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("customer_id", customer.id)
+    .eq("has_shortages", true)
+    .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION"])
 
   const statusLabels = {
     BORRADOR: "Borrador",
@@ -161,6 +170,24 @@ export default async function ClienteDashboardPage() {
             </Card>
           </div>
 
+          {/* Shortages Alert */}
+          {ordersWithShortages && ordersWithShortages > 0 && (
+            <Alert variant="destructive" className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800">
+              <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              <AlertTitle className="text-yellow-900 dark:text-yellow-100">
+                ⚠️ Pedidos con Productos Faltantes
+              </AlertTitle>
+              <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                Tienes {ordersWithShortages} {ordersWithShortages === 1 ? 'pedido' : 'pedidos'} con productos faltantes. 
+                Los productos que no estaban disponibles no serán incluidos en tu entrega. 
+                El monto final se ajustará automáticamente.{' '}
+                <Link href="/cliente/orders?has_shortages=true" className="underline font-medium">
+                  Ver pedidos con faltantes
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -177,19 +204,29 @@ export default async function ClienteDashboardPage() {
               {orders && orders.length > 0 ? (
                 <div className="space-y-4">
                   {orders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{order.order_number}</span>
                           <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
                             {statusLabels[order.status as keyof typeof statusLabels]}
                           </Badge>
+                          {order.has_shortages && (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-700">
+                              ⚠️ Con Faltantes
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground">
                           Fecha: {new Date(order.order_date).toLocaleDateString("es-AR")} | Entrega:{" "}
                           {new Date(order.delivery_date).toLocaleDateString("es-AR")}
                         </p>
                         <p className="text-sm font-medium">Total: ${order.total.toFixed(2)}</p>
+                        {order.has_shortages && (
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400 font-medium">
+                            Algunos productos no están disponibles
+                          </p>
+                        )}
                       </div>
                       <Button asChild variant="outline">
                         <Link href={`/cliente/orders/${order.id}`}>Ver Detalle</Link>

@@ -3,14 +3,15 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, AlertTriangle } from "lucide-react"
+import { ClientOrdersFilters } from "@/components/cliente/orders-filters"
+import { WhatsAppSupportButton } from "@/components/cliente/whatsapp-support-button"
 
 export default async function ClienteOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; search?: string }>
+  searchParams: Promise<{ status?: string; search?: string; has_shortages?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -43,6 +44,10 @@ export default async function ClienteOrdersPage({
 
   if (params.search) {
     query = query.ilike("order_number", `%${params.search}%`)
+  }
+
+  if (params.has_shortages === 'true') {
+    query = query.eq("has_shortages", true)
   }
 
   const { data: orders } = await query.order("created_at", { ascending: false })
@@ -86,6 +91,7 @@ export default async function ClienteOrdersPage({
                 Volver
               </Link>
             </Button>
+            <WhatsAppSupportButton />
           </div>
 
           <Card>
@@ -95,24 +101,23 @@ export default async function ClienteOrdersPage({
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex gap-4">
-                  <Input placeholder="Buscar por número de pedido..." className="max-w-sm" />
-                  <Button variant="outline">Filtrar por Estado</Button>
-                </div>
+                {/* Filters */}
+                <ClientOrdersFilters />
 
+                {/* Orders List */}
                 {orders && orders.length > 0 ? (
                   <div className="space-y-4">
                     {orders.map((order) => (
-                      <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div key={order.id} className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${order.has_shortages ? 'border-yellow-300 bg-yellow-50/50 dark:border-yellow-700 dark:bg-yellow-950/20' : ''}`}>
                         <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold">{order.order_number}</span>
                             <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
                               {statusLabels[order.status as keyof typeof statusLabels]}
                             </Badge>
                             {order.has_shortages && (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                                Con Faltantes
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-400 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-600 font-medium">
+                                ⚠️ Con Faltantes
                               </Badge>
                             )}
                           </div>
@@ -121,6 +126,14 @@ export default async function ClienteOrdersPage({
                             {new Date(order.delivery_date).toLocaleDateString("es-AR")}
                           </p>
                           <p className="text-sm font-medium">Total: ${order.total.toFixed(2)}</p>
+                          {order.has_shortages && (
+                            <div className="flex items-center gap-2 mt-2 bg-yellow-100 dark:bg-yellow-900 px-3 py-2 rounded-md">
+                              <AlertTriangle className="h-4 w-4 text-yellow-700 dark:text-yellow-300" />
+                              <p className="text-xs text-yellow-800 dark:text-yellow-200 font-medium">
+                                Algunos productos no están disponibles. Ver detalle para más información.
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Button asChild variant="outline">
                           <Link href={`/cliente/orders/${order.id}`}>Ver Detalle</Link>

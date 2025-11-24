@@ -45,9 +45,10 @@ interface AssemblyFormProps {
   products: any[]
   userId: string
   isLocked: boolean
+  lockedByUser?: { full_name: string; email: string } | null
 }
 
-export function AssemblyForm({ order, products, userId, isLocked }: AssemblyFormProps) {
+export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }: AssemblyFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,7 +75,44 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
   const [assemblyNotes, setAssemblyNotes] = useState(order.assembly_notes || "")
   const [startTime] = useState(order.assembly_started_at || new Date().toISOString())
 
+  // 🆕 CRITICAL-2: Release order function
+  const handleReleaseOrder = async () => {
+    setIsLoading(true)
+    setError(null)
 
+    try {
+      const supabase = createClient()
+
+      // Change status back to PENDIENTE_ARMADO and clear assembled_by
+      const { error: releaseError } = await supabase
+        .from("orders")
+        .update({
+          status: "PENDIENTE_ARMADO",
+          assembled_by: null,
+          assembly_started_at: null,
+        })
+        .eq("id", order.id)
+
+      if (releaseError) throw releaseError
+
+      // Create history entry
+      await supabase.from("order_history").insert({
+        order_id: order.id,
+        previous_status: "EN_ARMADO",
+        new_status: "PENDIENTE_ARMADO",
+        changed_by: userId,
+        change_reason: "Pedido liberado por el armador",
+      })
+
+      router.push("/armado/dashboard")
+      router.refresh()
+    } catch (err) {
+      console.error("[v0] Error releasing order:", err)
+      setError(err instanceof Error ? err.message : "Error al liberar el pedido")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleItemChange = (index: number, field: keyof AssemblyItem, value: any) => {
     const newItems = [...assemblyItems]
@@ -172,7 +210,7 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
 
       if (orderError) throw orderError
 
-      // Update order items
+      // Update order items and product stock
       for (const item of assemblyItems) {
         const { error: itemError } = await supabase
           .from("order_items")
@@ -187,6 +225,37 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
           .eq("id", item.id)
 
         if (itemError) throw itemError
+
+        // Update product stock - decrease by assembled quantity
+        if (item.quantityAssembled > 0) {
+          const productIdToUpdate = item.isSubstituted && item.substitutedProductId 
+            ? item.substitutedProductId 
+            : item.productId
+
+          // Get current stock
+          const { data: product, error: productFetchError } = await supabase
+            .from("products")
+            .select("current_stock")
+            .eq("id", productIdToUpdate)
+            .single()
+
+          if (productFetchError) {
+            console.error("Error fetching product stock:", productFetchError)
+            continue // Don't fail the whole operation if stock update fails
+          }
+
+          // Update stock
+          const newStock = Math.max(0, (product?.current_stock || 0) - item.quantityAssembled)
+          const { error: stockError } = await supabase
+            .from("products")
+            .update({ current_stock: newStock })
+            .eq("id", productIdToUpdate)
+
+          if (stockError) {
+            console.error("Error updating product stock:", stockError)
+            // Don't fail the whole operation if stock update fails
+          }
+        }
       }
 
       // Create order history entry
@@ -221,16 +290,42 @@ export function AssemblyForm({ order, products, userId, isLocked }: AssemblyForm
           </Link>
         </Button>
 
-        {order.status === "PENDIENTE_ARMADO" && (
-          <Button onClick={handleStartAssembly} disabled={isLoading || isLocked}>
-            <Package className="mr-2 h-4 w-4" />
-            Iniciar Armado
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {/* 🆕 CRITICAL-2: Release Order Button */}
+          {order.status === "EN_ARMADO" && order.assembled_by === userId && (
+            <Button variant="outline" onClick={handleReleaseOrder} disabled={isLoading}>
+              <Package className="mr-2 h-4 w-4" />
+              Liberar Pedido
+            </Button>
+          )}
+
+          {order.status === "PENDIENTE_ARMADO" && (
+            <Button onClick={handleStartAssembly} disabled={isLoading || isLocked}>
+              <Package className="mr-2 h-4 w-4" />
+              Iniciar Armado
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+      )}
+
+      {/* 🆕 CRITICAL-1b: Show locked message */}
+      {isLocked && lockedByUser && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 p-4 rounded-md border border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 mt-0.5" />
+            <div>
+              <p className="font-medium">Pedido en armado por otro usuario</p>
+              <p className="text-sm mt-1">
+                Este pedido está siendo armado por <strong>{lockedByUser.full_name}</strong> ({lockedByUser.email}).
+                No puedes modificarlo hasta que lo libere.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       <Card>

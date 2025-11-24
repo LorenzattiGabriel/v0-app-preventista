@@ -207,6 +207,34 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
     try {
       const supabase = createClient()
 
+      // 🆕 CRITICAL-4: Validate no duplicate orders across all generated routes
+      const allOrderIds = generatedRoutes.flatMap(route => route.orders.map(o => o.id))
+      
+      // Check if any of these orders are already in an active route (PLANIFICADO or EN_CURSO)
+      const { data: existingRouteOrders, error: checkError } = await supabase
+        .from("route_orders")
+        .select(`
+          order_id,
+          routes!inner(id, route_code, status)
+        `)
+        .in("order_id", allOrderIds)
+        .in("routes.status", ["PLANIFICADO", "EN_CURSO"])
+
+      if (checkError) throw checkError
+
+      if (existingRouteOrders && existingRouteOrders.length > 0) {
+        // Get order numbers for better error message
+        const duplicateOrderIds = existingRouteOrders.map(ro => ro.order_id)
+        const allOrders = generatedRoutes.flatMap(route => route.orders)
+        const duplicateOrders = allOrders.filter(o => duplicateOrderIds.includes(o.id))
+        const orderNumbers = duplicateOrders.map(o => o.order_number).join(", ")
+        const routeCodes = Array.from(new Set(existingRouteOrders.map(ro => (ro.routes as any).route_code))).join(", ")
+        
+        setError(`Los siguientes pedidos ya están en rutas activas (${routeCodes}): ${orderNumbers}. Por favor, elimínalos de las rutas o regenera las rutas sin incluir estos pedidos.`)
+        setIsCreating(false)
+        return
+      }
+
       for (let i = 0; i < generatedRoutes.length; i++) {
         const route = generatedRoutes[i]
         const driverId = routeDrivers[i]
