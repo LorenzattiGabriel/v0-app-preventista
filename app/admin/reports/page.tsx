@@ -53,13 +53,13 @@ export default async function ReportsPage({
 
         <TabsContent value="delivery" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <DeliveryReport />
+            <DeliveryReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <PerformanceReport />
+            <PerformanceReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 

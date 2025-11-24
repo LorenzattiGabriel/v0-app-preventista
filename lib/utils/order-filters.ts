@@ -86,7 +86,8 @@ export function getAvailableOrdersForRoute<T extends OrderForFiltering>(
 ): T[] {
   const { deliveryDate, zoneId, status = "PENDIENTE_ENTREGA" } = params
 
-  if (!deliveryDate || !zoneId) {
+  // Si no hay fecha de entrega, no mostrar nada
+  if (!deliveryDate) {
     return []
   }
 
@@ -95,7 +96,12 @@ export function getAvailableOrdersForRoute<T extends OrderForFiltering>(
   // Aplicar filtros en secuencia
   filteredOrders = filterOrdersByStatus(filteredOrders, status)
   filteredOrders = filterOrdersByDeliveryDate(filteredOrders, deliveryDate)
-  filteredOrders = filterOrdersByZone(filteredOrders, zoneId)
+  
+  // Solo filtrar por zona si se especifica una zona válida (no vacía y no "all")
+  if (zoneId && zoneId !== "" && zoneId !== "all") {
+    filteredOrders = filterOrdersByZone(filteredOrders, zoneId)
+  }
+  
   filteredOrders = filterOrdersWithCoordinates(filteredOrders)
 
   return filteredOrders

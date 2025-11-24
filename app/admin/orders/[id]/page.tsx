@@ -252,6 +252,60 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                 </CardContent>
               </Card>
 
+              {/* 🆕 Delivery Evidence (Photo + Name) */}
+              {order.status === "ENTREGADO" && order.delivery_photo_url && order.received_by_name && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      Evidencia de Entrega
+                    </CardTitle>
+                    <CardDescription>Foto y datos de quien recibió el pedido</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                      <div className="space-y-3">
+                        {/* Received By Name */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-300 dark:border-green-700">
+                          <p className="text-xs font-medium text-muted-foreground">Recibido por:</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+                            {order.received_by_name}
+                          </p>
+                        </div>
+
+                        {/* Delivery Photo */}
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-2">Foto de entrega:</p>
+                          <img
+                            src={order.delivery_photo_url}
+                            alt="Evidencia de entrega"
+                            className="w-full rounded-lg border-2 border-green-300 dark:border-green-700"
+                          />
+                        </div>
+
+                        {/* Delivery Date/Time */}
+                        {order.delivered_at && (
+                          <div className="text-xs text-green-700 dark:text-green-300 text-center pt-2 border-t border-green-200 dark:border-green-800">
+                            Entregado el {new Date(order.delivered_at).toLocaleDateString("es-AR")} a las{" "}
+                            {new Date(order.delivered_at).toLocaleTimeString("es-AR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {order.delivery_notes && (
+                      <div className="bg-muted p-3 rounded text-sm">
+                        <p className="text-xs text-muted-foreground mb-1">Notas de entrega:</p>
+                        <p>{order.delivery_notes}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Products */}
               <Card>
                 <CardHeader>
@@ -508,58 +562,69 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Star className="h-4 w-4" />
-                      Calificación del Cliente
+                      Calificaciones del Cliente
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Calidad del Producto:</p>
+                  <CardContent className="space-y-4 text-sm">
+                    {/* Order Rating */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">Calificación del Pedido:</p>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <span
                             key={star}
-                            className={star <= rating.product_rating ? "text-yellow-500" : "text-gray-300"}
+                            className={star <= rating.rating ? "text-yellow-500" : "text-gray-300"}
                           >
                             ★
                           </span>
                         ))}
+                        <span className="ml-2 font-medium">{rating.rating}/5</span>
                       </div>
+                      {rating.comments && (
+                        <div className="bg-muted p-2 rounded text-sm mt-2">
+                          <p className="text-xs text-muted-foreground mb-1">Comentarios sobre el pedido:</p>
+                          <p>{rating.comments}</p>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Tiempo de Entrega:</p>
+
+                    <div className="border-t pt-3"></div>
+
+                    {/* Driver Rating */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">Calificación del Repartidor:</p>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <span
                             key={star}
-                            className={star <= rating.delivery_rating ? "text-yellow-500" : "text-gray-300"}
+                            className={star <= rating.driver_rating ? "text-blue-500" : "text-gray-300"}
                           >
                             ★
                           </span>
                         ))}
+                        <span className="ml-2 font-medium">{rating.driver_rating}/5</span>
                       </div>
+                      {rating.driver_comments && (
+                        <div className="bg-muted p-2 rounded text-sm mt-2">
+                          <p className="text-xs text-muted-foreground mb-1">Comentarios sobre el repartidor:</p>
+                          <p>{rating.driver_comments}</p>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Atención al Cliente:</p>
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <span
-                            key={star}
-                            className={star <= rating.service_rating ? "text-yellow-500" : "text-gray-300"}
-                          >
-                            ★
-                          </span>
-                        ))}
-                      </div>
+
+                    <div className="pt-3 border-t">
+                      <p className="font-medium text-center">
+                        Promedio General: {((rating.rating + rating.driver_rating) / 2).toFixed(1)} ⭐
+                      </p>
                     </div>
-                    <div className="pt-2 border-t">
-                      <p className="font-medium">Promedio: {rating.overall_rating.toFixed(1)} ⭐</p>
+                    
+                    <div className="pt-2 text-xs text-muted-foreground text-center">
+                      Calificado el {new Date(rating.created_at).toLocaleDateString("es-AR")} a las{" "}
+                      {new Date(rating.created_at).toLocaleTimeString("es-AR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </div>
-                    {rating.comments && (
-                      <div className="pt-2 border-t">
-                        <p className="text-xs text-muted-foreground mb-1">Comentarios:</p>
-                        <p className="text-sm">{rating.comments}</p>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}

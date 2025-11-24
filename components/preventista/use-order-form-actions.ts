@@ -21,6 +21,7 @@ interface SaveOrderParams {
   requiresInvoice: boolean
   observations: string
   generalDiscount: number
+  paymentMethod?: string // Payment method (Efectivo, Transferencia, etc.)
   orderItems: OrderItem[]
   userId: string
   isDraft: boolean
@@ -49,6 +50,7 @@ export function useOrderFormActions() {
     requiresInvoice,
     observations,
     generalDiscount,
+    paymentMethod,
     orderItems,
     userId,
     isDraft,
@@ -128,6 +130,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
             observations,
           })
           .eq("id", orderId)
@@ -158,6 +161,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
             created_by: userId,
             observations,
           })

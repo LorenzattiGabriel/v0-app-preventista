@@ -79,7 +79,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
 
   // Form state
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split("T")[0])
-  const [selectedZone, setSelectedZone] = useState<string>("")
+  const [selectedZone, setSelectedZone] = useState<string>("all") // Default to "all" zones
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [startTime, setStartTime] = useState("08:00")
   const [avgDeliveryTime, setAvgDeliveryTime] = useState(10)
@@ -182,10 +182,11 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
 
       // Get zone name
       const zone = zones.find((z) => z.id === selectedZone)
+      const zoneName = selectedZone === "all" ? "Múltiples Zonas" : (zone?.name || "Zona")
 
       const newRoute = {
-        zone: zone?.name || "Zona",
-        zoneId: selectedZone,
+        zone: zoneName,
+        zoneId: selectedZone === "all" ? "" : selectedZone,
         orders: ordersToRoute,
         totalDistance: routeResponse.totalDistance,
         estimatedDuration: routeResponse.estimatedDuration,
@@ -322,7 +323,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
         .insert({
           route_code: routeCode,
           driver_id: selectedDriver,
-          zone_id: selectedZone,
+          zone_id: selectedZone === "all" ? null : selectedZone, // Si es "all", guardar como null
           scheduled_date: deliveryDate,
           scheduled_start_time: startTime,
           scheduled_end_time: endTime,
@@ -483,6 +484,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                     <SelectValue placeholder="Selecciona una zona" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">🌐 Todas las zonas</SelectItem>
                     {zones.map((zone) => (
                       <SelectItem key={zone.id} value={zone.id}>
                         {zone.name}
@@ -493,13 +495,14 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
               </div>
 
               {/* Orders Dashboard */}
-              {selectedZone && availableOrders.length > 0 && (
+              {availableOrders.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base font-semibold">Pedidos Disponibles</Label>
                       <p className="text-sm text-muted-foreground mt-1">
                         {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
+                        {selectedZone === "all" && " (todas las zonas)"}
                       </p>
                     </div>
                     <Button
@@ -532,9 +535,9 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                 </div>
               )}
 
-              {selectedZone && availableOrders.length === 0 && (
+              {deliveryDate && availableOrders.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay pedidos disponibles para esta zona y fecha con coordenadas guardadas.
+                  No hay pedidos disponibles para {selectedZone === "all" ? "esta fecha" : "esta zona y fecha"} con coordenadas guardadas.
                 </p>
               )}
             </CardContent>
