@@ -1,29 +1,45 @@
-"use client"
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Truck, Clock, MapPin, Star } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
+import { createClient } from "@/lib/supabase/server"
+import { createReportsService } from "@/lib/services/reportsService"
+import { ReportDateFilter } from "./report-date-filter"
+import { ExportReportButton } from "./export-report-button"
 
-export function DeliveryReport() {
-  // Mock data - replace with real data from Supabase
-  const stats = {
-    totalRoutes: 156,
-    completedRoutes: 142,
-    activeRoutes: 8,
-    avgDeliveryTime: 45,
-    onTimeDelivery: 91.2,
-    avgRating: 4.6,
-  }
+interface DeliveryReportProps {
+  startDate: Date
+  endDate: Date
+}
 
-  const driverPerformance = [
-    { name: "Carlos Méndez", deliveries: 234, onTime: 95, rating: 4.8 },
-    { name: "Roberto Díaz", deliveries: 198, onTime: 92, rating: 4.7 },
-    { name: "Martín Gómez", deliveries: 187, onTime: 89, rating: 4.5 },
-    { name: "Diego Transportista", deliveries: 176, onTime: 88, rating: 4.4 },
-  ]
+export async function DeliveryReport({ startDate, endDate }: DeliveryReportProps) {
+  const supabase = await createClient()
+  const reportsService = createReportsService(supabase)
+
+  const { stats, driverPerformance } = await reportsService.getDeliveryReport(startDate, endDate)
 
   return (
     <div className="space-y-6">
+      {/* Header with filters */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle>Reporte de Entregas</CardTitle>
+              <CardDescription>Análisis de rutas y rendimiento de repartidores</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <ReportDateFilter startDate={startDate} endDate={endDate} />
+              <ExportReportButton
+                reportType="delivery"
+                data={{ stats, driverPerformance }}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -56,7 +72,7 @@ export function DeliveryReport() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.onTimeDelivery}%</div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+3.2%</span> vs mes anterior
+              {stats.completedRoutes > 0 ? `${stats.completedRoutes} rutas completadas` : "Sin datos"}
             </p>
           </CardContent>
         </Card>
@@ -67,7 +83,7 @@ export function DeliveryReport() {
             <Star className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.avgRating}</div>
+            <div className="text-2xl font-bold">{stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "N/A"}</div>
             <p className="text-xs text-muted-foreground">de 5 estrellas</p>
           </CardContent>
         </Card>
@@ -77,37 +93,67 @@ export function DeliveryReport() {
       <Card>
         <CardHeader>
           <CardTitle>Rendimiento de Repartidores</CardTitle>
-          <CardDescription>Métricas de desempeño por repartidor</CardDescription>
+          <CardDescription>Métricas de desempeño por repartidor en el período seleccionado</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {driverPerformance.map((driver) => (
-              <div key={driver.name} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{driver.name}</p>
-                    <p className="text-sm text-muted-foreground">{driver.deliveries} entregas</p>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="text-right">
-                      <p className="font-medium">{driver.onTime}%</p>
-                      <p className="text-muted-foreground">A tiempo</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium flex items-center gap-1">
-                        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                        {driver.rating}
+          {driverPerformance.length > 0 ? (
+            <div className="space-y-6">
+              {driverPerformance.map((driver) => (
+                <div key={driver.driverId} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{driver.driverName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {driver.deliveries} {driver.deliveries === 1 ? "ruta" : "rutas"} (
+                        {driver.completedDeliveries} {driver.completedDeliveries === 1 ? "completada" : "completadas"})
                       </p>
-                      <p className="text-muted-foreground">Rating</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="text-right">
+                        <p className="font-medium">{Math.round(driver.onTime)}%</p>
+                        <p className="text-muted-foreground">Completadas</p>
+                      </div>
+                      {driver.rating > 0 && (
+                        <div className="text-right">
+                          <p className="font-medium flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                            {driver.rating.toFixed(1)}
+                          </p>
+                          <p className="text-muted-foreground">Rating</p>
+                        </div>
+                      )}
                     </div>
                   </div>
+                  <Progress value={driver.onTime} className="h-2" />
                 </div>
-                <Progress value={driver.onTime} className="h-2" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">
+              No hay datos de repartidores en el período seleccionado
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      {/* Active Routes Alert */}
+      {stats.activeRoutes > 0 && (
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Truck className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="font-medium text-blue-900 dark:text-blue-100">
+                  {stats.activeRoutes} {stats.activeRoutes === 1 ? "ruta activa" : "rutas activas"} en este momento
+                </p>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Repartidores en curso de entrega
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

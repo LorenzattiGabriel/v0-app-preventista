@@ -4,10 +4,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Truck, MapPin, CheckCircle, Clock, Package } from "lucide-react"
+import { Truck, MapPin, CheckCircle, Clock, Package, Calendar } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RepartidorRoutesFilter } from "@/components/repartidor/repartidor-routes-filter"
 
-export default async function RepartidorDashboardPage() {
+interface SearchParams {
+  selected_date?: string
+}
+
+interface PageProps {
+  searchParams: Promise<SearchParams>
+}
+
+export default async function RepartidorDashboardPage({ searchParams }: PageProps) {
+  const params = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -25,6 +36,7 @@ export default async function RepartidorDashboardPage() {
 
   // Get today's date
   const today = new Date().toISOString().split("T")[0]
+  const selectedDate = params.selected_date || today
 
   // Get statistics
   const { count: todayRoutes } = await supabase
@@ -53,8 +65,15 @@ export default async function RepartidorDashboardPage() {
     .eq("delivered_by", user.id)
     .gte("delivered_at", today)
 
-  // Get today's routes with order counts
-  const { data: routes } = await supabase
+  // Get future routes count
+  const { count: futureRoutes } = await supabase
+    .from("routes")
+    .select("*", { count: "exact", head: true })
+    .eq("driver_id", user.id)
+    .gt("scheduled_date", today)
+
+  // Get today's routes with order counts + any in-progress routes
+  const { data: routesToday } = await supabase
     .from("routes")
     .select(
       `
@@ -74,6 +93,71 @@ export default async function RepartidorDashboardPage() {
     .eq("driver_id", user.id)
     .eq("scheduled_date", today)
     .order("scheduled_start_time", { ascending: true })
+
+  // Also get any in-progress routes (regardless of date)
+  const { data: inProgressRoutesOtherDays } = await supabase
+    .from("routes")
+    .select(
+      `
+      *,
+      zones (
+        name
+      ),
+      route_orders (
+        id,
+        orders (
+          id,
+          status
+        )
+      )
+    `,
+    )
+    .eq("driver_id", user.id)
+    .eq("status", "EN_CURSO")
+    .neq("scheduled_date", today)
+    .order("scheduled_date", { ascending: false })
+
+  // Get routes for selected date (if different from today)
+  const { data: routesSelectedDate, error: routesSelectedDateError } = selectedDate !== today ? await supabase
+    .from("routes")
+    .select(
+      `
+      *,
+      zones (
+        name
+      ),
+      route_orders (
+        id,
+        orders (
+          id,
+          status
+        )
+      )
+    `,
+    )
+    .eq("driver_id", user.id)
+    .eq("scheduled_date", selectedDate)
+    .order("scheduled_start_time", { ascending: true })
+    : { data: [], error: null }
+
+  // Debug logging
+  console.log('🔍 Debug Repartidor Dashboard:', {
+    userId: user.id,
+    today,
+    selectedDate,
+    routesSelectedDateCount: routesSelectedDate?.length || 0,
+    routesSelectedDateError,
+    routesSelectedDate: routesSelectedDate?.map(r => ({
+      id: r.id,
+      route_code: r.route_code,
+      driver_id: r.driver_id,
+      scheduled_date: r.scheduled_date,
+      status: r.status
+    }))
+  })
+
+  // Combine routes (in-progress first, then today's)
+  const routes = [...(inProgressRoutesOtherDays || []), ...(routesToday || [])]
 
   const statusLabels = {
     PLANIFICADO: "Planificado",
@@ -111,7 +195,7 @@ export default async function RepartidorDashboardPage() {
             <p className="text-muted-foreground">Gestiona tus rutas y entregas del día</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Rutas de Hoy</CardTitle>
@@ -155,70 +239,166 @@ export default async function RepartidorDashboardPage() {
                 <p className="text-xs text-muted-foreground">Pedidos entregados</p>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Rutas Futuras</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{futureRoutes || 0}</div>
+                <p className="text-xs text-muted-foreground">Planificadas</p>
+              </CardContent>
+            </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Mis Rutas de Hoy</CardTitle>
-              <CardDescription>{new Date().toLocaleDateString("es-AR", { dateStyle: "full" })}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {routes && routes.length > 0 ? (
-                <div className="space-y-4">
-                  {routes.map((route) => {
-                    const totalOrders = route.route_orders?.length || 0
-                    const deliveredOrders =
-                      route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0
+          <Tabs defaultValue="today" className="w-full">
+            <TabsList>
+              <TabsTrigger value="today">Rutas de Hoy</TabsTrigger>
+              <TabsTrigger value="planned">Rutas Planificadas</TabsTrigger>
+            </TabsList>
 
-                    return (
-                      <div key={route.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">{route.route_code}</span>
-                            <Badge variant={statusColors[route.status as keyof typeof statusColors]}>
-                              {statusLabels[route.status as keyof typeof statusLabels]}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                              <span>{route.zones?.name || "Sin zona"}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Package className="h-4 w-4" />
-                              <span>
-                                {deliveredOrders}/{totalOrders} entregas
-                              </span>
-                            </div>
-                            {route.scheduled_start_time && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-4 w-4" />
-                                <span>Inicio: {route.scheduled_start_time.slice(0, 5)}</span>
+            {/* Today's Routes Tab */}
+            <TabsContent value="today" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Mis Rutas de Hoy</CardTitle>
+                  <CardDescription>{new Date().toLocaleDateString("es-AR", { dateStyle: "full" })}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {routes && routes.length > 0 ? (
+                    <div className="space-y-4">
+                      {routes.map((route) => {
+                        const totalOrders = route.route_orders?.length || 0
+                        const deliveredOrders =
+                          route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0
+
+                        return (
+                          <div key={route.id} className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{route.route_code}</span>
+                                <Badge variant={statusColors[route.status as keyof typeof statusColors]}>
+                                  {statusLabels[route.status as keyof typeof statusLabels]}
+                                </Badge>
                               </div>
-                            )}
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{route.zones?.name || "Sin zona"}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Package className="h-4 w-4" />
+                                  <span>
+                                    {deliveredOrders}/{totalOrders} entregas
+                                  </span>
+                                </div>
+                                {route.scheduled_start_time && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-4 w-4" />
+                                    <span>Inicio: {route.scheduled_start_time.slice(0, 5)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {route.total_distance && (
+                                <p className="text-xs text-muted-foreground">
+                                  Distancia: {route.total_distance.toFixed(1)} km | Duración estimada:{" "}
+                                  {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}
+                                  min
+                                </p>
+                              )}
+                            </div>
+                            <Button asChild>
+                              <Link href={`/repartidor/routes/${route.id}`}>
+                                {route.status === "EN_CURSO" ? "Continuar" : "Ver Ruta"}
+                              </Link>
+                            </Button>
                           </div>
-                          {route.total_distance && (
-                            <p className="text-xs text-muted-foreground">
-                              Distancia: {route.total_distance.toFixed(1)} km | Duración estimada:{" "}
-                              {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}
-                              min
-                            </p>
-                          )}
-                        </div>
-                        <Button asChild>
-                          <Link href={`/repartidor/routes/${route.id}`}>
-                            {route.status === "EN_CURSO" ? "Continuar" : "Ver Ruta"}
-                          </Link>
-                        </Button>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-8">No tienes rutas asignadas para hoy</p>
-              )}
-            </CardContent>
-          </Card>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-8">No tienes rutas asignadas para hoy</p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Planned Routes Tab */}
+            <TabsContent value="planned" className="mt-6 space-y-6">
+              <RepartidorRoutesFilter selectedDate={selectedDate} />
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Rutas Planificadas</CardTitle>
+                  <CardDescription>
+                    Fecha seleccionada: {selectedDate === today ? "Hoy" : new Date(selectedDate + 'T00:00:00').toLocaleDateString("es-AR", { 
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {routesSelectedDate && routesSelectedDate.length > 0 ? (
+                    <div className="space-y-4">
+                      {routesSelectedDate.map((route) => {
+                        const totalOrders = route.route_orders?.length || 0
+                        const deliveredOrders =
+                          route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0
+
+                        return (
+                          <div key={route.id} className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{route.route_code}</span>
+                                <Badge variant={statusColors[route.status as keyof typeof statusColors]}>
+                                  {statusLabels[route.status as keyof typeof statusLabels]}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{route.zones?.name || "Sin zona"}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Package className="h-4 w-4" />
+                                  <span>
+                                    {deliveredOrders}/{totalOrders} entregas
+                                  </span>
+                                </div>
+                                {route.scheduled_start_time && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-4 w-4" />
+                                    <span>Inicio: {route.scheduled_start_time.slice(0, 5)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {route.total_distance && (
+                                <p className="text-xs text-muted-foreground">
+                                  Distancia: {route.total_distance.toFixed(1)} km | Duración estimada:{" "}
+                                  {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}
+                                  min
+                                </p>
+                              )}
+                            </div>
+                            <Button asChild>
+                              <Link href={`/repartidor/routes/${route.id}`}>Ver Ruta</Link>
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-8">
+                      No tienes rutas planificadas para esta fecha
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

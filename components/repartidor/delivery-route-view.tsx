@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar } from "lucide-react"
 import Link from "next/link"
 import {
   Dialog,
@@ -25,9 +25,10 @@ import {
 interface DeliveryRouteViewProps {
   route: any
   userId: string
+  today: string
 }
 
-export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
+export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -353,6 +354,62 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
     try {
       const supabase = createClient()
 
+      // Get current orders in route
+      const { data: currentRouteOrders, error: fetchError } = await supabase
+        .from("route_orders")
+        .select("order_id, orders(id, status, no_delivery_reason)")
+        .eq("route_id", route.id)
+
+      if (fetchError) throw fetchError
+
+      // Validate all orders are in final state (ENTREGADO or have no_delivery_reason)
+      const pendingOrders = currentRouteOrders?.filter((ro: any) => {
+        const order = ro.orders
+        return order.status !== "ENTREGADO" && !order.no_delivery_reason
+      })
+
+      if (pendingOrders && pendingOrders.length > 0) {
+        setError(
+          `No se puede finalizar la ruta. Hay ${pendingOrders.length} pedido(s) sin gestionar. Debes entregarlos o indicar por qué no se pudieron entregar.`
+        )
+        setIsLoading(false)
+        return
+      }
+
+      // Get orders that were not delivered (have no_delivery_reason)
+      const notDeliveredOrders = currentRouteOrders?.filter((ro: any) => {
+        const order = ro.orders
+        return order.no_delivery_reason && order.status !== "ENTREGADO"
+      })
+
+      // Return not delivered orders to PENDIENTE_ENTREGA
+      if (notDeliveredOrders && notDeliveredOrders.length > 0) {
+        const notDeliveredOrderIds = notDeliveredOrders.map((ro: any) => ro.orders.id)
+
+        const { error: updateOrdersError } = await supabase
+          .from("orders")
+          .update({
+            status: "PENDIENTE_ENTREGA",
+            delivered_by: null,
+            delivery_started_at: null,
+          })
+          .in("id", notDeliveredOrderIds)
+
+        if (updateOrdersError) throw updateOrdersError
+
+        // Create history entries for orders returning to PENDIENTE_ENTREGA
+        for (const orderId of notDeliveredOrderIds) {
+          await supabase.from("order_history").insert({
+            order_id: orderId,
+            previous_status: "EN_REPARTICION",
+            new_status: "PENDIENTE_ENTREGA",
+            changed_by: userId,
+            change_reason: "Pedido no entregado - devuelto para reasignación",
+          })
+        }
+      }
+
+      // Complete the route
       const { error: routeError } = await supabase
         .from("routes")
         .update({
@@ -384,7 +441,14 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
 
   const totalOrders = sortedOrders.length
   const deliveredOrders = sortedOrders.filter((order: any) => order.status === "ENTREGADO").length
-  const allDelivered = deliveredOrders === totalOrders
+  const notDeliveredOrders = sortedOrders.filter((order: any) => order.no_delivery_reason && order.status !== "ENTREGADO")
+  const pendingOrders = sortedOrders.filter((order: any) => order.status !== "ENTREGADO" && !order.no_delivery_reason)
+  
+  // All orders are managed if they are either delivered or have a no-delivery reason
+  const allOrdersManaged = pendingOrders.length === 0
+  
+  // Check if route is scheduled for today
+  const isScheduledForToday = route.scheduled_date === today
 
   return (
     <div className="space-y-6">
@@ -397,14 +461,18 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
         </Button>
 
         {route.status === "PLANIFICADO" && (
-          <Button onClick={handleStartRoute} disabled={isLoading} size="lg">
+          <Button onClick={handleStartRoute} disabled={isLoading || !isScheduledForToday} size="lg">
             <Play className="mr-2 h-4 w-4" />
             Iniciar Ruta
           </Button>
         )}
 
-        {route.status === "EN_CURSO" && allDelivered && (
-          <Button onClick={handleShowRouteSummary} disabled={isLoading} size="lg">
+        {route.status === "EN_CURSO" && (
+          <Button 
+            onClick={handleShowRouteSummary} 
+            disabled={isLoading || !allOrdersManaged} 
+            size="lg"
+          >
             <Flag className="mr-2 h-4 w-4" />
             Finalizar Ruta
           </Button>
@@ -413,6 +481,41 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+      )}
+
+      {/* Info message for future routes */}
+      {route.status === "PLANIFICADO" && !isScheduledForToday && (
+        <div className="bg-blue-50 dark:bg-blue-950 border-2 border-blue-400 dark:border-blue-600 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-blue-900 dark:text-blue-100">
+                Ruta Planificada para el Futuro
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                Esta ruta está programada para el{" "}
+                <strong>{new Date(route.scheduled_date).toLocaleDateString("es-AR", { dateStyle: "long" })}</strong>.
+                Solo podrás iniciarla cuando llegue ese día.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {route.status === "EN_CURSO" && !allOrdersManaged && (
+        <div className="bg-yellow-50 dark:bg-yellow-950 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Package className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-yellow-900 dark:text-yellow-100">
+                Pedidos pendientes de gestionar: {pendingOrders.length}
+              </p>
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
+                Para finalizar la ruta, debes entregar todos los pedidos o indicar el motivo por el cual no pudieron ser entregados.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       <Card>
@@ -789,9 +892,18 @@ export function DeliveryRouteView({ route, userId }: DeliveryRouteViewProps) {
               {/* Not Delivered Orders */}
               {routeSummary.notDeliveredCount > 0 && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold text-sm text-muted-foreground">
-                    Pedidos No Entregados ({routeSummary.notDeliveredCount})
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm text-muted-foreground">
+                      Pedidos No Entregados ({routeSummary.notDeliveredCount})
+                    </h3>
+                  </div>
+                  
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                    <p className="text-xs text-blue-900 dark:text-blue-100">
+                      ℹ️ Estos pedidos volverán a estado <strong>PENDIENTE_ENTREGA</strong> para ser reasignados a otra ruta.
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     {routeSummary.notDeliveredOrders.map((order: any, idx: number) => (
                       <div key={idx} className="p-3 bg-muted rounded-lg border">

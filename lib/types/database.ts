@@ -128,6 +128,7 @@ export interface Order {
   received_by_name?: string // 🆕 Name of person who received the order
   no_delivery_reason?: string // 🆕 MEDIUM-2: Reason for non-delivery
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
+  payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   updated_at: string
 }
 

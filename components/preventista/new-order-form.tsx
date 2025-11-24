@@ -58,6 +58,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
+  const [paymentMethod, setPaymentMethod] = useState<string>("Efectivo") // 🆕 Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
   // Add product form state
@@ -128,6 +129,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       requiresInvoice,
       observations,
       generalDiscount,
+      paymentMethod, // 🆕 Pass payment method
       orderItems,
       userId,
       isDraft,
@@ -270,6 +272,34 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             <Label htmlFor="requiresInvoice" className="font-normal hover:cursor-pointer ">
               Requiere Factura
             </Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentMethod">Método de Pago</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Efectivo">Efectivo</SelectItem>
+                <SelectItem value="Transferencia">Transferencia</SelectItem>
+                <SelectItem value="Tarjeta de Débito">Tarjeta de Débito</SelectItem>
+                <SelectItem value="Tarjeta de Crédito">Tarjeta de Crédito</SelectItem>
+                <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                <SelectItem value="Cheque">Cheque</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="observations">Observaciones</Label>
+            <Textarea
+              id="observations"
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              placeholder="Notas adicionales sobre el pedido..."
+              rows={3}
+            />
           </div>
         </CardContent>
       </Card>

@@ -19,7 +19,6 @@ interface PageProps {
 }
 
 
-
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const params = await searchParams
   const supabase = await createClient()
@@ -48,11 +47,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     .select("*", { count: "exact", head: true })
     .eq("status", "PENDIENTE_ENTREGA")
 
+  // Count all orders for tomorrow (including those already assigned to routes)
   const { count: tomorrowOrders } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
-    .eq("status", "PENDIENTE_ENTREGA")
     .eq("delivery_date", tomorrow)
+    .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION"])
 
   const { count: todayRoutes } = await supabase
     .from("routes")
