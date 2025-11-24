@@ -19,6 +19,7 @@ interface PageProps {
 }
 
 
+
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const params = await searchParams
   const supabase = await createClient()
