@@ -58,14 +58,14 @@ export default async function PreventistaDashboardPage() {
     <div className="flex min-h-screen flex-col">
 
 
-      <main className="flex-1 bg-muted/40 p-6">
-        <div className="container mx-auto space-y-6">
+      <main className="flex-1 bg-muted/40 p-3 sm:p-4 md:p-6">
+        <div className="container mx-auto space-y-4 md:space-y-6">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Panel de Control</h2>
-            <p className="text-muted-foreground">Bienvenido, {profile.full_name}</p>
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Panel de Control</h2>
+            <p className="text-sm md:text-base text-muted-foreground">Bienvenido, {profile.full_name}</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Esta Semana</CardTitle>
@@ -111,15 +111,18 @@ export default async function PreventistaDashboardPage() {
             </Card>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Acciones Rápidas</CardTitle>
-                <CardDescription>Gestiona pedidos y clientes</CardDescription>
+                <CardTitle className="text-base md:text-lg">Acciones Rápidas</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Gestiona pedidos y clientes</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button asChild className="w-full" size="lg">
-                  <Link href="/preventista/orders/new">Crear Nuevo Pedido</Link>
+                  <Link href="/preventista/orders/new">
+                    <Package className="mr-2 h-4 w-4" />
+                    Crear Nuevo Pedido
+                  </Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/preventista/customers/new">Registrar Nuevo Cliente</Link>
@@ -135,16 +138,19 @@ export default async function PreventistaDashboardPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Borradores Recientes</CardTitle>
-                <CardDescription>Pedidos sin confirmar</CardDescription>
+                <CardTitle className="text-base md:text-lg">Borradores Recientes</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Pedidos sin confirmar</CardDescription>
               </CardHeader>
               <CardContent>
                 {draftOrders && draftOrders > 0 ? (
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/preventista/orders/drafts">Ver Borradores ({draftOrders})</Link>
+                  <Button asChild variant="outline" className="w-full bg-transparent" size="lg">
+                    <Link href="/preventista/orders/drafts">
+                      <FileText className="mr-2 h-4 w-4" />
+                      Ver Borradores ({draftOrders})
+                    </Link>
                   </Button>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No hay borradores pendientes</p>
+                  <p className="text-xs md:text-sm text-muted-foreground text-center py-4">No hay borradores pendientes</p>
                 )}
               </CardContent>
             </Card>
