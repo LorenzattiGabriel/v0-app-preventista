@@ -178,24 +178,26 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
       <header className="border-b bg-background">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <Truck className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Sistema de Gestión - Repartidor</h1>
+            <Truck className="h-5 w-5 md:h-6 md:w-6" />
+            <h1 className="text-lg md:text-xl font-semibold truncate">
+              <span className="hidden sm:inline">Sistema de Gestión - </span>Repartidor
+            </h1>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">{profile.full_name}</span>
+          <div className="flex items-center gap-2 md:gap-4">
+            <span className="text-xs md:text-sm text-muted-foreground hidden sm:inline truncate max-w-[120px] md:max-w-none">{profile.full_name}</span>
             <LogoutButton />
           </div>
         </div>
       </header>
 
-      <main className="flex-1 bg-muted/40 p-6">
-        <div className="container mx-auto space-y-6">
+      <main className="flex-1 bg-muted/40 p-3 sm:p-4 md:p-6">
+        <div className="container mx-auto space-y-4 md:space-y-6">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Panel de Entregas</h2>
-            <p className="text-muted-foreground">Gestiona tus rutas y entregas del día</p>
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Panel de Entregas</h2>
+            <p className="text-sm md:text-base text-muted-foreground">Gestiona tus rutas y entregas del día</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Rutas de Hoy</CardTitle>

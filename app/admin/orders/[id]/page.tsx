@@ -309,12 +309,12 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               {/* Products */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Productos</CardTitle>
-                  <CardDescription>Detalle de los productos del pedido</CardDescription>
+                  <CardTitle className="text-base md:text-lg">Productos</CardTitle>
+                  <CardDescription className="text-xs md:text-sm">Detalle de los productos del pedido</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="border rounded-md overflow-x-auto">
-                    <table className="w-full">
+                  <div className="border rounded-md overflow-x-auto -mx-4 md:mx-0">
+                    <table className="w-full min-w-[600px]">
                       <thead className="bg-muted">
                         <tr>
                           <th className="text-left p-3 text-sm font-medium">Producto</th>

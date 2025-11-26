@@ -377,15 +377,15 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           </div>
 
           {orderItems.length > 0 && (
-            <div className="border rounded-md">
-              <table className="w-full">
+            <div className="border rounded-md overflow-x-auto -mx-4 md:mx-0">
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-muted">
                   <tr>
-                    <th className="text-left p-2 text-sm font-medium">Producto</th>
-                    <th className="text-right p-2 text-sm font-medium">Cantidad</th>
-                    <th className="text-right p-2 text-sm font-medium">Precio Unit.</th>
-                    <th className="text-right p-2 text-sm font-medium">Descuento</th>
-                    <th className="text-right p-2 text-sm font-medium">Subtotal</th>
+                    <th className="text-left p-2 text-xs md:text-sm font-medium">Producto</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Cant.</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Precio</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Desc.</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Subtotal</th>
                     <th className="w-12"></th>
                   </tr>
                 </thead>
