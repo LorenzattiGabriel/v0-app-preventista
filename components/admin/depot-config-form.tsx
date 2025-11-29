@@ -14,6 +14,7 @@ interface DepotConfigFormProps {
   userId: string
 }
 
+
 export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
