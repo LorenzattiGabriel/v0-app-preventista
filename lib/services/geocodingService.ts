@@ -10,7 +10,7 @@ export interface GeocodingResult {
 export class GeocodingService {
   /**
    * Geocode an address to coordinates
-   * Uses browser Geocoding API if available, falls back to Nominatim
+   * Uses Google Maps Geocoding API (requires API key)
    */
   static async geocodeAddress(address: {
     street: string
@@ -22,17 +22,68 @@ export class GeocodingService {
     const fullAddress = `${address.street} ${address.streetNumber}, ${address.locality}, ${address.province}, ${address.country || 'Argentina'}`
     
     try {
-      // Try Nominatim (OpenStreetMap) - free and no API key required
+      // Try Google Maps first (best coverage for Argentina)
+      const googleResult = await this.geocodeWithGoogleMaps(fullAddress)
+      if (googleResult) {
+        return googleResult
+      }
+
+      // Fallback to Nominatim if Google Maps fails or no API key
       const nominatimResult = await this.geocodeWithNominatim(fullAddress)
       if (nominatimResult) {
         return nominatimResult
       }
 
-      // If Nominatim fails, could add other services here
       console.error('Geocoding failed for address:', fullAddress)
       return null
     } catch (error) {
       console.error('Geocoding error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Geocode using Google Maps Geocoding API
+   * Requires NEXT_PUBLIC_GOOGLE_MAPS_API_KEY environment variable
+   */
+  private static async geocodeWithGoogleMaps(address: string): Promise<GeocodingResult | null> {
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+      
+      if (!apiKey) {
+        console.warn('Google Maps API key not configured, falling back to Nominatim')
+        return null
+      }
+
+      const encodedAddress = encodeURIComponent(address)
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${apiKey}`
+      
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        throw new Error(`Google Maps API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'OK' && data.results && data.results.length > 0) {
+        const result = data.results[0]
+        return {
+          latitude: result.geometry.location.lat,
+          longitude: result.geometry.location.lng,
+          formattedAddress: result.formatted_address,
+        }
+      }
+
+      if (data.status === 'ZERO_RESULTS') {
+        console.warn('Google Maps: No se encontraron resultados para la dirección')
+        return null
+      }
+
+      console.error('Google Maps geocoding error:', data.status, data.error_message)
+      return null
+    } catch (error) {
+      console.error('Google Maps geocoding error:', error)
       return null
     }
   }

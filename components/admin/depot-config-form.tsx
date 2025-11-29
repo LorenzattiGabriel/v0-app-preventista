@@ -68,12 +68,12 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
           longitude: result.longitude,
           formattedAddress: result.formattedAddress,
         })
-        setSuccess("✅ Coordenadas encontradas exitosamente")
+        setSuccess("✅ Coordenadas encontradas exitosamente con Google Maps")
       } else {
-        setError("No se pudieron encontrar las coordenadas. Verifica la dirección.")
+        setError("No se pudieron encontrar las coordenadas. Verifica la dirección o configura NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.")
       }
     } catch (err) {
-      setError("Error al geocodificar la dirección. Intenta nuevamente.")
+      setError("Error al geocodificar la dirección. Verifica que NEXT_PUBLIC_GOOGLE_MAPS_API_KEY esté configurada.")
       console.error("Geocoding error:", err)
     } finally {
       setIsGeocoding(false)
