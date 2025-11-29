@@ -193,12 +193,12 @@ class ReportsService {
     stats: DeliveryReportData
     driverPerformance: DriverPerformance[]
   }> {
-    // Get routes in the date range
+    // Get routes in the date range (using scheduled_date for actual delivery dates)
     const { data: routes, error: routesError } = await this.supabase
       .from("routes")
       .select("*, assigned_driver:profiles!driver_id(id, full_name)")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
+      .gte("scheduled_date", startDate.toISOString().split('T')[0])
+      .lte("scheduled_date", endDate.toISOString().split('T')[0])
 
     if (routesError) {
       console.error("Error fetching routes:", routesError)
@@ -350,30 +350,31 @@ class ReportsService {
   }
 
   async getPerformanceReport(startDate: Date, endDate: Date): Promise<PerformanceReportData> {
-    // Calculate last 6 months of data
+    // Calculate last 6 months of data ending at endDate
     const monthlyDataMap = new Map<string, { orders: number; revenue: number }>()
 
-    // Get 6 months of data
+    // Get 6 months of data ending at endDate
     for (let i = 5; i >= 0; i--) {
-      const monthStart = new Date(startDate)
-      monthStart.setMonth(monthStart.getMonth() - i)
-      monthStart.setDate(1)
-      monthStart.setHours(0, 0, 0, 0)
-
-      const monthEnd = new Date(monthStart)
-      monthEnd.setMonth(monthEnd.getMonth() + 1)
-      monthEnd.setDate(0)
-      monthEnd.setHours(23, 59, 59, 999)
+      const monthEnd = new Date(endDate)
+      monthEnd.setMonth(monthEnd.getMonth() - i)
+      monthEnd.setDate(1)
+      monthEnd.setHours(0, 0, 0, 0)
+      
+      const monthStart = new Date(monthEnd)
+      const actualMonthEnd = new Date(monthEnd)
+      actualMonthEnd.setMonth(actualMonthEnd.getMonth() + 1)
+      actualMonthEnd.setDate(0)
+      actualMonthEnd.setHours(23, 59, 59, 999)
 
       const { data: orders } = await this.supabase
         .from("orders")
-        .select("total")
+        .select("total, status")
         .gte("created_at", monthStart.toISOString())
-        .lte("created_at", monthEnd.toISOString())
+        .lte("created_at", actualMonthEnd.toISOString())
 
       // Format month name in Spanish
       const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-      const monthKey = monthNames[monthStart.getMonth()]
+      const monthKey = `${monthNames[monthStart.getMonth()]} ${monthStart.getFullYear().toString().slice(-2)}`
       
       monthlyDataMap.set(monthKey, {
         orders: orders?.length || 0,
@@ -482,7 +483,7 @@ class ReportsService {
     // Get orders with customer data for zones
     const { data: orders, error } = await this.supabase
       .from("orders")
-      .select("*, customers(zone)")
+      .select("*, customers(zone_id, zones:zone_id(name))")
       .gte("created_at", startDate.toISOString())
       .lte("created_at", endDate.toISOString())
 
@@ -517,9 +518,9 @@ class ReportsService {
     // Revenue by zone
     const revenueByZoneMap = new Map<string, number>()
     orders?.forEach((order) => {
-      const zone = (order.customers as any)?.zone || "Sin zona"
-      const current = revenueByZoneMap.get(zone) || 0
-      revenueByZoneMap.set(zone, current + (order.total || 0))
+      const zoneName = (order.customers as any)?.zones?.name || "Sin zona"
+      const current = revenueByZoneMap.get(zoneName) || 0
+      revenueByZoneMap.set(zoneName, current + (order.total || 0))
     })
 
     const revenueByZone: RevenueByZone[] = Array.from(revenueByZoneMap.entries())
