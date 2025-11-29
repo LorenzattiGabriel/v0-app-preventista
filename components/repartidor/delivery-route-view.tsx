@@ -21,14 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { GeocodingService } from "@/lib/services/geocodingService"
 
 interface DeliveryRouteViewProps {
   route: any
   userId: string
   today: string
+  depot: any | null
 }
 
-export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewProps) {
+export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,12 +54,81 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
 
+  // Helper function to build Google Maps URL with depot as start and end point
+  const buildGoogleMapsUrl = () => {
+    // Try to use optimized route URL from microservice first
+    if (route.optimized_route?.googleMapsUrl) {
+      return route.optimized_route.googleMapsUrl
+    }
+
+    // Fallback: Build URL manually
+    const waypoints: string[] = []
+    
+    // Start point: depot or default coordinates
+    const startPoint = depot 
+      ? `${depot.latitude},${depot.longitude}`
+      : route.start_latitude && route.start_longitude
+      ? `${route.start_latitude},${route.start_longitude}`
+      : '-31.4201,-64.1888' // Default Córdoba center
+
+    // Customer waypoints in delivery order
+    const customerCoords = route.route_orders
+      .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
+      .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
+      .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
+
+    waypoints.push(...customerCoords)
+
+    // End point: return to depot
+    const endPoint = startPoint // Same as start
+
+    if (waypoints.length === 0) {
+      return null
+    }
+
+    // Build Google Maps directions URL: start -> waypoints -> end
+    return `https://www.google.com/maps/dir/${startPoint}/${waypoints.join('/')}/${endPoint}/`
+  }
+
   const handleStartRoute = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
       const supabase = createClient()
+
+      // Validate location if depot is configured
+      if (depot) {
+        const currentLocation = await GeocodingService.getCurrentLocation()
+        
+        if (!currentLocation) {
+          setError('No se pudo obtener tu ubicación. Por favor, habilita el GPS y vuelve a intentar.')
+          setIsLoading(false)
+          return
+        }
+
+        const isWithinRadius = GeocodingService.isWithinRadius(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          depot.latitude,
+          depot.longitude,
+          depot.radius_meters
+        )
+
+        if (!isWithinRadius) {
+          const distance = GeocodingService.calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            depot.latitude,
+            depot.longitude
+          )
+          setError(
+            `Debes estar en la distribuidora para iniciar la ruta. Te encuentras a ${Math.round(distance)} metros del punto base (máximo permitido: ${depot.radius_meters}m).`
+          )
+          setIsLoading(false)
+          return
+        }
+      }
 
       // Update route status
       const { error: routeError } = await supabase
@@ -95,36 +166,9 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
         })
       }
 
-      // 🆕 Usar URL de Google Maps optimizada del microservicio
-      let googleMapsUrl = null
+      // Open Google Maps with route (depot -> customers -> depot)
+      const googleMapsUrl = buildGoogleMapsUrl()
       
-      // Intentar obtener la URL del optimized_route (generada por microservicio)
-      if (route.optimized_route?.googleMapsUrl) {
-        googleMapsUrl = route.optimized_route.googleMapsUrl
-        console.log('✅ Usando ruta optimizada del microservicio')
-      } else {
-        // Fallback: Construir URL manualmente con coordenadas de los clientes
-        const coordinates = route.route_orders
-          .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
-          .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
-          .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
-
-        if (coordinates.length > 0) {
-          // Punto de partida (primer pedido o depósito default)
-          const startPoint = coordinates.length > 0 ? coordinates[0] : '-31.4201,-64.1888'
-          
-          // Construir URL con todos los puntos
-          if (coordinates.length > 1) {
-            googleMapsUrl = `https://www.google.com/maps/dir/${coordinates.join('/')}/`
-          } else {
-            googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${startPoint}/`
-          }
-          console.log('⚠️ Usando ruta manual (sin optimización)')
-        } else {
-          console.warn('⚠️ No se encontraron coordenadas para la ruta')
-        }
-      }
-
       if (googleMapsUrl) {
         window.open(googleMapsUrl, '_blank')
       } else {
@@ -354,6 +398,39 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
     try {
       const supabase = createClient()
 
+      // Validate location if depot is configured
+      if (depot) {
+        const currentLocation = await GeocodingService.getCurrentLocation()
+        
+        if (!currentLocation) {
+          setError('No se pudo obtener tu ubicación. Por favor, habilita el GPS y vuelve a intentar.')
+          setIsLoading(false)
+          return
+        }
+
+        const isWithinRadius = GeocodingService.isWithinRadius(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          depot.latitude,
+          depot.longitude,
+          depot.radius_meters
+        )
+
+        if (!isWithinRadius) {
+          const distance = GeocodingService.calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            depot.latitude,
+            depot.longitude
+          )
+          setError(
+            `Debes regresar a la distribuidora para finalizar la ruta. Te encuentras a ${Math.round(distance)} metros del punto base (máximo permitido: ${depot.radius_meters}m).`
+          )
+          setIsLoading(false)
+          return
+        }
+      }
+
       // Get current orders in route
       const { data: currentRouteOrders, error: fetchError } = await supabase
         .from("route_orders")
@@ -473,28 +550,7 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
               <Button 
                 variant="outline"
                 onClick={() => {
-                  // Abrir Google Maps con la ruta completa
-                  let googleMapsUrl = null
-                  
-                  // Intentar obtener la URL del optimized_route (generada por microservicio)
-                  if (route.optimized_route?.googleMapsUrl) {
-                    googleMapsUrl = route.optimized_route.googleMapsUrl
-                  } else {
-                    // Fallback: Construir URL manualmente con coordenadas de los clientes
-                    const coordinates = route.route_orders
-                      .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
-                      .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
-                      .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
-
-                    if (coordinates.length > 0) {
-                      if (coordinates.length > 1) {
-                        googleMapsUrl = `https://www.google.com/maps/dir/${coordinates.join('/')}/`
-                      } else {
-                        googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${coordinates[0]}/`
-                      }
-                    }
-                  }
-
+                  const googleMapsUrl = buildGoogleMapsUrl()
                   if (googleMapsUrl) {
                     window.open(googleMapsUrl, '_blank')
                   } else {

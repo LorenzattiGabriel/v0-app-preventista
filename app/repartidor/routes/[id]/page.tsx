@@ -53,6 +53,13 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
     redirect("/repartidor/dashboard")
   }
 
+  // Get active depot configuration
+  const { data: depot } = await supabase
+    .from("depot_configuration")
+    .select("*")
+    .eq("is_active", true)
+    .single()
+
   // Get today's date to validate if route can be started
   const today = new Date().toISOString().split("T")[0]
 
@@ -66,7 +73,7 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
 
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto max-w-5xl">
-          <DeliveryRouteView route={route} userId={user.id} today={today} />
+          <DeliveryRouteView route={route} userId={user.id} today={today} depot={depot} />
         </div>
       </main>
     </div>
