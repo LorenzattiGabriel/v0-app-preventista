@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.depot_configuration (
   longitude DECIMAL(11, 8) NOT NULL,
   
   -- Tolerance radius in meters for check-in/check-out validation
-  radius_meters INTEGER DEFAULT 100,
+  radius_meters INTEGER DEFAULT 200,
   
   -- Metadata
   is_active BOOLEAN DEFAULT true,
@@ -66,7 +66,7 @@ INSERT INTO public.depot_configuration (
   'X5000',
   -31.4201,
   -64.1888,
-  100,
+  200,
   true
 ) ON CONFLICT DO NOTHING;
 

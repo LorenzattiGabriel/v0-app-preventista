@@ -29,7 +29,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
     locality: depot?.locality || "",
     province: depot?.province || "",
     postalCode: depot?.postal_code || "",
-    radiusMeters: depot?.radius_meters || 100,
+    radiusMeters: depot?.radius_meters || 200,
   })
 
   const [coordinates, setCoordinates] = useState<{
