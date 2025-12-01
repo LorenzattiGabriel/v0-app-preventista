@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
 import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
@@ -17,7 +17,6 @@ interface SearchParams {
 interface PageProps {
   searchParams: Promise<SearchParams>
 }
-
 
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const params = await searchParams
@@ -235,6 +234,27 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/customers">Ver Clientes</Link>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/50">
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Configuración
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">Ajustes del sistema</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="default" className="w-full">
+                  <Link href="/admin/settings/depot">
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Punto Base / Distribuidora
+                  </Link>
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Configura el punto de inicio y fin para todas las rutas
+                </p>
               </CardContent>
             </Card>
           </div>

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock } from "lucide-react"
 import Link from "next/link"
 import {
   Dialog,
@@ -21,14 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { GeocodingService } from "@/lib/services/geocodingService"
 
 interface DeliveryRouteViewProps {
   route: any
   userId: string
   today: string
+  depot: any | null
 }
 
-export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewProps) {
+export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,12 +54,81 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
 
+  // Helper function to build Google Maps URL with depot as start and end point
+  const buildGoogleMapsUrl = () => {
+    // Try to use optimized route URL from microservice first
+    if (route.optimized_route?.googleMapsUrl) {
+      return route.optimized_route.googleMapsUrl
+    }
+
+    // Fallback: Build URL manually
+    const waypoints: string[] = []
+    
+    // Start point: depot or default coordinates
+    const startPoint = depot 
+      ? `${depot.latitude},${depot.longitude}`
+      : route.start_latitude && route.start_longitude
+      ? `${route.start_latitude},${route.start_longitude}`
+      : '-31.4201,-64.1888' // Default Córdoba center
+
+    // Customer waypoints in delivery order
+    const customerCoords = route.route_orders
+      .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
+      .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
+      .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
+
+    waypoints.push(...customerCoords)
+
+    // End point: return to depot
+    const endPoint = startPoint // Same as start
+
+    if (waypoints.length === 0) {
+      return null
+    }
+
+    // Build Google Maps directions URL: start -> waypoints -> end
+    return `https://www.google.com/maps/dir/${startPoint}/${waypoints.join('/')}/${endPoint}/`
+  }
+
   const handleStartRoute = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
       const supabase = createClient()
+
+      // Validate location if depot is configured
+      if (depot) {
+        const currentLocation = await GeocodingService.getCurrentLocation()
+        
+        if (!currentLocation) {
+          setError('No se pudo obtener tu ubicación. Por favor, habilita el GPS y vuelve a intentar.')
+          setIsLoading(false)
+          return
+        }
+
+        const isWithinRadius = GeocodingService.isWithinRadius(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          depot.latitude,
+          depot.longitude,
+          depot.radius_meters
+        )
+
+        if (!isWithinRadius) {
+          const distance = GeocodingService.calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            depot.latitude,
+            depot.longitude
+          )
+          setError(
+            `Debes estar en la distribuidora para iniciar la ruta. Te encuentras a ${Math.round(distance)} metros del punto base (máximo permitido: ${depot.radius_meters}m).`
+          )
+          setIsLoading(false)
+          return
+        }
+      }
 
       // Update route status
       const { error: routeError } = await supabase
@@ -95,36 +166,9 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
         })
       }
 
-      // 🆕 Usar URL de Google Maps optimizada del microservicio
-      let googleMapsUrl = null
+      // Open Google Maps with route (depot -> customers -> depot)
+      const googleMapsUrl = buildGoogleMapsUrl()
       
-      // Intentar obtener la URL del optimized_route (generada por microservicio)
-      if (route.optimized_route?.googleMapsUrl) {
-        googleMapsUrl = route.optimized_route.googleMapsUrl
-        console.log('✅ Usando ruta optimizada del microservicio')
-      } else {
-        // Fallback: Construir URL manualmente con coordenadas de los clientes
-        const coordinates = route.route_orders
-          .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
-          .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
-          .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
-
-        if (coordinates.length > 0) {
-          // Punto de partida (primer pedido o depósito default)
-          const startPoint = coordinates.length > 0 ? coordinates[0] : '-31.4201,-64.1888'
-          
-          // Construir URL con todos los puntos
-          if (coordinates.length > 1) {
-            googleMapsUrl = `https://www.google.com/maps/dir/${coordinates.join('/')}/`
-          } else {
-            googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${startPoint}/`
-          }
-          console.log('⚠️ Usando ruta manual (sin optimización)')
-        } else {
-          console.warn('⚠️ No se encontraron coordenadas para la ruta')
-        }
-      }
-
       if (googleMapsUrl) {
         window.open(googleMapsUrl, '_blank')
       } else {
@@ -354,6 +398,39 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
     try {
       const supabase = createClient()
 
+      // Validate location if depot is configured
+      if (depot) {
+        const currentLocation = await GeocodingService.getCurrentLocation()
+        
+        if (!currentLocation) {
+          setError('No se pudo obtener tu ubicación. Por favor, habilita el GPS y vuelve a intentar.')
+          setIsLoading(false)
+          return
+        }
+
+        const isWithinRadius = GeocodingService.isWithinRadius(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          depot.latitude,
+          depot.longitude,
+          depot.radius_meters
+        )
+
+        if (!isWithinRadius) {
+          const distance = GeocodingService.calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            depot.latitude,
+            depot.longitude
+          )
+          setError(
+            `Debes regresar a la distribuidora para finalizar la ruta. Te encuentras a ${Math.round(distance)} metros del punto base (máximo permitido: ${depot.radius_meters}m).`
+          )
+          setIsLoading(false)
+          return
+        }
+      }
+
       // Get current orders in route
       const { data: currentRouteOrders, error: fetchError } = await supabase
         .from("route_orders")
@@ -460,27 +537,79 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
           </Link>
         </Button>
 
-        {route.status === "PLANIFICADO" && (
-          <Button onClick={handleStartRoute} disabled={isLoading || !isScheduledForToday} size="lg">
-            <Play className="mr-2 h-4 w-4" />
-            Iniciar Ruta
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {route.status === "PLANIFICADO" && (
+            <Button onClick={handleStartRoute} disabled={isLoading || !isScheduledForToday} size="lg">
+              <Play className="mr-2 h-4 w-4" />
+              Iniciar Ruta
+            </Button>
+          )}
 
-        {route.status === "EN_CURSO" && (
-          <Button 
-            onClick={handleShowRouteSummary} 
-            disabled={isLoading || !allOrdersManaged} 
-            size="lg"
-          >
-            <Flag className="mr-2 h-4 w-4" />
-            Finalizar Ruta
-          </Button>
-        )}
+          {route.status === "EN_CURSO" && (
+            <>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  const googleMapsUrl = buildGoogleMapsUrl()
+                  if (googleMapsUrl) {
+                    window.open(googleMapsUrl, '_blank')
+                  } else {
+                    setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
+                  }
+                }}
+                size="lg"
+              >
+                <MapPin className="mr-2 h-4 w-4" />
+                Abrir en Google Maps
+              </Button>
+              <Button 
+                onClick={handleShowRouteSummary} 
+                disabled={isLoading || !allOrdersManaged} 
+                size="lg"
+              >
+                <Flag className="mr-2 h-4 w-4" />
+                Finalizar Ruta
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+      )}
+
+      {/* Info banner for active route */}
+      {route.status === "EN_CURSO" && (
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary rounded-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground shrink-0">
+              <Truck className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-lg mb-1">Ruta en Curso</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                Gestiona tus entregas y marca cada pedido como entregado. Usa el botón "Abrir en Google Maps" para navegar entre direcciones.
+              </p>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span><strong>{deliveredOrders}</strong> entregados</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-600" />
+                  <span><strong>{pendingOrders.length}</strong> pendientes</span>
+                </div>
+                {notDeliveredOrders.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-red-600" />
+                    <span><strong>{notDeliveredOrders.length}</strong> no entregados</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Info message for future routes */}
@@ -518,7 +647,7 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
         </div>
       )}
 
-      <Card>
+      <Card className={route.status === "EN_CURSO" ? "border-2 border-primary" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -527,9 +656,9 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
                 {route.zones?.name} | {new Date(route.scheduled_date).toLocaleDateString("es-AR")}
               </CardDescription>
             </div>
-            <Badge variant={route.status === "COMPLETADO" ? "default" : "secondary"}>
+            <Badge variant={route.status === "COMPLETADO" ? "default" : route.status === "EN_CURSO" ? "default" : "secondary"}>
               {route.status === "PLANIFICADO" && "Planificado"}
-              {route.status === "EN_CURSO" && "En Curso"}
+              {route.status === "EN_CURSO" && "🚚 En Curso"}
               {route.status === "COMPLETADO" && "Completado"}
             </Badge>
           </div>
@@ -538,9 +667,10 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <span className="font-medium">Progreso:</span>
-              <p className="text-muted-foreground">
-                {deliveredOrders} / {totalOrders} entregas
+              <p className="text-2xl font-bold text-primary">
+                {deliveredOrders} / {totalOrders}
               </p>
+              <p className="text-xs text-muted-foreground">entregas realizadas</p>
             </div>
             {route.total_distance && (
               <div>
@@ -559,13 +689,30 @@ export function DeliveryRouteView({ route, userId, today }: DeliveryRouteViewPro
           </div>
 
           {route.status === "EN_CURSO" && (
-            <div className="mt-4">
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{ width: `${(deliveredOrders / totalOrders) * 100}%` }}
-                />
+            <div className="mt-6 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium">Progreso de entregas</span>
+                <span className="text-muted-foreground">
+                  {Math.round((deliveredOrders / totalOrders) * 100)}%
+                </span>
               </div>
+              <div className="w-full bg-muted rounded-full h-3">
+                <div
+                  className="bg-primary h-3 rounded-full transition-all flex items-center justify-end pr-2"
+                  style={{ width: `${(deliveredOrders / totalOrders) * 100}%` }}
+                >
+                  {deliveredOrders > 0 && (
+                    <span className="text-xs font-bold text-primary-foreground">
+                      {deliveredOrders}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {pendingOrders.length > 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  ⏳ Quedan <strong className="text-foreground">{pendingOrders.length}</strong> pedido{pendingOrders.length !== 1 ? 's' : ''} por gestionar
+                </p>
+              )}
             </div>
           )}
         </CardContent>
