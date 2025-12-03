@@ -91,6 +91,12 @@ export interface Product {
   is_active: boolean
   created_at: string
   updated_at: string
+  barcode?: string
+  iva_aliquot: number
+  category_margin: number
+  product_margin: number
+  location?: string
+  supplier?: string
 }
 
 export interface Order {
@@ -118,6 +124,11 @@ export interface Order {
   observations?: string
   assembly_notes?: string
   delivery_notes?: string
+  delivery_photo_url?: string // 🆕 Photo evidence of delivery
+  received_by_name?: string // 🆕 Name of person who received the order
+  no_delivery_reason?: string // 🆕 MEDIUM-2: Reason for non-delivery
+  no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
+  payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   updated_at: string
 }
 

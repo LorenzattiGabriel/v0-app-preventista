@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Truck, Package, CheckCircle, Clock } from "lucide-react"
 import { OrderRatingForm } from "@/components/cliente/order-rating-form"
+import { WhatsAppSupportButton } from "@/components/cliente/whatsapp-support-button"
+import { Separator } from "@/components/ui/separator"
 
 export default async function ClienteOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -110,6 +112,7 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                 Volver
               </Link>
             </Button>
+            <WhatsAppSupportButton orderNumber={order.order_number} />
           </div>
 
           <Card>
@@ -160,6 +163,47 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                 )}
               </div>
 
+              {/* 🆕 Show delivery evidence (photo + name) after delivery */}
+              {order.status === "ENTREGADO" && order.delivery_photo_url && order.received_by_name && (
+                <div className="bg-green-50 dark:bg-green-950 border-2 border-green-400 dark:border-green-600 rounded-lg p-6 shadow-sm">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      <div>
+                        <p className="font-bold text-green-900 dark:text-green-100 text-lg">
+                          📸 Evidencia de Entrega
+                        </p>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Tu pedido fue entregado exitosamente
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-green-300 dark:border-green-700">
+                      <div className="space-y-4">
+                        {/* Delivery Photo */}
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-2">Foto de entrega:</p>
+                          <img
+                            src={order.delivery_photo_url}
+                            alt="Evidencia de entrega"
+                            className="w-full max-w-md mx-auto rounded-lg border-2 border-gray-300 dark:border-gray-600"
+                          />
+                        </div>
+                        
+                        {/* Received By Name */}
+                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-300 dark:border-gray-700">
+                          <p className="text-sm font-medium text-muted-foreground">Recibido por:</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+                            {order.received_by_name}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {order.status === "EN_REPARTICION" && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
                   <Truck className="h-5 w-5 text-blue-600" />
@@ -171,11 +215,22 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
               )}
 
               {order.has_shortages && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="font-medium text-yellow-900">Este pedido tiene productos faltantes</p>
-                  <p className="text-sm text-yellow-700">
-                    Algunos productos no estaban disponibles al momento del armado
-                  </p>
+                <div className="bg-yellow-50 dark:bg-yellow-950 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="font-bold text-yellow-900 dark:text-yellow-100 text-lg">
+                        ⚠️ Este pedido tiene productos faltantes
+                      </p>
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        Algunos productos no estaban disponibles al momento del armado. Los productos faltantes están marcados
+                        en la tabla de abajo y <strong>NO serán incluidos en tu entrega</strong>.
+                      </p>
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
+                        💰 El total del pedido se ajustará automáticamente y solo pagarás por los productos que recibas.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -206,27 +261,45 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                   </thead>
                   <tbody>
                     {order.order_items.map((item: any) => (
-                      <tr key={item.id} className="border-t">
+                      <tr key={item.id} className={`border-t ${item.is_shortage ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
                         <td className="p-3">
                           <div>
-                            <p className="font-medium">
+                            <p className={`font-medium ${item.is_shortage ? 'text-red-900 dark:text-red-100' : ''}`}>
                               {item.products.name} {item.products.brand && `- ${item.products.brand}`}
                             </p>
                             {item.is_shortage && (
-                              <Badge variant="outline" className="mt-1 bg-yellow-50 text-yellow-700 border-yellow-200">
-                                Faltante: {item.quantity_requested - (item.quantity_assembled || 0)} unidades
-                              </Badge>
+                              <div className="mt-2 space-y-1">
+                                <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300 dark:bg-red-900 dark:text-red-200">
+                                  ❌ PRODUCTO NO DISPONIBLE
+                                </Badge>
+                                <p className="text-xs text-red-700 dark:text-red-300 font-medium">
+                                  Faltante: {item.quantity_requested - (item.quantity_assembled || 0)} de {item.quantity_requested} unidades
+                                </p>
+                              </div>
                             )}
                           </div>
                         </td>
                         <td className="p-3 text-right">
-                          {item.quantity_assembled || item.quantity_requested}
-                          {item.is_shortage && (
-                            <span className="text-muted-foreground text-sm"> / {item.quantity_requested}</span>
-                          )}
+                          <div className="flex flex-col items-end">
+                            <span className={item.is_shortage ? 'text-red-700 dark:text-red-300 font-bold' : ''}>
+                              {item.quantity_assembled || item.quantity_requested}
+                            </span>
+                            {item.is_shortage && (
+                              <span className="text-muted-foreground text-sm line-through">
+                                {item.quantity_requested} solicitadas
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-right">${item.unit_price.toFixed(2)}</td>
-                        <td className="p-3 text-right font-medium">${item.subtotal.toFixed(2)}</td>
+                        <td className="p-3 text-right font-medium">
+                          ${item.subtotal.toFixed(2)}
+                          {item.is_shortage && item.quantity_requested > 0 && (
+                            <div className="text-xs text-muted-foreground line-through">
+                              ${(item.unit_price * item.quantity_requested).toFixed(2)}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -267,23 +340,54 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
               </CardHeader>
               <CardContent>
                 {rating ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Tu calificación:</span>
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <span key={star} className={star <= rating.rating ? "text-yellow-500" : "text-gray-300"}>
-                            ★
-                          </span>
-                        ))}
+                  <div className="space-y-4">
+                    {/* Order Rating */}
+                    <div className="space-y-2">
+                      <h3 className="font-semibold">Calificación del Pedido</h3>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <span key={star} className={star <= rating.rating ? "text-yellow-500 text-2xl" : "text-gray-300 text-2xl"}>
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                        <span className="text-muted-foreground">({rating.rating}/5)</span>
                       </div>
+                      {rating.comments && (
+                        <div>
+                          <span className="text-sm font-medium">Tus comentarios:</span>
+                          <p className="text-muted-foreground mt-1">{rating.comments}</p>
+                        </div>
+                      )}
                     </div>
-                    {rating.comments && (
-                      <div>
-                        <span className="font-medium">Comentarios:</span>
-                        <p className="text-muted-foreground mt-1">{rating.comments}</p>
+
+                    <Separator />
+
+                    {/* Driver Rating */}
+                    {rating.driver_rating && (
+                      <div className="space-y-2">
+                        <h3 className="font-semibold">Calificación del Repartidor</h3>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span key={star} className={star <= rating.driver_rating ? "text-blue-500 text-2xl" : "text-gray-300 text-2xl"}>
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <span className="text-muted-foreground">({rating.driver_rating}/5)</span>
+                        </div>
+                        {rating.driver_comments && (
+                          <div>
+                            <span className="text-sm font-medium">Tus comentarios:</span>
+                            <p className="text-muted-foreground mt-1">{rating.driver_comments}</p>
+                          </div>
+                        )}
                       </div>
                     )}
+
+                    <p className="text-sm text-muted-foreground">¡Gracias por tu calificación!</p>
                   </div>
                 ) : (
                   <OrderRatingForm orderId={order.id} customerId={customer.id} />

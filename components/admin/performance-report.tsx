@@ -1,85 +1,110 @@
-"use client"
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users } from "lucide-react"
-import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Users, TrendingUp } from "lucide-react"
+import { createClient } from "@/lib/supabase/server"
+import { createReportsService } from "@/lib/services/reportsService"
+import { ReportDateFilter } from "./report-date-filter"
+import { ExportReportButton } from "./export-report-button"
+import { PerformanceChart } from "./performance-chart"
 
-export function PerformanceReport() {
-  // Mock data
-  const monthlyData = [
-    { month: "Ene", orders: 320, revenue: 4200000 },
-    { month: "Feb", orders: 385, revenue: 4850000 },
-    { month: "Mar", orders: 412, revenue: 5320000 },
-    { month: "Abr", orders: 398, revenue: 5100000 },
-    { month: "May", orders: 445, revenue: 5780000 },
-    { month: "Jun", orders: 487, revenue: 6240000 },
-  ]
+interface PerformanceReportProps {
+  startDate: Date
+  endDate: Date
+}
 
-  const teamStats = [
-    { role: "Preventistas", count: 3, avgOrders: 148, efficiency: 94 },
-    { role: "Armado", count: 3, avgOrders: 156, efficiency: 96 },
-    { role: "Repartidores", count: 4, avgDeliveries: 117, efficiency: 91 },
-  ]
+export async function PerformanceReport({ startDate, endDate }: PerformanceReportProps) {
+  const supabase = await createClient()
+  const reportsService = createReportsService(supabase)
+
+  const { monthlyData, teamStats } = await reportsService.getPerformanceReport(startDate, endDate)
 
   return (
     <div className="space-y-6">
-      {/* Trend Chart */}
+      {/* Header with filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Tendencia Mensual</CardTitle>
-          <CardDescription>Evolución de pedidos y facturación</CardDescription>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle>Reporte de Rendimiento</CardTitle>
+              <CardDescription>Análisis de tendencias y desempeño por equipo</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <ReportDateFilter startDate={startDate} endDate={endDate} />
+              <ExportReportButton
+                reportType="performance"
+                data={{ monthlyData, teamStats }}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <ChartContainer
-            config={{
-              orders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
-            }}
-            className="h-[300px]"
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData}>
-                <XAxis dataKey="month" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line type="monotone" dataKey="orders" stroke="var(--color-orders)" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
       </Card>
+
+      {/* Trend Chart */}
+      <PerformanceChart monthlyData={monthlyData} />
 
       {/* Team Performance */}
       <Card>
         <CardHeader>
           <CardTitle>Rendimiento por Equipo</CardTitle>
-          <CardDescription>Métricas de eficiencia por área</CardDescription>
+          <CardDescription>Métricas de eficiencia por área en el período seleccionado</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {teamStats.map((team) => (
-              <div key={team.role} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Users className="h-6 w-6 text-primary" />
+          {teamStats.length > 0 ? (
+            <div className="space-y-6">
+              {teamStats.map((team) => (
+                <div key={team.role} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Users className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{team.role}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {team.count} {team.count === 1 ? "miembro" : "miembros"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{team.role}</p>
-                    <p className="text-sm text-muted-foreground">{team.count} miembros</p>
+                  <div className="flex gap-8 text-right">
+                    <div>
+                      <p className="text-2xl font-bold">{team.avgOrders}</p>
+                      <p className="text-xs text-muted-foreground">Promedio</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-600 flex items-center gap-1">
+                        {team.efficiency}%
+                        <TrendingUp className="h-4 w-4" />
+                      </p>
+                      <p className="text-xs text-muted-foreground">Eficiencia</p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-8 text-right">
-                  <div>
-                    <p className="text-2xl font-bold">{team.avgOrders || team.avgDeliveries}</p>
-                    <p className="text-xs text-muted-foreground">Promedio</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-green-600">{team.efficiency}%</p>
-                    <p className="text-xs text-muted-foreground">Eficiencia</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">
+              No hay datos de equipos en el período seleccionado
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Summary Card */}
+      <Card className="border-green-200 bg-green-50 dark:bg-green-950">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            <div>
+              <p className="font-medium text-green-900 dark:text-green-100">
+                Total de {teamStats.reduce((sum, t) => sum + t.count, 0)} colaboradores activos
+              </p>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Eficiencia general del sistema:{" "}
+                {teamStats.length > 0
+                  ? `${Math.round(teamStats.reduce((sum, t) => sum + t.efficiency, 0) / teamStats.length)}%`
+                  : "N/A"}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

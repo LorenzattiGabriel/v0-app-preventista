@@ -1,0 +1,74 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+import { AdminNewCustomerForm } from '@/components/admin/admin-new-customer-form'
+
+/**
+ * Admin New Customer Page
+ * Allows administrators to create new customers
+ */
+export default async function AdminNewCustomerPage() {
+  const supabase = await createClient()
+
+  // Authentication check
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
+  }
+
+  // Authorization check
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile || profile.role !== 'administrativo') {
+    redirect('/auth/login')
+  }
+
+  // Fetch active zones
+  const { data: zones } = await supabase
+    .from('zones')
+    .select('*')
+    .eq('is_active', true)
+    .order('name')
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <header className="border-b bg-background">
+        <div className="container flex h-16 items-center justify-between px-4">
+          <h1 className="text-xl font-semibold">Nuevo Cliente</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">{profile.full_name}</span>
+            <form action="/auth/logout" method="post">
+              <Button variant="outline" size="sm">
+                Cerrar Sesión
+              </Button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 bg-muted/40 p-6">
+        <div className="container mx-auto max-w-4xl space-y-6">
+          <Button variant="outline" asChild>
+            <Link href="/admin/customers">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver a Clientes
+            </Link>
+          </Button>
+
+          <AdminNewCustomerForm zones={zones || []} userId={user.id} />
+        </div>
+      </main>
+    </div>
+  )
+}
+
+

@@ -79,7 +79,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
 
   // Form state
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split("T")[0])
-  const [selectedZone, setSelectedZone] = useState<string>("")
+  const [selectedZone, setSelectedZone] = useState<string>("all") // Default to "all" zones
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [startTime, setStartTime] = useState("08:00")
   const [avgDeliveryTime, setAvgDeliveryTime] = useState(10)
@@ -182,10 +182,11 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
 
       // Get zone name
       const zone = zones.find((z) => z.id === selectedZone)
+      const zoneName = selectedZone === "all" ? "Múltiples Zonas" : (zone?.name || "Zona")
 
       const newRoute = {
-        zone: zone?.name || "Zona",
-        zoneId: selectedZone,
+        zone: zoneName,
+        zoneId: selectedZone === "all" ? "" : selectedZone,
         orders: ordersToRoute,
         totalDistance: routeResponse.totalDistance,
         estimatedDuration: routeResponse.estimatedDuration,
@@ -231,6 +232,33 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
 
     try {
       const supabase = createClient()
+
+      // 🆕 CRITICAL-4: Validate no duplicate orders in active routes
+      const orderIds = generatedRoute.orders.map(o => o.id)
+      
+      // Check if any of these orders are already in an active route (PLANIFICADO or EN_CURSO)
+      const { data: existingRouteOrders, error: checkError } = await supabase
+        .from("route_orders")
+        .select(`
+          order_id,
+          routes!inner(id, route_code, status)
+        `)
+        .in("order_id", orderIds)
+        .in("routes.status", ["PLANIFICADO", "EN_CURSO"])
+
+      if (checkError) throw checkError
+
+      if (existingRouteOrders && existingRouteOrders.length > 0) {
+        // Get order numbers for better error message
+        const duplicateOrderIds = existingRouteOrders.map(ro => ro.order_id)
+        const duplicateOrders = generatedRoute.orders.filter(o => duplicateOrderIds.includes(o.id))
+        const orderNumbers = duplicateOrders.map(o => o.order_number).join(", ")
+        const routeCodes = Array.from(new Set(existingRouteOrders.map(ro => (ro.routes as any).route_code))).join(", ")
+        
+        setError(`Los siguientes pedidos ya están en rutas activas (${routeCodes}): ${orderNumbers}. Por favor, elimínalos de la ruta o quita los pedidos duplicados.`)
+        setIsCreating(false)
+        return
+      }
 
       // Generate route code
       const { data: routeCodeData } = await supabase.rpc("generate_route_code", {
@@ -295,7 +323,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
         .insert({
           route_code: routeCode,
           driver_id: selectedDriver,
-          zone_id: selectedZone,
+          zone_id: selectedZone === "all" ? null : selectedZone, // Si es "all", guardar como null
           scheduled_date: deliveryDate,
           scheduled_start_time: startTime,
           scheduled_end_time: endTime,
@@ -456,6 +484,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                     <SelectValue placeholder="Selecciona una zona" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">🌐 Todas las zonas</SelectItem>
                     {zones.map((zone) => (
                       <SelectItem key={zone.id} value={zone.id}>
                         {zone.name}
@@ -466,13 +495,14 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
               </div>
 
               {/* Orders Dashboard */}
-              {selectedZone && availableOrders.length > 0 && (
+              {availableOrders.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base font-semibold">Pedidos Disponibles</Label>
                       <p className="text-sm text-muted-foreground mt-1">
                         {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
+                        {selectedZone === "all" && " (todas las zonas)"}
                       </p>
                     </div>
                     <Button
@@ -505,9 +535,9 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                 </div>
               )}
 
-              {selectedZone && availableOrders.length === 0 && (
+              {deliveryDate && availableOrders.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay pedidos disponibles para esta zona y fecha con coordenadas guardadas.
+                  No hay pedidos disponibles para {selectedZone === "all" ? "esta fecha" : "esta zona y fecha"} con coordenadas guardadas.
                 </p>
               )}
             </CardContent>

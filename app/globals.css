@@ -123,3 +123,62 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* PWA & Mobile Optimizations */
+@layer utilities {
+  /* Smooth scrolling para toda la app */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Touch targets mínimos de 44x44px para móviles */
+  @media (max-width: 768px) {
+    button, a, input[type="button"], input[type="submit"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+  
+  /* Tablas con scroll horizontal en móviles */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 px-4;
+  }
+  
+  /* Container con padding adaptable */
+  .container-responsive {
+    @apply px-4 md:px-6 lg:px-8;
+  }
+  
+  /* Prevenir zoom en inputs en iOS */
+  @media (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="number"],
+    input[type="password"],
+    input[type="tel"],
+    input[type="url"],
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+  
+  /* Safe areas para dispositivos con notch */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Ocultar scrollbar pero mantener funcionalidad */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

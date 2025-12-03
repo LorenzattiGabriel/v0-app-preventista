@@ -6,11 +6,33 @@ import { DeliveryReport } from "@/components/admin/delivery-report"
 import { PerformanceReport } from "@/components/admin/performance-report"
 import { FinancialReport } from "@/components/admin/financial-report"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
+import { subMonths, startOfMonth, endOfMonth } from "date-fns"
 
-export default function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>
+}) {
+  const params = await searchParams
+
+  // Default to current month if no dates provided
+  const fromDate = params.from ? new Date(params.from) : startOfMonth(new Date())
+  const toDate = params.to ? new Date(params.to) : endOfMonth(new Date())
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <Button variant="outline" asChild>
+            <Link href="/admin/dashboard">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver al Dashboard
+            </Link>
+          </Button>
+        </div>
         <h1 className="text-3xl font-bold mb-2">Reportes y Análisis</h1>
         <p className="text-muted-foreground">Análisis detallado de operaciones y rendimiento del sistema</p>
       </div>
@@ -25,25 +47,25 @@ export default function ReportsPage() {
 
         <TabsContent value="orders" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <OrdersReport />
+            <OrdersReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="delivery" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <DeliveryReport />
+            <DeliveryReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <PerformanceReport />
+            <PerformanceReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="financial" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
-            <FinancialReport />
+            <FinancialReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
       </Tabs>

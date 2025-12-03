@@ -21,6 +21,7 @@ interface SaveOrderParams {
   requiresInvoice: boolean
   observations: string
   generalDiscount: number
+  paymentMethod?: string // Payment method (Efectivo, Transferencia, etc.)
   orderItems: OrderItem[]
   userId: string
   isDraft: boolean
@@ -32,6 +33,7 @@ export function useOrderFormActions() {
   const [isLoading, setIsLoading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDuplicating, setIsDuplicating] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const calculateTotals = (items: OrderItem[], discount: number) => {
@@ -48,6 +50,7 @@ export function useOrderFormActions() {
     requiresInvoice,
     observations,
     generalDiscount,
+    paymentMethod,
     orderItems,
     userId,
     isDraft,
@@ -127,6 +130,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
             observations,
           })
           .eq("id", orderId)
@@ -157,6 +161,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
             created_by: userId,
             observations,
           })
@@ -290,5 +295,44 @@ export function useOrderFormActions() {
     }
   };
 
-  return { saveOrder, deleteOrder, duplicateDraft, isLoading, isDeleting, isDuplicating, error, setError, calculateTotals };
+  // 🆕 CRITICAL-3a: Confirm Order (BORRADOR → PENDIENTE_ARMADO)
+  const confirmOrder = async (orderId: string, userId: string) => {
+    setIsConfirming(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+
+      // Update order status from BORRADOR to PENDIENTE_ARMADO
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({
+          status: "PENDIENTE_ARMADO",
+        })
+        .eq("id", orderId)
+        .eq("status", "BORRADOR"); // Only confirm if it's still a draft
+
+      if (updateError) {
+        console.error("Error confirming order:", updateError);
+        throw updateError;
+      }
+
+      // Create order history entry
+      await supabase.from("order_history").insert({
+        order_id: orderId,
+        previous_status: "BORRADOR",
+        new_status: "PENDIENTE_ARMADO",
+        changed_by: userId,
+        change_reason: "Pedido confirmado por preventista",
+      });
+
+      router.refresh();
+    } catch (err) {
+      console.error("[v0] Error confirming order:", err);
+      setError(err instanceof Error ? err.message : "Error al confirmar el pedido");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  return { saveOrder, deleteOrder, duplicateDraft, confirmOrder, isLoading, isDeleting, isDuplicating, isConfirming, error, setError, calculateTotals };
 }

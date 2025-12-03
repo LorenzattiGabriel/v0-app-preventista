@@ -58,6 +58,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
+  const [paymentMethod, setPaymentMethod] = useState<string>("Efectivo") // 🆕 Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
   // Add product form state
@@ -128,6 +129,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       requiresInvoice,
       observations,
       generalDiscount,
+      paymentMethod, // 🆕 Pass payment method
       orderItems,
       userId,
       isDraft,
@@ -271,6 +273,34 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               Requiere Factura
             </Label>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentMethod">Método de Pago</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Efectivo">Efectivo</SelectItem>
+                <SelectItem value="Transferencia">Transferencia</SelectItem>
+                <SelectItem value="Tarjeta de Débito">Tarjeta de Débito</SelectItem>
+                <SelectItem value="Tarjeta de Crédito">Tarjeta de Crédito</SelectItem>
+                <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                <SelectItem value="Cheque">Cheque</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="observations">Observaciones</Label>
+            <Textarea
+              id="observations"
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              placeholder="Notas adicionales sobre el pedido..."
+              rows={3}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -347,15 +377,15 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           </div>
 
           {orderItems.length > 0 && (
-            <div className="border rounded-md">
-              <table className="w-full">
+            <div className="border rounded-md overflow-x-auto -mx-4 md:mx-0">
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-muted">
                   <tr>
-                    <th className="text-left p-2 text-sm font-medium">Producto</th>
-                    <th className="text-right p-2 text-sm font-medium">Cantidad</th>
-                    <th className="text-right p-2 text-sm font-medium">Precio Unit.</th>
-                    <th className="text-right p-2 text-sm font-medium">Descuento</th>
-                    <th className="text-right p-2 text-sm font-medium">Subtotal</th>
+                    <th className="text-left p-2 text-xs md:text-sm font-medium">Producto</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Cant.</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Precio</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Desc.</th>
+                    <th className="text-right p-2 text-xs md:text-sm font-medium">Subtotal</th>
                     <th className="w-12"></th>
                   </tr>
                 </thead>
