@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign } from "lucide-react"
 import Link from "next/link"
 import {
   Dialog,
@@ -28,9 +28,10 @@ interface DeliveryRouteViewProps {
   userId: string
   today: string
   depot: any | null
+  hasActiveRoute?: boolean
 }
 
-export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRouteViewProps) {
+export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +89,31 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
     // Build Google Maps directions URL: start -> waypoints -> end
     return `https://www.google.com/maps/dir/${startPoint}/${waypoints.join('/')}/${endPoint}/`
+  }
+
+
+  // Effect to log customer coordinates on page load in development environment
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      logCustomerCoordinates()
+    }
+  }, [])
+
+  const logCustomerCoordinates = () => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("Customer Coordinates for Route:", route.id)
+      route.route_orders
+        .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
+        .forEach((ro: any) => {
+          if (ro.orders?.customers?.latitude && ro.orders?.customers?.longitude) {
+            console.log(
+              `Customer ${ro.orders.customers.commercial_name}: Lat ${ro.orders.customers.latitude}, Lng ${ro.orders.customers.longitude}`
+            )
+          } else {
+            console.log(`Customer ${ro.orders.customers.name}: Coordinates not available`)
+          }
+        })
+    }
   }
 
   const handleStartRoute = async () => {
@@ -177,57 +203,20 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       }
 
       // Open Google Maps with route (depot -> customers -> depot)
-      let googleMapsUrl = buildGoogleMapsUrl()
+      // We rely on buildGoogleMapsUrl which handles:
+      // 1. Optimized route URL if available
+      // 2. Manual construction: Depot -> Customers -> Depot
+      const googleMapsUrl = buildGoogleMapsUrl()
       
-
-      // Intentar obtener la URL del optimized_route (generada por microservicio)
-      if (route.optimized_route?.googleMapsUrl) {
-        googleMapsUrl = route.optimized_route.googleMapsUrl
-        console.log('✅ Usando URL de ruta optimizada del microservicio')
-      } else if (route.optimized_route?.origin && route.optimized_route?.destinations) {
-        // Fallback 1: Construir URL desde el objeto de ruta optimizada
-        console.log('🛠️ Construyendo URL desde objeto de ruta optimizada')
-        const origin = `${route.optimized_route.origin.lat},${route.optimized_route.origin.lng}`
-        
-        // Waypoints (puntos intermedios) si existen
-        const waypoints = (route.optimized_route.waypoints || [])
-          .map((wp: any) => `${wp.lat},${wp.lng}`)
-          .join('|')
-
-        // El último destino es el punto final
-        const destination = route.optimized_route.destinations.length > 0
-          ? `${route.optimized_route.destinations[route.optimized_route.destinations.length - 1].lat},${route.optimized_route.destinations[route.optimized_route.destinations.length - 1].lng}`
-          : origin
-
-        googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoints}`
-      } else {
-        // Fallback 2: Construir URL manualmente con coordenadas de los clientes (sin optimizar)
-        const coordinates = route.route_orders
-          .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
-          .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
-          .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
-
-        if (coordinates.length > 0) {
-          // Punto de partida (primer pedido o depósito default)
-          const startPoint = coordinates.length > 0 ? coordinates[0] : '-31.4201,-64.1888'
-          
-          // Construir URL con todos los puntos
-          if (coordinates.length > 1) {
-            googleMapsUrl = `https://www.google.com/maps/dir/${coordinates.join('/')}/`
-          } else {
-            googleMapsUrl = `https://www.google.com/maps/dir/-31.4201,-64.1888/${startPoint}/`
-          }
-          console.log('⚠️ Usando ruta manual (fallback, sin optimización)')
-        } else {
-          console.warn('⚠️ No se encontraron coordenadas para la ruta')
-        }
-      }
-
       if (googleMapsUrl) {
+        console.log('✅ Opening Google Maps URL:', googleMapsUrl)
         window.open(googleMapsUrl, '_blank')
       } else {
+        console.warn('⚠️ Could not generate Google Maps URL')
         setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
       }
+
+
 
       router.refresh()
     } catch (err) {
@@ -293,12 +282,20 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       try {
         const supabase = createClient()
 
-        // Update order with non-delivery info (keep EN_REPARTICION status)
+        // Update order with non-delivery info and reset status to PENDIENTE_ENTREGA
         const { error: orderError } = await supabase
           .from("orders")
           .update({
+            status: "PENDIENTE_ENTREGA", // Return to pending so it can be re-assigned
             no_delivery_reason: noDeliveryReason,
             no_delivery_notes: noDeliveryNotes || null,
+            // Clear delivery evidence and assignment
+            delivered_at: null,
+            received_by_name: null,
+            delivery_photo_url: null,
+            delivery_notes: null,
+            delivered_by: null,
+            delivery_started_at: null,
           })
           .eq("id", selectedOrder.id)
 
@@ -307,8 +304,8 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         // Create history entry
         await supabase.from("order_history").insert({
           order_id: selectedOrder.id,
-          previous_status: "EN_REPARTICION",
-          new_status: "EN_REPARTICION", // Status doesn't change
+          previous_status: selectedOrder.status,
+          new_status: "PENDIENTE_ENTREGA", 
           changed_by: userId,
           change_reason: `No se pudo entregar: ${noDeliveryReason}`,
         })
@@ -461,6 +458,11 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
           setIsLoading(false)
           return
         }
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Depot coordinates:', depot.latitude, depot.longitude)
+          console.log('Current location:', currentLocation.latitude, currentLocation.longitude)
+          console.log('Radius:', depot.radius_meters)
+        }
 
         const isWithinRadius = GeocodingService.isWithinRadius(
           currentLocation.latitude,
@@ -492,6 +494,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         .eq("route_id", route.id)
 
       if (fetchError) throw fetchError
+     
 
       // Validate all orders are in final state (ENTREGADO or have no_delivery_reason)
       const pendingOrders = currentRouteOrders?.filter((ro: any) => {
@@ -567,6 +570,8 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       ...ro.orders,
       delivery_order: ro.delivery_order,
       route_order_id: ro.id,
+      collected_amount: ro.collected_amount,
+      was_collected: ro.was_collected,
     }))
     .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
 
@@ -578,8 +583,9 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
   // All orders are managed if they are either delivered or have a no-delivery reason
   const allOrdersManaged = pendingOrders.length === 0
   
-  // Check if route is scheduled for today
-  const isScheduledForToday = route.scheduled_date === today
+  // Check if route is scheduled for today or past
+  const isScheduledForTodayOrPast = route.scheduled_date <= today
+  const isFutureRoute = route.scheduled_date > today
 
   return (
     <div className="space-y-6">
@@ -593,10 +599,21 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
         <div className="flex gap-2">
           {route.status === "PLANIFICADO" && (
-            <Button onClick={handleStartRoute} disabled={isLoading || !isScheduledForToday} size="lg">
-              <Play className="mr-2 h-4 w-4" />
-              Iniciar Ruta
-            </Button>
+            <div className="flex flex-col items-end gap-2">
+              <Button 
+                onClick={handleStartRoute} 
+                disabled={isLoading || !isScheduledForTodayOrPast || hasActiveRoute} 
+                size="lg"
+              >
+                <Play className="mr-2 h-4 w-4" />
+                Iniciar Ruta
+              </Button>
+              {hasActiveRoute && (
+                <p className="text-xs text-destructive font-medium">
+                  Completa tu ruta activa primero
+                </p>
+              )}
+            </div>
           )}
 
           {route.status === "EN_CURSO" && (
@@ -667,7 +684,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       )}
 
       {/* Info message for future routes */}
-      {route.status === "PLANIFICADO" && !isScheduledForToday && (
+      {route.status === "PLANIFICADO" && isFutureRoute && (
         <div className="bg-blue-50 dark:bg-blue-950 border-2 border-blue-400 dark:border-blue-600 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
@@ -740,6 +757,35 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                 </p>
               </div>
             )}
+            <div className="col-span-3 pt-2 border-t mt-2">
+               <span className="font-medium">Estado Financiero:</span>
+               <div className="flex items-center gap-2 mt-1">
+                 {(() => {
+                    const collected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0
+                    const totalExpected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.orders?.total || 0), 0) || 0
+                    const debt = totalExpected - collected
+                    
+                    return (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Recaudado: </span>
+                          <span className="font-bold text-green-600 dark:text-green-400">${collected.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Total Esperado: </span>
+                          <span className="font-semibold">${totalExpected.toFixed(2)}</span>
+                        </div>
+                        {debt > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Deuda Pendiente: </span>
+                            <span className="font-bold text-red-600 dark:text-red-400">${debt.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                 })()}
+               </div>
+            </div>
           </div>
 
           {route.status === "EN_CURSO" && (
@@ -747,20 +793,39 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
               <div className="flex justify-between text-sm">
                 <span className="font-medium">Progreso de entregas</span>
                 <span className="text-muted-foreground">
-                  {Math.round((deliveredOrders / totalOrders) * 100)}%
+                  {Math.round(((deliveredOrders + notDeliveredOrders.length) / totalOrders) * 100)}%
                 </span>
               </div>
-              <div className="w-full bg-muted rounded-full h-3">
-                <div
-                  className="bg-primary h-3 rounded-full transition-all flex items-center justify-end pr-2"
-                  style={{ width: `${(deliveredOrders / totalOrders) * 100}%` }}
-                >
-                  {deliveredOrders > 0 && (
-                    <span className="text-xs font-bold text-primary-foreground">
-                      {deliveredOrders}
-                    </span>
-                  )}
+              <div className="relative w-full h-3">
+                <div className="absolute inset-0 w-full bg-muted rounded-full flex overflow-hidden">
+                  {/* Delivered Segment (Black/Primary) */}
+                  <div
+                    className="bg-primary h-full transition-all duration-500"
+                    style={{ width: `${(deliveredOrders / totalOrders) * 100}%` }}
+                  />
+                  {/* Not Delivered Segment (Red) */}
+                  <div
+                    className="bg-red-500 h-full transition-all duration-500"
+                    style={{ width: `${(notDeliveredOrders.length / totalOrders) * 100}%` }}
+                  />
                 </div>
+                
+                {/* Circle Indicator */}
+                {(deliveredOrders + notDeliveredOrders.length) > 0 && (
+                    <div 
+                      className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-background border-2 border-primary rounded-full shadow-sm z-10 transition-all duration-500"
+                      style={{ left: `calc(${((deliveredOrders + notDeliveredOrders.length) / totalOrders) * 100}% - 8px)` }}
+                    />
+                )}
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                 <div className="flex gap-3">
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary"></div> {deliveredOrders} Entregados</span>
+                    {notDeliveredOrders.length > 0 && (
+                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> {notDeliveredOrders.length} No Entregados</span>
+                    )}
+                 </div>
+                 <span>{totalOrders} Total</span>
               </div>
               {pendingOrders.length > 0 && (
                 <p className="text-sm text-muted-foreground mt-2">
@@ -782,11 +847,11 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
             {sortedOrders.map((order: any, index: number) => (
               <div
                 key={order.id}
-                className={`border rounded-lg p-4 ${order.status === "ENTREGADO" ? "bg-muted/50" : ""}`}
+                className={`border rounded-lg p-4 ${order.status === "ENTREGADO" ? "bg-muted/50" : order.no_delivery_reason ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900" : ""}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex gap-4 flex-1">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-semibold text-sm">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm shrink-0 ${order.no_delivery_reason ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-100" : "bg-primary text-primary-foreground"}`}>
                       {index + 1}
                     </div>
                     <div className="flex-1 space-y-2">
@@ -796,6 +861,13 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                           <Badge variant="default">
                             <CheckCircle className="mr-1 h-3 w-3" />
                             Entregado
+                          </Badge>
+                        )}
+                        {console.log("order status:",order.status)}
+
+                        {order.no_delivery_reason && (
+                          <Badge variant="destructive">
+                            No Entregado
                           </Badge>
                         )}
                         {order.priority === "urgente" && <Badge variant="destructive">Urgente</Badge>}
@@ -818,10 +890,39 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Package className="h-4 w-4" />
-                          <span>
-                            {order.order_items.length} productos | Total: ${order.total.toFixed(2)}
-                          </span>
+                          <span> {order.order_items.length} productos | </span>
+
+                            {/* Financial Status for Order */}
+                            <span className="flex items-center gap-2 text-sm">                              
+                              <span>
+                                {"Recaudado: "} 
+                                {(() => {
+                                  const collected = order.was_collected ? order.collected_amount || 0 : 0
+                                  const total = order.total || 0
+                                  const debt = total - collected
+                                  
+                                  return (
+                                    <>
+                                      <span className={collected >= total ? "text-green-600 dark:text-green-400 font-medium" : "text-muted-foreground"}>
+                                        ${collected.toFixed(2)}
+                                      </span>
+                                      <span className="text-muted-foreground"> / ${total.toFixed(2)}</span>
+                                      {debt > 0 && (
+                                        <span className="ml-2 text-red-600 dark:text-red-400 text-xs font-medium bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded">
+                                          Deuda: ${debt.toFixed(2)}
+                                        </span>
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </span>
+                            </span>
+                            
+                            
+                          
                         </div>
+
+                        
 
                         {order.customers.phone && <p className="text-muted-foreground">Tel: {order.customers.phone}</p>}
                       </div>
@@ -831,11 +932,18 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                           <span className="font-medium">Observaciones:</span> {order.observations}
                         </div>
                       )}
+                      
+                      {order.no_delivery_reason && (
+                        <div className="text-sm text-red-600 dark:text-red-400 mt-2 bg-red-50 dark:bg-red-950/30 p-2 rounded">
+                            <p className="font-medium">Motivo: {order.no_delivery_reason}</p>
+                            {order.no_delivery_notes && <p className="text-xs mt-1">Nota: {order.no_delivery_notes}</p>}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    {order.status !== "ENTREGADO" && route.status === "EN_CURSO" && (
+                    {order.status !== "ENTREGADO" && route.status === "EN_CURSO" && !order.no_delivery_reason && (
                       <>
                         <Button onClick={() => handleOpenDeliveryDialog(order)} size="sm">
                           <CheckCircle className="mr-2 h-4 w-4" />
@@ -863,7 +971,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                       </Badge>
                     )}
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/repartidor/orders/${order.id}`}>Ver Detalle</Link>
+                      <Link href={`/repartidor/orders/${order.route_order_id}`}>Ver Detalle</Link>
                     </Button>
                   </div>
                 </div>

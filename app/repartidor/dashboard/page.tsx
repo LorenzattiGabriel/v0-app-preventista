@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Truck, MapPin, CheckCircle, Clock, Package, DollarSign, Target, CircleDollarSign, Calendar } from "lucide-react"
+import { Truck, MapPin, CheckCircle, Clock, Package, DollarSign, Target, CircleDollarSign, Calendar, CalendarDays, ArrowRight } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RepartidorRoutesFilter } from "@/components/repartidor/repartidor-routes-filter"
+import { RouteCard } from "@/components/repartidor/route-card"
 
 interface SearchParams {
   selected_date?: string
@@ -37,126 +38,88 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
   // Get today's date
   const now = new Date()
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
-  // const today = new Date().toISOString().split("T")[0]
-
-  // Get statistics
-  // const { count: todayRoutes } = await supabase
-
   const selectedDate = params.selected_date || today
-  const { data: inProgressRoute } = await supabase    
-.from("routes")
-    .select("*, zones (name), route_orders(id, orders(status))")
+
+  // Prepare all data fetching promises
+  const inProgressRoutePromise = supabase
+    .from("routes")
+    .select("*, zones (name), route_orders(id, orders(status, no_delivery_reason))")
     .eq("driver_id", user.id)
     .eq("status", "EN_CURSO")
     .maybeSingle()
-
-  // --- NEW METRICS CALCULATIONS ---
 
 
   // Get all routes that are part of the current workload.
   // This includes:
   // 1. Any route that is currently "EN_CURSO".
   // 2. Any route that is "PLANIFICADO" for today or any past day.
-  const { data: todaysRoutes, error } = await supabase
+  // 3. Any route that is "COMPLETADO" and was finished today.
+  const todaysRoutesPromise = supabase
     .from("routes")
     .select(
       `*, zones (name), route_orders (id, orders (id, status, total), was_collected, collected_amount)`
     )
     .eq("driver_id", user.id)
-    .or(`status.eq.EN_CURSO,and(status.eq.PLANIFICADO,scheduled_date.lte.${today})`)
+    .or(`status.eq.EN_CURSO,and(status.eq.PLANIFICADO,scheduled_date.lte.${today}),and(status.eq.COMPLETADO,actual_end_time.gte.${today}T00:00:00)`)
     .order("scheduled_date", { ascending: true })
     .order("scheduled_start_time", { ascending: true })
 
-  // Get delivered orders today
-  const { count: deliveredOrders } = await supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
-    .eq("delivered_by", user.id)
-    .gte("delivered_at", today)
-
-  // Get future routes count
-  const { count: futureRoutes } = await supabase
+  const futureRoutesPromise = supabase
     .from("routes")
     .select("*", { count: "exact", head: true })
     .eq("driver_id", user.id)
     .gt("scheduled_date", today)
 
+  const routesSelectedDatePromise = selectedDate >= today 
+    ? supabase
+        .from("routes")
+        .select(
+          `
+          *,
+          zones (
+            name
+          ),
+          route_orders (
+            id,
+            orders (
+              id,
+              status
+            )
+          )
+        `,
+        )
+        .eq("driver_id", user.id)
+        .gte("scheduled_date", today)
+        .lte("scheduled_date", selectedDate)
+        .order("scheduled_date", { ascending: true })
+        .order("scheduled_start_time", { ascending: true })
+    : Promise.resolve({ data: [], error: null })
 
+  // Execute all fetches in parallel
+  const [
+    { data: inProgressRoute },
+    { data: todaysRoutes, error },
+    { count: futureRoutes },
+    { data: routesSelectedDate, error: routesSelectedDateError }
+  ] = await Promise.all([
+    inProgressRoutePromise,
+    todaysRoutesPromise,
+    futureRoutesPromise,
+    routesSelectedDatePromise
+  ])
 
-  // Calculate total money collected today
-  const { data: collectedData } = await supabase
-    .from("routes")
-    .select("route_orders (collected_amount, was_collected)")
-    .eq("routes.driver_id", user.id)
-    .eq("routes.status", "COMPLETADO")
-    .gte("routes.actual_end_time", today)
+  // Calculate derived metrics
+  const allRoutesForStats = todaysRoutes || []
 
-  const collectedToday =
-    collectedData?.flatMap((r) => r.route_orders).reduce((sum, ro) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0
+  const collectedToday = allRoutesForStats.flatMap((r) => r.route_orders)
+    .reduce((sum, ro) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0
+console.log("collectedToday", collectedToday)
+  const completedRoutesToday = allRoutesForStats.filter(r => r.status === "COMPLETADO").length
 
   // Calculate delivery progress for today's routes
-  const totalOrdersToday = todaysRoutes?.reduce((sum, route) => sum + (route.route_orders?.length || 0), 0);
-  const completedOrdersToday = todaysRoutes?.reduce((sum, route) => 
+  const totalOrdersToday = allRoutesForStats.reduce((sum, route) => sum + (route.route_orders?.length || 0), 0);
+  const completedOrdersToday = allRoutesForStats.reduce((sum, route) => 
     sum + (route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0), 0);
-
-  // Calculate route progress for today
-  const { count: completedRoutesToday } = await supabase
-    .from("routes")
-    .select("*", { count: "exact", head: true })
-    .eq("driver_id", user.id) // This counts routes completed today
-    .gte("actual_end_time", today)
-    .eq("status", "COMPLETADO") // and whose end time is today
-
-
-  // ---
-
-  // // Also get any in-progress routes (regardless of date)
-  // const { data: inProgressRoutesOtherDays } = await supabase
-  //   .from("routes")
-  //   .select(
-  //     `
-  //     *,
-  //     zones (
-  //       name
-  //     ),
-  //     route_orders (
-  //       id,
-  //       orders (
-  //         id,
-  //         status
-  //       )
-  //     )
-  //   `,
-  //   )
-  //   .eq("driver_id", user.id)
-  //   .eq("status", "EN_CURSO") //TODO: Le faltan los estado PENDIENTE(asignado pero no iniciados)
-  //   .neq("scheduled_date", today)
-  //   .order("scheduled_date", { ascending: false })
-
-
-  // TODO: fechas anteriores a la seleccionada.
-  // Get routes for selected date (if different from today)
-  const { data: routesSelectedDate, error: routesSelectedDateError } = selectedDate !== today ? await supabase
-    .from("routes")
-    .select(
-      `
-      *,
-      zones (
-        name
-      ),
-      route_orders (
-        id,
-        orders (
-          id,
-          status
-        )
-      )
-    `,
-    )
-    .eq("driver_id", user.id)
-    .eq("scheduled_date", selectedDate)
-    .order("scheduled_start_time", { ascending: true })
-    : { data: [], error: null }
 
   // Debug logging
   console.log('🔍 Debug Repartidor Dashboard:', {
@@ -174,9 +137,6 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
     }))
   })
 
-  // TODO
-  // Combine routes (in-progress first, then today's)
-  // const routes = [...(inProgressRoutesOtherDays || []), ...(routesToday || [])]
 
 
   const statusLabels = {
@@ -219,50 +179,60 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
 
 
           {/* --- NEW METRICS SECTION --- */}
-          {/* TODO: decide metrics style. */}
-           {/* <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"> */}
-          <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-            <Card>
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+            {/* Money Card */}
+            <Card className="col-span-2 sm:col-span-1 shadow-sm transition-all hover:shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Dinero Recaudado Hoy</CardTitle>
-                <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Recaudado Hoy</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${collectedToday.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Total cobrado en entregas completadas</p>
+                <p className="text-xs text-muted-foreground font-medium">Total cobrado</p>
               </CardContent>
             </Card>
 
-            <Card>
+            {/* Orders Progress */}
+            <Card className="shadow-sm transition-all hover:shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Entregas de Hoy</CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Entregas</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{completedOrdersToday} / {totalOrdersToday}</div>
-                <p className="text-xs text-muted-foreground">Pedidos completados en rutas de hoy</p>
+                <div className="text-2xl font-bold">{completedOrdersToday} <span className="text-sm text-muted-foreground font-normal">/ {totalOrdersToday}</span></div>
+                <p className="text-xs text-muted-foreground font-medium">Pedidos completados</p>
               </CardContent>
             </Card>
 
-            <Card>
+            {/* Routes Progress */}
+            <Card className="shadow-sm transition-all hover:shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Progreso de Rutas</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Rutas</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{completedRoutesToday || 0} / {todaysRoutes?.length}</div>
-                <p className="text-xs text-muted-foreground">Rutas de hoy completadas</p>
+                <div className="text-2xl font-bold">{completedRoutesToday} <span className="text-sm text-muted-foreground font-normal">/ {todaysRoutes?.length}</span></div>
+                <p className="text-xs text-muted-foreground font-medium">Rutas finalizadas</p>
               </CardContent>
             </Card>
 
-            <Card>
+            {/* Future Routes */}
+            <Card className="shadow-sm transition-all hover:shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Rutas Futuras</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Futuras</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{futureRoutes || 0}</div>
-                <p className="text-xs text-muted-foreground">Planificadas</p>
+                <p className="text-xs text-muted-foreground font-medium">Rutas planificadas</p>
               </CardContent>
             </Card>
           </div>
@@ -271,38 +241,116 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
 
           {/* In-Progress Route Card */}
           {inProgressRoute && (
-            <Card className="border-2 border-primary">
-              <CardHeader>
-                <CardTitle className="text-primary">Ruta en Curso</CardTitle>
-                <CardDescription>
-                  Tienes una ruta activa que debes completar antes de iniciar otra.
-                </CardDescription>
+            <Card className="border-2 border-primary/10 bg-primary/5 shadow-lg overflow-hidden relative">
+              {/* Decorative background element */}
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <CardHeader className="relative z-10">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-1">
+                      <Truck className="h-4 w-4 text-primary" />
+                      Ruta en Curso
+                    </CardTitle>
+                    <h3 className="text-2xl font-bold tracking-tight text-foreground">{inProgressRoute.route_code}</h3>
+                  </div>
+                  <Badge variant="outline" className="text-sm px-3 py-1 font-semibold shadow-sm border-primary/20 text-primary bg-primary/5">
+                    {statusLabels[inProgressRoute.status as keyof typeof statusLabels]}
+                  </Badge>
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-muted/50 rounded-lg gap-4">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{inProgressRoute.route_code}</span>
-                      <Badge>{statusLabels[inProgressRoute.status as keyof typeof statusLabels]}</Badge>
+              
+              <CardContent className="relative z-10 space-y-5">
+                {/* Progress Section */}
+                <div>
+                  {(() => {
+                    const totalOrders = inProgressRoute.route_orders.length
+                    const deliveredOrders = inProgressRoute.route_orders.filter((ro: any) => ro.orders?.status === "ENTREGADO").length
+                    const notDeliveredOrders = inProgressRoute.route_orders.filter((ro: any) => ro.orders?.status !== "ENTREGADO" && ro.orders?.no_delivery_reason).length
+                    const pendingOrders = totalOrders - deliveredOrders - notDeliveredOrders
+                    
+                    // Progress is based on managed orders (delivered + not delivered)
+                    const managedOrders = deliveredOrders + notDeliveredOrders
+                    const progressPercentage = totalOrders > 0 ? Math.round((managedOrders / totalOrders) * 100) : 0
+
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm mb-2 text-muted-foreground">
+                          <span className="font-medium">Progreso de entregas</span>
+                          <span className="font-bold text-foreground">
+                            {progressPercentage}%
+                          </span>
+                        </div>
+                        {/* Custom Progress Bar */}
+                        <div className="relative w-full h-3">
+                          <div className="absolute inset-0 w-full bg-muted rounded-full flex overflow-hidden">
+                            {/* Delivered Segment (Black/Primary) */}
+                            <div
+                              className="bg-primary h-full transition-all duration-500"
+                              style={{ width: `${totalOrders > 0 ? (deliveredOrders / totalOrders) * 100 : 0}%` }}
+                            />
+                            {/* Not Delivered Segment (Red) */}
+                            <div
+                              className="bg-red-500 h-full transition-all duration-500"
+                              style={{ width: `${totalOrders > 0 ? (notDeliveredOrders / totalOrders) * 100 : 0}%` }}
+                            />
+                          </div>
+                          
+                          {/* Circle Indicator */}
+                          {managedOrders > 0 && (
+                              <div 
+                                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-background border-2 border-primary rounded-full shadow-sm z-10 transition-all duration-500"
+                                style={{ left: `calc(${totalOrders > 0 ? (managedOrders / totalOrders) * 100 : 0}% - 8px)` }}
+                              />
+                          )}
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                           <div className="flex gap-3">
+                              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary"></div> {deliveredOrders} Entregados</span>
+                              {notDeliveredOrders > 0 && (
+                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> {notDeliveredOrders} No Entregados</span>
+                              )}
+                           </div>
+                           <span>{totalOrders} Total</span>
+                        </div>
+                        
+                        {pendingOrders > 0 && (
+                          <p className="text-sm text-muted-foreground mt-2">
+                            ⏳ Quedan <strong className="text-foreground">{pendingOrders}</strong> pedido{pendingOrders !== 1 ? 's' : ''} por gestionar
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
+
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-background p-2.5 rounded-lg border border-border/50 shadow-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
+                      <MapPin className="h-3 w-3 text-primary" /> ZONA
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        <span>{inProgressRoute.zones?.name || "Sin zona"}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Package className="h-4 w-4" />
-                        <span>
-                          {inProgressRoute.route_orders.filter((ro: any) => ro.orders?.status === "ENTREGADO").length}/
-                          {inProgressRoute.route_orders.length} entregas
-                        </span>
-                      </div>
+                    <div className="font-bold text-base truncate leading-tight text-foreground">
+                      {inProgressRoute.zones?.name || "Sin zona"}
                     </div>
                   </div>
-                  <Button asChild size="lg" className="w-full sm:w-auto h-14 text-lg cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg">
-                    <Link href={`/repartidor/routes/${inProgressRoute.id}`}>Continuar Ruta</Link>
-                  </Button>
+                  <div className="bg-background p-2.5 rounded-lg border border-border/50 shadow-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
+                      <Clock className="h-3 w-3 text-primary" /> INICIO
+                    </div>
+                    <div className="font-bold text-base truncate leading-tight text-foreground">
+                      {inProgressRoute.actual_start_time ? new Date(inProgressRoute.actual_start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
+                    </div>
+                  </div>
                 </div>
+
+                <Button asChild size="lg" className="w-full h-12 text-lg font-bold shadow-md hover:scale-[1.01] transition-all duration-200 group">
+                  <Link href={`/repartidor/routes/${inProgressRoute.id}`} className="flex items-center justify-center gap-2">
+                    Continuar Ruta 
+                    <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -311,10 +359,11 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
           <Tabs defaultValue="today" className="w-full">
             <TabsList>
               <TabsTrigger value="today" className="cursor-pointer transition-all duration-300 hover:bg-primary/90 hover:text-white hover:shadow-md hover:scale-[1.02]">Rutas de Hoy</TabsTrigger>
+              <TabsTrigger value="completed" className="cursor-pointer transition-all duration-300 hover:bg-primary/90 hover:text-white hover:shadow-md hover:scale-[1.02]">Completadas hoy</TabsTrigger>
               <TabsTrigger value="planned" className="cursor-pointer transition-all duration-300 hover:bg-primary/90 hover:text-white hover:shadow-md hover:scale-[1.02]">Rutas Planificadas</TabsTrigger>
             </TabsList>
 
-            {/* Today's Routes Tab */}
+            {/* Today's Routes Tab (Pending/In Progress) */}
             <TabsContent value="today" className="mt-6">
                {/* --- NEW UNIFIED QUEUE --- */}
                 <Card>
@@ -323,78 +372,54 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
                     <CardDescription>Tus rutas pendientes, ordenadas por prioridad.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {todaysRoutes && todaysRoutes.length > 0 ? (
+                    {todaysRoutes && todaysRoutes.filter(r => r.status !== 'COMPLETADO' && r.status !== 'EN_CURSO').length > 0 ? (
                       <div className="space-y-4">
-                        {todaysRoutes.map((route) => {
-                          const totalOrders = route.route_orders?.length || 0
-                          const deliveredOrders =
-                            route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0
+                        {todaysRoutes
+                          .filter(r => r.status !== 'COMPLETADO' && r.status !== 'EN_CURSO')
+                          .map((route) => {
                           const isDelayed = route.status === 'PLANIFICADO' && new Date(route.scheduled_date + "T00:00:00") < new Date(today);
-
                           return (
-                            <div key={route.id} className={`flex items-center justify-between p-4 border rounded-lg ${isDelayed ? 'border-amber-500/50 bg-amber-500/5' : ''}`}>
-                              <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold">{route.route_code}</span>
-                                  {isDelayed && (
-                                    <Badge variant="outline" className="border-amber-600 text-amber-700">
-                                      <Clock className="mr-1 h-3 w-3" />
-                                      Atrasada
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <div className="flex items-center gap-1">
-                                    <MapPin className="h-4 w-4" />
-                                    <span>{route.zones?.name || "Sin zona"}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 font-medium">
-                                    <Package className="h-4 w-4" />
-                                    <span>
-                                      {deliveredOrders}/{totalOrders} entregas
-                                    </span>
-                                  </div>
-                                  {/* TODO: ver card anterior */}
-                                  {/* <div className="flex items-center gap-1 font-semibold">
-                                    <Clock className="h-4 w-4" />
-                                    <span>
-                                      {new Date(route.scheduled_date + "T00:00:00").toLocaleDateString("es-AR")}
-                                      {route.scheduled_start_time && ` - ${route.scheduled_start_time.slice(0, 5)}hs`}
-                                    </span>
-                                  </div> */}
-                                  {route.scheduled_start_time && (
-                                        <div className="flex items-center gap-1">
-                                          <Clock className="h-4 w-4" />
-                                          <span>Inicio: {route.scheduled_start_time.slice(0, 5)}</span>
-                                        </div>
-                                  )}
-                                  {route.total_distance && (
-                                      <p className="text-xs text-muted-foreground">
-                                        Distancia: {route.total_distance.toFixed(1)} km | Duración estimada:{" "}
-                                        {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}
-                                        min
-                                      </p>
-                                    )}
-
-                                </div>
-                              </div>
-                              <Button 
-                                asChild 
-                                disabled={!!inProgressRoute} 
-                                className="cursor-pointer transition-all duration-300 hover:bg-primary/90 hover:shadow-md hover:scale-[1.02]"
-                              >
-                                <Link href={`/repartidor/routes/${route.id}`}>Ver Ruta</Link>
-                              </Button>
-                            </div>
+                            <RouteCard 
+                              key={route.id} 
+                              route={route} 
+                              isDelayed={isDelayed} 
+                              inProgressRouteId={inProgressRoute?.id} 
+                            />
                           )
                         })}
                       </div>
                     ) : (
-                      <p className="text-center text-muted-foreground py-8">No tienes rutas pendientes.</p>
+                      <p className="text-center text-muted-foreground py-8">No tienes rutas pendientes para hoy.</p>
                     )}
                   </CardContent>
                 </Card>
-                {/* --- END NEW UNIFIED QUEUE --- */}
+            </TabsContent>
+
+            {/* Completed Today Tab */}
+            <TabsContent value="completed" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Rutas Completadas</CardTitle>
+                    <CardDescription>Rutas finalizadas en el día de hoy.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {todaysRoutes && todaysRoutes.filter(r => r.status === 'COMPLETADO').length > 0 ? (
+                      <div className="space-y-4">
+                        {todaysRoutes
+                          .filter(r => r.status === 'COMPLETADO')
+                          .map((route) => (
+                            <RouteCard 
+                              key={route.id} 
+                              route={route} 
+                              showMoneyCollected={true} 
+                            />
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">No has completado ninguna ruta hoy.</p>
+                    )}
+                  </CardContent>
+                </Card>
             </TabsContent>
 
             {/* Planned Routes Tab */}
@@ -416,52 +441,13 @@ export default async function RepartidorDashboardPage({ searchParams }: PageProp
                 <CardContent>
                   {routesSelectedDate && routesSelectedDate.length > 0 ? (
                     <div className="space-y-4">
-                      {routesSelectedDate.map((route) => {
-                        const totalOrders = route.route_orders?.length || 0
-                        const deliveredOrders =
-                          route.route_orders?.filter((ro: any) => ro.orders?.status === "ENTREGADO").length || 0
-
-                        return (
-                          <div key={route.id} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold">{route.route_code}</span>
-                                <Badge variant={statusColors[route.status as keyof typeof statusColors]}>
-                                  {statusLabels[route.status as keyof typeof statusLabels]}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                  <MapPin className="h-4 w-4" />
-                                  <span>{route.zones?.name || "Sin zona"}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Package className="h-4 w-4" />
-                                  <span>
-                                    {deliveredOrders}/{totalOrders} entregas
-                                  </span>
-                                </div>
-                                {route.scheduled_start_time && (
-                                  <div className="flex items-center gap-1">
-                                    <Clock className="h-4 w-4" />
-                                    <span>Inicio: {route.scheduled_start_time.slice(0, 5)}</span>
-                                  </div>
-                                )}
-                              </div>
-                              {route.total_distance && (
-                                <p className="text-xs text-muted-foreground">
-                                  Distancia: {route.total_distance.toFixed(1)} km | Duración estimada:{" "}
-                                  {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}
-                                  min
-                                </p>
-                              )}
-                            </div>
-                            <Button asChild className="cursor-pointer transition-all duration-300 hover:bg-primary/90 hover:shadow-md hover:scale-[1.02]">
-                              <Link href={`/repartidor/routes/${route.id}`}>Ver Ruta</Link>
-                            </Button>
-                          </div>
-                        )
-                      })}
+                      {routesSelectedDate.map((route) => (
+                        <RouteCard 
+                          key={route.id} 
+                          route={route} 
+                          showStatusBadge={true} 
+                        />
+                      ))}
                     </div>
                   ) : (
                     <p className="text-center text-muted-foreground py-8">
