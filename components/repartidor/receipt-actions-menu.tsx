@@ -18,9 +18,10 @@ import { ReceiptPreviewDialog } from "./receipt-preview-dialog"
 interface ReceiptActionsMenuProps {
   order: any
   className?: string
+  repartidorName?: string
 }
 
-export function ReceiptActionsMenu({ order, className }: ReceiptActionsMenuProps) {
+export function ReceiptActionsMenu({ order, className, repartidorName }: ReceiptActionsMenuProps) {
   const [showPreview, setShowPreview] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
 
@@ -52,7 +53,7 @@ export function ReceiptActionsMenu({ order, className }: ReceiptActionsMenuProps
             <FileText className="mr-2 h-4 w-4" />
             Ver Vista Previa
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => downloadOrderReceipt(order)}>
+          <DropdownMenuItem onClick={() => downloadOrderReceipt(order, repartidorName)}>
             <Download className="mr-2 h-4 w-4" />
             Descargar PDF
           </DropdownMenuItem>
@@ -88,6 +89,7 @@ export function ReceiptActionsMenu({ order, className }: ReceiptActionsMenuProps
         open={showPreview} 
         onOpenChange={setShowPreview} 
         order={order} 
+        repartidorName={repartidorName}
       />
     </>
   )

@@ -2,7 +2,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import type { Customer, OrderPriority, OrderType } from "@/lib/types/database"
+import type { Customer, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
 
 interface OrderItem {
   productId: string
@@ -21,7 +21,7 @@ interface SaveOrderParams {
   requiresInvoice: boolean
   observations: string
   generalDiscount: number
-  paymentMethod?: string // Payment method (Efectivo, Transferencia, etc.)
+  paymentMethod?: PaymentMethod // Payment method (Efectivo, Transferencia, etc.)
   orderItems: OrderItem[]
   userId: string
   isDraft: boolean

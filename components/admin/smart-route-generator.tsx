@@ -159,7 +159,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
       zone: selectedZone,
       totalPending: pendingOrders.length,
       filtered: filtered.length,
-      withAmounts: filtered.filter(o => o.total_amount).length
+      withAmounts: filtered.filter(o => o.total).length
     })
 
     setAvailableOrders(filtered)
@@ -342,7 +342,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
           customer_name: order.customers.commercial_name || order.customers.name,
           address: `${order.customers.street} ${order.customers.street_number}`,
           delivery_order: index + 1,
-          total_amount: order.total_amount
+          total_amount: order.total
         })),
         costCalculation: generatedRoute.costCalculation,
         optimizationData: generatedRoute.optimizedRouteData,

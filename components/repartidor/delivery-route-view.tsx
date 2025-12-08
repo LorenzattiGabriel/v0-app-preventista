@@ -25,6 +25,8 @@ import { GeocodingService } from "@/lib/services/geocodingService"
 import { ReceiptButton } from "./receipt-button"
 import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
+import { CameraCapture } from "@/components/ui/camera-capture"
+import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/types/database"
 
 interface DeliveryRouteViewProps {
   route: any
@@ -32,9 +34,10 @@ interface DeliveryRouteViewProps {
   today: string
   depot: any | null
   hasActiveRoute?: boolean
+  repartidorName?: string
 }
 
-export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false }: DeliveryRouteViewProps) {
+export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false, repartidorName }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +51,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   // Delivery form state
   const [wasCollected, setWasCollected] = useState(false)
   const [collectedAmount, setCollectedAmount] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method state
   const [deliveryNotes, setDeliveryNotes] = useState("")
   
   // 🆕 New states for delivery evidence and non-delivery
@@ -234,6 +238,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setSelectedOrder(order)
     setWasCollected(false)
     setCollectedAmount("")
+    setPaymentMethod(order.payment_method || "Efectivo") // 🆕 Default to preferred or Cash
     setDeliveryNotes("")
     // 🆕 Reset delivery evidence fields
     setDeliveryPhoto(null)
@@ -246,9 +251,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   }
 
   // 🆕 Handle photo selection
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
+  const handlePhotoCapture = (file: File) => {
       // Validate file type
       if (!file.type.startsWith('image/')) {
         setError("Por favor selecciona una imagen válida")
@@ -266,7 +269,6 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         setPhotoPreview(reader.result as string)
       }
       reader.readAsDataURL(file)
-    }
   }
 
   const handleConfirmDelivery = async () => {
@@ -384,6 +386,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           actual_arrival_time: new Date().toISOString(),
           was_collected: wasCollected,
           collected_amount: wasCollected ? Number.parseFloat(collectedAmount) || 0 : null,
+          payment_method: wasCollected ? paymentMethod : null, // 🆕 Save payment method
         })
         .eq("route_id", route.id)
         .eq("order_id", selectedOrder.id)
@@ -439,6 +442,13 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         reason: o.no_delivery_reason,
         notes: o.no_delivery_notes,
       })),
+      paymentBreakdown: route.route_orders
+        .filter((ro: any) => ro.was_collected)
+        .reduce((acc: any, ro: any) => {
+          const method = ro.payment_method || "Efectivo";
+          acc[method] = (acc[method] || 0) + (ro.collected_amount || 0);
+          return acc;
+        }, {}),
     }
     
     setRouteSummary(summary)
@@ -575,6 +585,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       route_order_id: ro.id,
       collected_amount: ro.collected_amount,
       was_collected: ro.was_collected,
+      payment_method: ro.payment_method || ro.orders.payment_method,
     }))
     .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
 
@@ -978,6 +989,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                         <ReceiptActionsMenu 
                           order={order}
                           className="w-full"
+                          repartidorName={repartidorName}
                         />
                       </div>
                       </div>
@@ -1063,14 +1075,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
                     Toma una foto del pedido entregado
                   </p>
-                  <Input
-                    id="delivery-photo"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoChange}
-                    className="cursor-pointer"
-                  />
+                  <CameraCapture onCapture={handlePhotoCapture} />
                   {photoPreview && (
                     <div className="mt-2">
                       <img
@@ -1109,7 +1114,23 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 </div>
 
                 {wasCollected && (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="payment-method">Método de Pago</Label>
+                      <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}>
+                        <SelectTrigger id="payment-method">
+                          <SelectValue placeholder="Seleccionar método" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((method) => (
+                            <SelectItem key={method} value={method}>
+                              {method}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>  
+                    <div className="space-y-2">
                     <Label htmlFor="amount">Importe Cobrado ($)</Label>
                     <Input
                       id="amount"
@@ -1119,6 +1140,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                       value={collectedAmount}
                       onChange={(e) => setCollectedAmount(e.target.value)}
                     />
+                  </div>
                   </div>
                 )}
 
@@ -1191,6 +1213,23 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Payment Breakdown */}
+              {routeSummary.paymentBreakdown && Object.keys(routeSummary.paymentBreakdown).length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Detalle por Método de Pago</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {Object.entries(routeSummary.paymentBreakdown).map(([method, amount]: [string, any]) => (
+                      <div key={method} className="flex justify-between text-sm">
+                        <span className="capitalize">{method}</span>
+                        <span className="font-medium">${Number(amount).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Difference Alert */}
               {routeSummary.difference !== 0 && (

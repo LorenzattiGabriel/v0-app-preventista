@@ -164,6 +164,10 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                     )}
                   </div>
                 </div>
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Forma de Pago</span>
+                  <p className="font-semibold text-lg">{routeOrder.payment_method || order.payment_method || "Efectivo"}</p>
+                </div>
                 {routeOrder.was_collected && (
                   <div className="col-span-2">
                     <span className="text-sm font-medium text-muted-foreground">Monto cobrado</span>
@@ -184,6 +188,43 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                 <div className="bg-muted p-3 rounded-md">
                   <span className="font-medium text-sm">Observaciones:</span>
                   <p className="text-sm text-muted-foreground mt-1">{order.observations}</p>
+                </div>
+              )}
+
+              {/* Delivery Evidence */}
+              {order.status === "ENTREGADO" && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="font-semibold">Comprobante de Entrega</h3>
+                  
+                  <div className="grid gap-4">
+                    {order.received_by_name && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Recibido por:</span>
+                        <span className="font-medium">{order.received_by_name}</span>
+                      </div>
+                    )}
+
+                    {order.delivery_photo_url && (
+                        <div className="rounded-lg overflow-hidden border bg-muted/20">
+                           {/* Use standard img for now to avoid Next.js Image config issues with external URLs */}
+                           <img 
+                             src={order.delivery_photo_url} 
+                             alt="Foto de entrega" 
+                             className="w-full h-auto object-contain max-h-[400px]"
+                           />
+                           <div className="p-2 text-xs text-center text-muted-foreground bg-muted/50">
+                             <a 
+                               href={order.delivery_photo_url} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="hover:underline"
+                             >
+                               Ver imagen original
+                             </a>
+                           </div>
+                        </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>

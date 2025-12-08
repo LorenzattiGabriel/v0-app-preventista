@@ -1,6 +1,6 @@
 import jsPDF from "jspdf"
 
-export const generateOrderReceipt = (order: any) => {
+export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.width
   const margin = 15
@@ -28,7 +28,12 @@ export const generateOrderReceipt = (order: any) => {
   doc.text(`Fecha: ${new Date().toLocaleDateString("es-AR")} ${new Date().toLocaleTimeString("es-AR")}`, margin, yPos)
   yPos += 6
   doc.text(`Pedido N°: ${order.order_number || "S/N"}`, margin, yPos)
-  yPos += 10
+  yPos += 6
+  if (repartidorName) {
+    doc.text(`Repartidor: ${repartidorName}`, margin, yPos)
+    yPos += 6
+  }
+  yPos += 4
 
   // --- Customer Info ---
   doc.setDrawColor(200)
@@ -107,6 +112,13 @@ export const generateOrderReceipt = (order: any) => {
   if (order.was_collected) {
       doc.setTextColor(0, 100, 0) // Green
       doc.text(`COBRADO: $${collected.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+      
+      // Payment Method
+      yPos += 5
+      doc.setFontSize(9)
+      doc.setTextColor(50, 50, 50) // Dark Gray
+      const paymentMethod = order.payment_method || "Efectivo"
+      doc.text(`Forma de Pago: ${paymentMethod}`, pageWidth - margin, yPos, { align: "right" })
   } else {
       doc.setTextColor(150, 0, 0) // Red
       doc.text("NO COBRADO", pageWidth - margin, yPos, { align: "right" })
@@ -125,12 +137,12 @@ export const generateOrderReceipt = (order: any) => {
   return doc
 }
 
-export const downloadOrderReceipt = (order: any) => {
-  const doc = generateOrderReceipt(order)
+export const downloadOrderReceipt = (order: any, repartidorName?: string) => {
+  const doc = generateOrderReceipt(order, repartidorName)
   doc.save(`Recibo_Pedido_${order.order_number}.pdf`)
 }
 
-export const getReceiptBlob = (order: any): Blob => {
-  const doc = generateOrderReceipt(order)
+export const getReceiptBlob = (order: any, repartidorName?: string): Blob => {
+  const doc = generateOrderReceipt(order, repartidorName)
   return doc.output('blob')
 }

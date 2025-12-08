@@ -35,6 +35,7 @@ export default async function GenerateSmartRoutesPage() {
     .select(
       `
       *,
+      order_items (*),
       customers (
         *,
         zones (

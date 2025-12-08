@@ -89,6 +89,7 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
             today={today} 
             depot={depot} 
             hasActiveRoute={hasActiveRoute}
+            repartidorName={profile.full_name}
           />
         </div>
       </main>

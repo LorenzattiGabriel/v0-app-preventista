@@ -32,7 +32,7 @@ export function ShareButtons({ order, phone, email, layout = "row", className, b
   const [isSharing, setIsSharing] = useState(false)
 
   useEffect(() => {
-    if (typeof navigator !== "undefined" && navigator.share) {
+    if (typeof navigator !== "undefined") {
       setCanShareNative(true)
     }
   }, [])

@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import type { Customer, Product, OrderPriority, OrderType } from "@/lib/types/database"
+import type { Customer, Product, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
+import { PAYMENT_METHODS } from "@/lib/types/database"
 import { Plus, Trash2, ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
@@ -58,7 +59,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
-  const [paymentMethod, setPaymentMethod] = useState<string>("Efectivo") // 🆕 Payment method
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
   // Add product form state
@@ -276,19 +277,18 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
           <div className="space-y-2">
             <Label htmlFor="paymentMethod">Método de Pago</Label>
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Efectivo">Efectivo</SelectItem>
-                <SelectItem value="Transferencia">Transferencia</SelectItem>
-                <SelectItem value="Tarjeta de Débito">Tarjeta de Débito</SelectItem>
-                <SelectItem value="Tarjeta de Crédito">Tarjeta de Crédito</SelectItem>
-                <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                <SelectItem value="Cheque">Cheque</SelectItem>
-              </SelectContent>
-            </Select>
+              <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val as PaymentMethod)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHODS.map((method) => (
+                    <SelectItem key={method} value={method}>
+                      {method}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
           </div>
 
           <div className="space-y-2">

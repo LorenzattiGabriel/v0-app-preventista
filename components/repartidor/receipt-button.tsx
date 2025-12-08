@@ -13,6 +13,7 @@ interface ReceiptButtonProps {
   size?: "default" | "sm" | "lg" | "icon"
   className?: string
   directDownload?: boolean
+  repartidorName?: string
 }
 
 export function ReceiptButton({ 
@@ -20,7 +21,8 @@ export function ReceiptButton({
   variant = "outline", 
   size = "sm", 
   className,
-  directDownload = false 
+  directDownload = false,
+  repartidorName
 }: ReceiptButtonProps) {
   const [showReceiptDialog, setShowReceiptDialog] = useState(false)
 
@@ -28,7 +30,7 @@ export function ReceiptButton({
 
   const handleClick = () => {
     if (directDownload) {
-      downloadOrderReceipt(order)
+      downloadOrderReceipt(order, repartidorName)
     } else {
       setShowReceiptDialog(true)
     }
@@ -55,6 +57,7 @@ export function ReceiptButton({
           open={showReceiptDialog} 
           onOpenChange={setShowReceiptDialog} 
           order={order} 
+          repartidorName={repartidorName}
         />
       )}
     </>

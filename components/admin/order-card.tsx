@@ -158,7 +158,7 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
           )}
           <div className="text-right">
              <span className="text-sm font-bold text-foreground">
-               ${order.total_amount?.toLocaleString('es-AR') || '0'}
+               ${order.total?.toLocaleString('es-AR') || '0'}
              </span>
           </div>
         </div>

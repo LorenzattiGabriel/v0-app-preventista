@@ -10,13 +10,14 @@ interface ReceiptPreviewDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   order: any
+  repartidorName?: string
 }
 
-export function ReceiptPreviewDialog({ open, onOpenChange, order }: ReceiptPreviewDialogProps) {
+export function ReceiptPreviewDialog({ open, onOpenChange, order, repartidorName }: ReceiptPreviewDialogProps) {
   if (!order) return null
 
   const handleDownload = () => {
-    downloadOrderReceipt(order)
+    downloadOrderReceipt(order, repartidorName)
   }
 
   const collectedAmount = order.was_collected ? (order.collected_amount || 0) : 0
@@ -42,6 +43,7 @@ export function ReceiptPreviewDialog({ open, onOpenChange, order }: ReceiptPrevi
           <div className="space-y-1">
              <p><strong>Fecha:</strong> {new Date().toLocaleDateString("es-AR")}</p>
              <p><strong>Pedido N°:</strong> {order.order_number}</p>
+             {repartidorName && <p><strong>Repartidor:</strong> {repartidorName}</p>}
           </div>
 
           <div className="border-t border-dashed pt-2 space-y-1">
@@ -82,6 +84,13 @@ export function ReceiptPreviewDialog({ open, onOpenChange, order }: ReceiptPrevi
                 <span>{order.was_collected ? 'PAGADO:' : 'PENDIENTE:'}</span>
                 <span>${order.was_collected ? collectedAmount.toFixed(2) : totalAmount.toFixed(2)}</span>
             </div>
+            
+             {order.was_collected && (
+              <div className="flex justify-between text-xs text-gray-600 mt-1">
+                <span>Forma de Pago:</span>
+                <span>{order.payment_method || "Efectivo"}</span>
+              </div>
+            )}
             
              {order.received_by_name && (
               <div className="pt-2 text-right">
