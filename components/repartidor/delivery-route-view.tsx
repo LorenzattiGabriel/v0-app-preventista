@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText } from "lucide-react"
 import Link from "next/link"
 import {
   Dialog,
@@ -22,6 +22,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { GeocodingService } from "@/lib/services/geocodingService"
+import { ReceiptButton } from "./receipt-button"
+import { ShareButtons } from "./share-buttons"
+import { ReceiptActionsMenu } from "./receipt-actions-menu"
 
 interface DeliveryRouteViewProps {
   route: any
@@ -763,7 +766,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                  {(() => {
                     const collected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0
                     const totalExpected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.orders?.total || 0), 0) || 0
-                    const debt = totalExpected - collected
+                    const totalDeliveredExpected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.orders?.status === 'ENTREGADO' ? ro.orders?.total || 0 : 0), 0) || 0
+                    const debt = totalDeliveredExpected - collected
                     
                     return (
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -907,7 +911,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                                         ${collected.toFixed(2)}
                                       </span>
                                       <span className="text-muted-foreground"> / ${total.toFixed(2)}</span>
-                                      {debt > 0 && (
+                                      {debt > 0 && order.status === "ENTREGADO" && (
                                         <span className="ml-2 text-red-600 dark:text-red-400 text-xs font-medium bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded">
                                           Deuda: ${debt.toFixed(2)}
                                         </span>
@@ -965,10 +969,18 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                       </>
                     )}
                     {order.status === "ENTREGADO" && (
-                      <Badge variant="default" className="justify-center py-2">
-                        <CheckCircle className="mr-1 h-4 w-4" />
-                        Completado
-                      </Badge>
+                      <div className="flex flex-col gap-2">
+                        <Badge variant="default" className="justify-center py-2">
+                          <CheckCircle className="mr-1 h-4 w-4" />
+                          Completado
+                        </Badge>
+                      <div className="mt-2">
+                        <ReceiptActionsMenu 
+                          order={order}
+                          className="w-full"
+                        />
+                      </div>
+                      </div>
                     )}
                     <Button variant="outline" size="sm" asChild>
                       <Link href={`/repartidor/orders/${order.route_order_id}`}>Ver Detalle</Link>

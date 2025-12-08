@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, MapPin, CheckCircle, AlertCircle, Clock } from "lucide-react"
+import { ReceiptButton } from "@/components/repartidor/receipt-button"
+import { ShareButtons } from "@/components/repartidor/share-buttons"
 
 export default async function RepartidorOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -77,6 +79,23 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                 Volver
               </Link>
             </Button>
+            
+            
+            <div className="flex gap-2">
+              <ShareButtons 
+                order={order} 
+                phone={order.customers?.phone} 
+                email={order.customers?.email}
+              />
+              <ReceiptButton 
+                order={{
+                  ...order,
+                  was_collected: routeOrder.was_collected,
+                  collected_amount: routeOrder.collected_amount
+                }} 
+                directDownload={true}
+              />
+            </div>
           </div>
 
           <Card>

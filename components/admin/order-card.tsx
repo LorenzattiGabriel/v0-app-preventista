@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Package } from "lucide-react"
+import { MapPin, Package, Calendar } from "lucide-react"
 
 interface OrderCardProps {
   order: any
@@ -19,6 +19,7 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
   const customerName = order.customers?.commercial_name || order.customers?.name || "Cliente"
   const orderNumber = order.order_number || "S/N"
   const itemsCount = order.order_items?.length || 0
+  const deliveryDate = order.delivery_date
   
   // Address components
   const street = order.customers?.street || ""
@@ -45,69 +46,122 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
     onToggle(order.id)
   }
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return ""
+    const [year, month, day] = dateString.split('-')
+    return `${day}/${month}`
+  }
+
+  const getDaysOverdue = (dateString: string) => {
+    if (!dateString) return 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const delivery = new Date(dateString)
+    const diffTime = today.getTime() - delivery.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  }
+
+  const getRelativeDateLabel = (dateString: string) => {
+    if (!dateString) return "Sin fecha"
+    const days = getDaysOverdue(dateString)
+    if (days < 0) return formatDate(dateString) // Future
+    if (days === 0) return "Para hoy"
+    if (days === 1) return "Ayer"
+    return `Hace ${days} días`
+  }
+
+  const getUrgencyColorClass = (days: number) => {
+    if (days <= 0) return "bg-blue-500" // Normal/Future
+    if (days <= 2) return "bg-yellow-500" // Low
+    if (days <= 5) return "bg-orange-500" // Medium
+    return "bg-red-600" // High
+  }
+
+  const getUrgencyBorderClass = (days: number) => {
+    if (days <= 0) return "border-l-blue-500"
+    if (days <= 2) return "border-l-yellow-500"
+    if (days <= 5) return "border-l-orange-500"
+    return "border-l-red-600"
+  }
+
+  const daysOverdue = getDaysOverdue(deliveryDate)
+
   return (
     <Card
-      className={`cursor-pointer transition-all hover:shadow-md ${
+      className={`group relative cursor-pointer overflow-hidden transition-all hover:shadow-lg border-l-[6px] ${
         isSelected
-          ? "border-2 border-primary bg-primary/5 shadow-sm"
-          : "border hover:border-primary/50"
+          ? "border-primary bg-primary/5 shadow-md"
+          : `${getUrgencyBorderClass(daysOverdue)} hover:bg-muted/50`
       }`}
       onClick={handleCardClick}
     >
-      <CardHeader className="p-4 pb-2">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id={`order-${order.id}`}
-            checked={isSelected}
-            onCheckedChange={() => onToggle(order.id)}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-sm leading-tight truncate" title={customerName}>
+      <div className="absolute top-3 left-3 z-10">
+        <Checkbox
+          id={`order-${order.id}`}
+          checked={isSelected}
+          onCheckedChange={() => onToggle(order.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+        />
+      </div>
+
+      <CardContent className="p-3 pl-9 space-y-3">
+        {/* Header: Name & Date Badge */}
+        <div className="flex justify-between items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h4 className="font-bold text-sm leading-tight text-foreground truncate" title={customerName}>
               {customerName}
             </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              #{orderNumber}
-            </p>
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+               <span className="font-mono bg-muted px-1 rounded text-[10px]">#{orderNumber}</span>
+               <span className="truncate">{locality}</span>
+            </div>
+          </div>
+          
+          <div className={`shrink-0 px-2 py-1 rounded text-[10px] font-bold text-white shadow-sm ${getUrgencyColorClass(daysOverdue)}`}>
+            {getRelativeDateLabel(deliveryDate)}
           </div>
         </div>
-      </CardHeader>
-      
-      <CardContent className="p-4 pt-2 space-y-2">
+
         {/* Address */}
-        <div className="flex items-start gap-2 text-xs">
-          <MapPin className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
-          <p className="text-muted-foreground line-clamp-2">
-            {street} {streetNumber}
-            {floorApt && `, ${floorApt}`}
-            <br />
-            {locality}
-          </p>
+        <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/30 p-2 rounded-md">
+           <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+           <p className="line-clamp-2 leading-relaxed">
+             {street} {streetNumber}
+             {floorApt && <span className="text-foreground/80 font-medium"> • {floorApt}</span>}
+           </p>
         </div>
 
-        {/* Order Details */}
-        <div className="flex items-center gap-3 pt-1 text-xs">
-          <div className="flex items-center gap-1">
-            <Package className="h-3 w-3 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              {itemsCount} {itemsCount === 1 ? 'item' : 'items'}
-            </span>
+        {/* Footer: Details & Price */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center gap-2">
+            {/* Priority Badge */}
+            {priority && priority !== 'normal' && (
+              <Badge variant={getPriorityBadgeVariant(priority)} className="text-[10px] px-1.5 h-5 shadow-none border-0 font-semibold uppercase tracking-wider">
+                {priority}
+              </Badge>
+            )}
+            
+            <div className="flex items-center text-xs text-muted-foreground" title="Cantidad de items">
+              <Package className="h-3.5 w-3.5 mr-1" />
+              <span>{itemsCount}</span>
+            </div>
           </div>
-          {priority && priority !== 'normal' && (
-            <Badge variant={getPriorityBadgeVariant(priority)} className="text-xs capitalize">
-              {priority}
-            </Badge>
+
+          {/* Customer Type */}
+          {customerType && (
+            <div className="pt-1">
+              <Badge variant="outline" className="text-xs">
+                {customerType === 'mayorista' ? 'Mayorista' : 'Minorista'}
+              </Badge>
+            </div>
           )}
-        </div>
-
-        {/* Customer Type */}
-        {customerType && (
-          <div className="pt-1">
-            <Badge variant="outline" className="text-xs">
-              {customerType === 'mayorista' ? 'Mayorista' : 'Minorista'}
-            </Badge>
+          <div className="text-right">
+             <span className="text-sm font-bold text-foreground">
+               ${order.total_amount?.toLocaleString('es-AR') || '0'}
+             </span>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   )

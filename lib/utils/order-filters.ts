@@ -73,6 +73,18 @@ export function filterOrdersWithoutCoordinates<T extends OrderForFiltering>(
 }
 
 /**
+ * Filtra pedidos hasta una fecha de entrega (inclusive)
+ * Útil para incluir pedidos atrasados (backlog)
+ */
+export function filterOrdersUpToDate<T extends OrderForFiltering>(
+  orders: T[],
+  deliveryDate: string
+): T[] {
+  if (!deliveryDate) return []
+  return orders.filter(order => order.delivery_date <= deliveryDate)
+}
+
+/**
  * Obtiene pedidos disponibles para una ruta
  * Aplica todos los filtros necesarios: fecha, zona, estado y coordenadas
  */
@@ -95,7 +107,15 @@ export function getAvailableOrdersForRoute<T extends OrderForFiltering>(
 
   // Aplicar filtros en secuencia
   filteredOrders = filterOrdersByStatus(filteredOrders, status)
-  filteredOrders = filterOrdersByDeliveryDate(filteredOrders, deliveryDate)
+  
+  // Lógica de fecha:
+  // Si buscamos pendientes, queremos ver los de la fecha seleccionada Y los anteriores (backlog)
+  // Si buscamos entregados u otros, queremos ver estrictamente los de esa fecha
+  if (status === "PENDIENTE_ENTREGA") {
+    filteredOrders = filterOrdersUpToDate(filteredOrders, deliveryDate)
+  } else {
+    filteredOrders = filterOrdersByDeliveryDate(filteredOrders, deliveryDate)
+  }
   
   // Solo filtrar por zona si se especifica una zona válida (no vacía y no "all")
   if (zoneId && zoneId !== "" && zoneId !== "all") {
