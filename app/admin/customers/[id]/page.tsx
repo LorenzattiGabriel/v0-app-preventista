@@ -16,7 +16,11 @@ import {
   TrendingUp,
   Star,
   CreditCard,
+  Wallet,
+  ArrowDownRight,
+  ArrowUpRight,
 } from "lucide-react"
+import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
 
 export default async function AdminCustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -80,6 +84,41 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
 
+  // Get customer account movements (cuenta corriente)
+  const { data: accountMovements } = await supabase
+    .from("customer_account_movements")
+    .select("*, orders(order_number)")
+    .eq("customer_id", customer.id)
+    .order("created_at", { ascending: false })
+    .limit(20)
+
+  // Get orders with pending debt (for payment registration)
+  const { data: ordersWithDebt } = await supabase
+    .from("order_payments")
+    .select(`
+      id,
+      order_id,
+      order_total,
+      total_paid,
+      balance_due,
+      orders!inner (
+        id,
+        order_number,
+        customer_id
+      )
+    `)
+    .eq("orders.customer_id", customer.id)
+    .gt("balance_due", 0)
+    .order("created_at", { ascending: false })
+
+  // Format pending orders for the dialog
+  const pendingOrders = ordersWithDebt?.map((op: any) => ({
+    id: op.orders.id,
+    order_number: op.orders.order_number,
+    total: op.order_total,
+    balance_due: op.balance_due,
+  })) || []
+
   // Calculate stats
   const totalOrders = orders?.length || 0
   const deliveredOrders = orders?.filter((o) => o.status === "ENTREGADO").length || 0
@@ -111,6 +150,20 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     CANCELADO: "Cancelado",
     ESPERANDO_STOCK: "Esperando Stock",
   } as const
+
+  const movementTypeLabels = {
+    DEUDA_PEDIDO: "Deuda por pedido",
+    PAGO_EFECTIVO: "Pago efectivo",
+    PAGO_TRANSFERENCIA: "Pago transferencia",
+    PAGO_TARJETA: "Pago tarjeta",
+    AJUSTE_CREDITO: "Ajuste a favor",
+    AJUSTE_DEBITO: "Ajuste en contra",
+    NOTA_CREDITO: "Nota de crédito",
+    PAGO_ADELANTADO: "Pago adelantado",
+  } as const
+
+  // Saldo actual del cliente (positivo = debe, negativo = a favor)
+  const currentBalance = customer.current_balance || 0
 
   const statusColors = {
     BORRADOR: "secondary",
@@ -286,6 +339,62 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                 </CardContent>
               </Card>
 
+              {/* Movimientos de Cuenta Corriente */}
+              {accountMovements && accountMovements.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5" />
+                          Movimientos de Cuenta Corriente
+                        </CardTitle>
+                        <CardDescription>Últimos 20 movimientos</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {accountMovements.map((movement: any) => {
+                        const isDebit = movement.debit_amount > 0
+                        return (
+                          <div key={movement.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${isDebit ? "bg-red-100 dark:bg-red-900" : "bg-green-100 dark:bg-green-900"}`}>
+                                {isDebit 
+                                  ? <ArrowUpRight className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                  : <ArrowDownRight className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                }
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {movementTypeLabels[movement.movement_type as keyof typeof movementTypeLabels]}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{movement.description}</p>
+                                {movement.orders?.order_number && (
+                                  <p className="text-xs text-muted-foreground">Pedido: {movement.orders.order_number}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-bold ${isDebit ? "text-red-600" : "text-green-600"}`}>
+                                {isDebit ? "+" : "-"}${(movement.debit_amount || movement.credit_amount).toFixed(2)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Saldo: ${movement.balance_after.toFixed(2)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(movement.created_at).toLocaleDateString("es-AR")}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Ratings */}
               {ratings && ratings.length > 0 && (
                 <Card>
@@ -377,6 +486,57 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                   </CardContent>
                 </Card>
               )}
+
+              {/* Cuenta Corriente */}
+              <Card className={currentBalance > 0 ? "border-red-300 dark:border-red-700" : currentBalance < 0 ? "border-green-300 dark:border-green-700" : ""}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wallet className="h-4 w-4" />
+                    Cuenta Corriente
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className={`p-3 rounded-lg ${
+                    currentBalance > 0 
+                      ? "bg-red-50 dark:bg-red-950" 
+                      : currentBalance < 0 
+                        ? "bg-green-50 dark:bg-green-950"
+                        : "bg-muted"
+                  }`}>
+                    <p className="text-xs text-muted-foreground mb-1">Saldo Actual</p>
+                    <p className={`text-2xl font-bold ${
+                      currentBalance > 0 
+                        ? "text-red-600 dark:text-red-400" 
+                        : currentBalance < 0 
+                          ? "text-green-600 dark:text-green-400"
+                          : ""
+                    }`}>
+                      {currentBalance > 0 ? "DEBE " : currentBalance < 0 ? "A FAVOR " : ""}
+                      ${Math.abs(currentBalance).toFixed(2)}
+                    </p>
+                  </div>
+                  
+                  {/* Crédito disponible */}
+                  <div className="text-sm">
+                    <p className="text-muted-foreground">Crédito disponible</p>
+                    <p className="font-bold">
+                      ${Math.max(0, parseFloat(customer.credit_limit || "0") - currentBalance).toFixed(2)}
+                    </p>
+                  </div>
+
+                  {/* Botón de registrar pago - solo si tiene deuda */}
+                  {currentBalance > 0 && (
+                    <div className="pt-2 border-t">
+                      <RegisterPaymentDialog
+                        customerId={customer.id}
+                        customerName={customer.commercial_name}
+                        currentBalance={currentBalance}
+                        pendingOrders={pendingOrders}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Credit Info */}
               <Card>

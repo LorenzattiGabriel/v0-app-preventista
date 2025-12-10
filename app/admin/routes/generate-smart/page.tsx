@@ -46,6 +46,13 @@ export default async function GenerateSmartRoutesPage() {
     .eq("status", "PENDIENTE_ENTREGA")
     .order("delivery_date", { ascending: true })
 
+  // Get active depot configuration
+  const { data: depot } = await supabase
+    .from("depot_configuration")
+    .select("*")
+    .eq("is_active", true)
+    .single()
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-background">
@@ -61,6 +68,7 @@ export default async function GenerateSmartRoutesPage() {
             drivers={drivers || []}
             pendingOrders={pendingOrders || []}
             userId={user.id}
+            depot={depot}
           />
         </div>
       </main>
