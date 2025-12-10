@@ -3,7 +3,7 @@
  * Integración con microservicio: https://v0-micro-saa-s-snowy.vercel.app
  */
 
-import { rutasInteligentesClient, RutasInteligentesError } from './rutasInteligentesClient'
+import { rutasInteligentesClient, RutasInteligentesClient, RutasInteligentesError } from './rutasInteligentesClient'
 import type { Location } from '@/lib/types/rutas-inteligentes.types'
 
 /**
@@ -38,8 +38,8 @@ export interface CostParams {
  */
 export async function generateRouteFromOrders(
   orders: any[],
-  startLat: number,
-  startLng: number,
+  startLat: number = DEFAULT_DEPOT.lat,
+  startLng: number = DEFAULT_DEPOT.lng,
   costParams?: CostParams,
   endLat?: number,
   endLng?: number
@@ -126,7 +126,7 @@ export async function generateRouteFromOrders(
     }
 
     // Validar ubicaciones
-    rutasInteligentesClient.constructor.validateLocations(locations)
+    RutasInteligentesClient.validateLocations(locations)
 
     // Preparar request
     const request: any = {

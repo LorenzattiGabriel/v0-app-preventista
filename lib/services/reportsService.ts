@@ -34,6 +34,24 @@ export interface FinancialReportData {
   previousPeriodTicket?: number
 }
 
+export interface AccountsReceivableData {
+  totalDebt: number
+  customersWithDebt: number
+  avgDebtPerCustomer: number
+  overdueDebt: number
+  recentPayments: number
+  topDebtors: Array<{
+    customerId: string
+    customerName: string
+    debt: number
+  }>
+  debtByAge: Array<{
+    range: string
+    amount: number
+    count: number
+  }>
+}
+
 export interface RevenueByZone {
   zone: string
   revenue: number
@@ -553,6 +571,104 @@ class ReportsService {
       },
       revenueByZone,
       paymentMethods,
+    }
+  }
+
+  async getAccountsReceivableReport(): Promise<AccountsReceivableData> {
+    // Get customers with debt
+    const { data: customersWithDebt, error: customersError } = await this.supabase
+      .from("customers")
+      .select("id, commercial_name, current_balance")
+      .gt("current_balance", 0)
+      .order("current_balance", { ascending: false })
+
+    if (customersError) {
+      console.error("Error fetching customers with debt:", customersError)
+    }
+
+    const totalDebt = customersWithDebt?.reduce((sum, c) => sum + (c.current_balance || 0), 0) || 0
+    const customersCount = customersWithDebt?.length || 0
+    const avgDebtPerCustomer = customersCount > 0 ? totalDebt / customersCount : 0
+
+    // Top 5 debtors
+    const topDebtors = (customersWithDebt || []).slice(0, 5).map(c => ({
+      customerId: c.id,
+      customerName: c.commercial_name,
+      debt: c.current_balance || 0,
+    }))
+
+    // Get overdue debt (orders with due_date < today and balance_due > 0)
+    const today = new Date().toISOString().split('T')[0]
+    const { data: overduePayments } = await this.supabase
+      .from("order_payments")
+      .select("balance_due, due_date")
+      .lt("due_date", today)
+      .gt("balance_due", 0)
+
+    const overdueDebt = overduePayments?.reduce((sum, p) => sum + (p.balance_due || 0), 0) || 0
+
+    // Get recent payments (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const { data: recentPaymentMovements } = await this.supabase
+      .from("customer_account_movements")
+      .select("credit_amount")
+      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA"])
+      .gte("created_at", thirtyDaysAgo.toISOString())
+
+    const recentPayments = recentPaymentMovements?.reduce((sum, m) => sum + (m.credit_amount || 0), 0) || 0
+
+    // Debt by age (based on movement creation date)
+    const { data: debtMovements } = await this.supabase
+      .from("customer_account_movements")
+      .select("debit_amount, created_at, customer_id")
+      .eq("movement_type", "DEUDA_PEDIDO")
+      .gt("debit_amount", 0)
+
+    // Calculate debt age ranges
+    const now = new Date()
+    const debtByAgeMap = {
+      "0-30 días": { amount: 0, count: 0 },
+      "31-60 días": { amount: 0, count: 0 },
+      "61-90 días": { amount: 0, count: 0 },
+      "+90 días": { amount: 0, count: 0 },
+    }
+
+    debtMovements?.forEach(movement => {
+      const createdAt = new Date(movement.created_at)
+      const daysDiff = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      const amount = movement.debit_amount || 0
+
+      if (daysDiff <= 30) {
+        debtByAgeMap["0-30 días"].amount += amount
+        debtByAgeMap["0-30 días"].count++
+      } else if (daysDiff <= 60) {
+        debtByAgeMap["31-60 días"].amount += amount
+        debtByAgeMap["31-60 días"].count++
+      } else if (daysDiff <= 90) {
+        debtByAgeMap["61-90 días"].amount += amount
+        debtByAgeMap["61-90 días"].count++
+      } else {
+        debtByAgeMap["+90 días"].amount += amount
+        debtByAgeMap["+90 días"].count++
+      }
+    })
+
+    const debtByAge = Object.entries(debtByAgeMap).map(([range, data]) => ({
+      range,
+      amount: data.amount,
+      count: data.count,
+    }))
+
+    return {
+      totalDebt,
+      customersWithDebt: customersCount,
+      avgDebtPerCustomer,
+      overdueDebt,
+      recentPayments,
+      topDebtors,
+      debtByAge,
     }
   }
 }

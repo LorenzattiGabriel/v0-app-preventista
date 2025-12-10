@@ -127,27 +127,23 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
 
           // Reordenar pedidos según optimización
           const reorderedOrders = reorderOrdersByOptimization(
-            optimizedRoute.optimizedOrder,
+            optimizedRoute.data.optimizedOrder,
             orders
           )
-
-          // Extraer distancia y duración REALES
-          const distanceKm = optimizedRoute.routes[0].distance.value / 1000 // metros a km
-          const durationMinutes = optimizedRoute.routes[0].duration.value / 60 // segundos a minutos
 
           routes.push({
             zone: zoneName,
             zoneId: zoneId,
             orders: reorderedOrders,
-            totalDistance: distanceKm, // ✅ REAL del microservicio
-            estimatedDuration: durationMinutes, // ✅ REAL del microservicio
+            totalDistance: optimizedRoute.totalDistance, // ✅ REAL del microservicio (ya en km)
+            estimatedDuration: optimizedRoute.estimatedDuration, // ✅ REAL del microservicio (ya en minutos)
             googleMapsUrl: optimizedRoute.googleMapsUrl, // ✅ Link directo a Google Maps
-            optimizedRouteData: optimizedRoute, // ✅ Guardar toda la data
+            optimizedRouteData: optimizedRoute.data, // ✅ Guardar la data de la ruta
           })
 
           console.log(`✅ Ruta optimizada para ${zoneName}:`, {
-            distance: optimizedRoute.routes[0].distance.text,
-            duration: optimizedRoute.routes[0].duration.text,
+            distance: `${optimizedRoute.totalDistance.toFixed(1)} km`,
+            duration: `${Math.floor(optimizedRoute.estimatedDuration / 60)}h ${Math.floor(optimizedRoute.estimatedDuration % 60)}min`,
             orders: reorderedOrders.length,
           })
         } catch (error) {

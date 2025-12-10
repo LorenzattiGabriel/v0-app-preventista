@@ -23,6 +23,21 @@ export type ShortageReason = "sin_stock" | "producto_danado" | "producto_discont
 
 export type RouteStatus = "PLANIFICADO" | "EN_CURSO" | "COMPLETADO" | "CANCELADO"
 
+// Cuenta Corriente Types
+export type AccountMovementType =
+  | "DEUDA_PEDIDO"
+  | "PAGO_EFECTIVO"
+  | "PAGO_TRANSFERENCIA"
+  | "PAGO_TARJETA"
+  | "AJUSTE_CREDITO"
+  | "AJUSTE_DEBITO"
+  | "NOTA_CREDITO"
+  | "PAGO_ADELANTADO"
+
+export type PaymentStatus = "PENDIENTE" | "PAGO_PARCIAL" | "PAGADO" | "VENCIDO"
+
+export type PaymentMethod = "efectivo" | "transferencia" | "tarjeta"
+
 export interface Profile {
   id: string
   email: string
@@ -70,6 +85,7 @@ export interface Customer {
   created_by?: string
   observations?: string
   is_active: boolean
+  current_balance: number // Saldo cuenta corriente (positivo = deuda)
   created_at: string
   updated_at: string
 }
@@ -129,6 +145,7 @@ export interface Order {
   no_delivery_reason?: string // 🆕 MEDIUM-2: Reason for non-delivery
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
   payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
+  payment_status: PaymentStatus // Estado de pago del pedido
   updated_at: string
 }
 
@@ -179,6 +196,7 @@ export interface RouteOrder {
   actual_arrival_time?: string
   was_collected: boolean
   collected_amount?: number
+  payment_method: PaymentMethod
   created_at: string
 }
 
@@ -189,4 +207,54 @@ export interface OrderRating {
   rating: number
   comments?: string
   created_at: string
+}
+
+// =====================================================
+// SISTEMA DE CUENTA CORRIENTE
+// =====================================================
+
+export interface CustomerAccountMovement {
+  id: string
+  customer_id: string
+  movement_type: AccountMovementType
+  description: string
+  debit_amount: number   // Aumenta deuda
+  credit_amount: number  // Reduce deuda (pago)
+  balance_after: number  // Saldo después del movimiento
+  order_id?: string
+  route_id?: string
+  created_by?: string
+  created_at: string
+  notes?: string
+}
+
+export interface OrderPayment {
+  id: string
+  order_id: string
+  order_total: number
+  total_paid: number
+  balance_due: number
+  payment_status: PaymentStatus
+  due_date?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RouteCashClosure {
+  id: string
+  route_id: string
+  driver_id: string
+  total_expected: number
+  total_collected: number
+  total_difference: number
+  total_orders: number
+  orders_delivered: number
+  orders_collected: number
+  cash_collected: number
+  transfer_collected: number
+  card_collected: number
+  closure_date: string
+  created_at: string
+  is_locked: boolean
+  notes?: string
 }
