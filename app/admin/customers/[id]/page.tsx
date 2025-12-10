@@ -594,4 +594,3 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     </div>
   )
 }
-
