@@ -360,4 +360,3 @@ export default async function AdminCustomersPage({
     </div>
   )
 }
-
