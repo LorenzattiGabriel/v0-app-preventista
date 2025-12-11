@@ -36,7 +36,7 @@ export type AccountMovementType =
 
 export type PaymentStatus = "PENDIENTE" | "PAGO_PARCIAL" | "PAGADO" | "VENCIDO"
 
-export type PaymentMethod = "efectivo" | "transferencia" | "tarjeta"
+
 
 export interface Profile {
   id: string
@@ -115,6 +115,25 @@ export interface Product {
   supplier?: string
 }
 
+export type PaymentMethod = 
+  | "Efectivo" 
+  | "Transferencia" 
+  | "Tarjeta de Débito" 
+  | "Tarjeta de Crédito" 
+  | "Cuenta Corriente" 
+  | "Cheque" 
+  | "Otro"
+
+export const PAYMENT_METHODS: PaymentMethod[] = [
+  "Efectivo",
+  "Transferencia",
+  "Tarjeta de Débito",
+  "Tarjeta de Crédito",
+  "Cuenta Corriente",
+  "Cheque",
+  "Otro"
+]
+
 export interface Order {
   id: string
   order_number: string
@@ -144,7 +163,7 @@ export interface Order {
   received_by_name?: string // 🆕 Name of person who received the order
   no_delivery_reason?: string // 🆕 MEDIUM-2: Reason for non-delivery
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
-  payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
+  payment_method?: PaymentMethod // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   payment_status: PaymentStatus // Estado de pago del pedido
   updated_at: string
 }
@@ -196,7 +215,7 @@ export interface RouteOrder {
   actual_arrival_time?: string
   was_collected: boolean
   collected_amount?: number
-  payment_method: PaymentMethod
+  payment_method?: PaymentMethod
   created_at: string
 }
 

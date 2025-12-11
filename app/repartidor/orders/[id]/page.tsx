@@ -4,7 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowLeft, MapPin, Camera, User, Calendar, CreditCard, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, MapPin, CheckCircle, AlertCircle, Clock } from "lucide-react"
+import { ReceiptButton } from "@/components/repartidor/receipt-button"
+import { ShareButtons } from "@/components/repartidor/share-buttons"
+import { Camera, User, Calendar, CreditCard, CheckCircle2 } from "lucide-react"
 
 export default async function RepartidorOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -23,52 +26,42 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
     redirect("/auth/login")
   }
 
-  // Get order with all details
-  // Primero verificar si el pedido está en una ruta asignada al repartidor
+  // Get order details through route_orders using the specific route_order_id
   const { data: routeOrder } = await supabase
     .from("route_orders")
-    .select(`
-      order_id,
-      routes!inner (
-        id,
-        driver_id
-      )
-    `)
-    .eq("order_id", id)
-    .eq("routes.driver_id", user.id)
-    .single()
-
-  // Si no está en una ruta del repartidor, verificar si es delivered_by
-  const { data: order } = await supabase
-    .from("orders")
     .select(
       `
       *,
-      customers (
-        *
+      routes!inner (
+        id,
+        driver_id,
+        scheduled_date,
+        status
       ),
-      order_items (
+      orders!inner (
         *,
-        products:product_id (
+        customers (
           *
+        ),
+        order_items (
+          *,
+          products:product_id (
+            *
+          )
         )
       )
     `,
     )
     .eq("id", id)
+    .eq("routes.driver_id", user.id)
     .single()
 
-  // Verificar acceso: debe estar en una ruta del repartidor O ser delivered_by
-  if (!order || (!routeOrder && order.delivered_by !== user.id)) {
+  if (!routeOrder) {
     redirect("/repartidor/dashboard")
   }
 
-  // Obtener información de cobro si existe
-  const { data: routeOrderInfo } = await supabase
-    .from("route_orders")
-    .select("was_collected, collected_amount, payment_method, actual_arrival_time")
-    .eq("order_id", id)
-    .single()
+  const order = routeOrder.orders
+  const backLink = `/repartidor/routes/${routeOrder.route_id}`
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -82,16 +75,61 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
         <div className="container mx-auto max-w-4xl space-y-6">
           <div className="flex items-center justify-between">
             <Button variant="outline" asChild>
-              <Link href="/repartidor/dashboard">
+              <Link href={backLink}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Volver
               </Link>
             </Button>
+            
+            
+            <div className="flex gap-2">
+              <ShareButtons 
+                order={order} 
+                phone={order.customers?.phone} 
+                email={order.customers?.email}
+              />
+              <ReceiptButton 
+                order={{
+                  ...order,
+                  was_collected: routeOrder.was_collected,
+                  collected_amount: routeOrder.collected_amount
+                }} 
+                directDownload={true}
+              />
+            </div>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>{order.order_number}</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>{order.order_number}</CardTitle>
+                <div className="flex gap-2">
+                  {order.status === "ENTREGADO" && (
+                    <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                      <CheckCircle className="mr-1 h-3 w-3" />
+                      Entregado
+                    </Badge>
+                  )}
+                  {order.no_delivery_reason && (
+                    <Badge variant="destructive">
+                      <AlertCircle className="mr-1 h-3 w-3" />
+                      No Entregado
+                    </Badge>
+                  )}
+                  {order.status === "PENDIENTE_ENTREGA" && !order.no_delivery_reason && (
+                    <Badge variant="outline">
+                      <Clock className="mr-1 h-3 w-3" />
+                      Pendiente
+                    </Badge>
+                  )}
+                  {order.status === "EN_REPARTICION" && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200">
+                      <Clock className="mr-1 h-3 w-3" />
+                      En Reparto
+                    </Badge>
+                  )}
+                </div>
+              </div>
               <CardDescription>Información del pedido</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -109,6 +147,41 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                   {order.customers.phone && (
                     <p className="text-sm text-muted-foreground">Tel: {order.customers.phone}</p>
                   )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Orden de entrega</span>
+                  <p className="font-semibold text-lg">#{routeOrder.delivery_order}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Estado de cobro</span>
+                  <div className="flex items-center gap-2">
+                    {routeOrder.was_collected ? (
+                      <Badge variant="default" className="bg-green-600 hover:bg-green-700">Cobrado</Badge>
+                    ) : (
+                      <Badge variant="outline">Pendiente</Badge>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Forma de Pago</span>
+                  <p className="font-semibold text-lg">{order.payment_method}</p>
+                </div>
+                {routeOrder.was_collected && (
+                  <div className="col-span-2">
+                    <span className="text-sm font-medium text-muted-foreground">Monto cobrado</span>
+                    <p className="font-semibold text-lg">${routeOrder.collected_amount?.toFixed(2)}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Llegada estimada</span>
+                  <p>{routeOrder.estimated_arrival_time ? new Date(routeOrder.estimated_arrival_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-muted-foreground">Llegada real</span>
+                  <p>{routeOrder.actual_arrival_time ? new Date(routeOrder.actual_arrival_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</p>
                 </div>
               </div>
 
@@ -235,33 +308,31 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                 </div>
 
                 {/* Información de cobro */}
-                {routeOrderInfo && (
+                {routeOrder && (
                   <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border space-y-3">
                     <div className="flex items-center gap-2 font-medium">
                       <CreditCard className="h-5 w-5 text-green-600" />
                       Información de Cobro
                     </div>
                     
-                    {routeOrderInfo.was_collected ? (
+                    {routeOrder.was_collected ? (
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Monto Cobrado</p>
                           <p className="text-xl font-bold text-green-600">
-                            ${routeOrderInfo.collected_amount?.toFixed(2) || "0.00"}
+                            ${routeOrder.collected_amount?.toFixed(2) || "0.00"}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Método de Pago</p>
                           <Badge variant="outline" className="mt-1">
-                            {routeOrderInfo.payment_method === "efectivo" && "💵 Efectivo"}
-                            {routeOrderInfo.payment_method === "transferencia" && "🏦 Transferencia"}
-                            {routeOrderInfo.payment_method === "tarjeta" && "💳 Tarjeta"}
+                            {order.payment_method }
                           </Badge>
                         </div>
-                        {routeOrderInfo.collected_amount < order.total && (
+                        {routeOrder.collected_amount < order.total && (
                           <div className="col-span-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
                             <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                              ⚠️ Deuda generada: <strong>${(order.total - routeOrderInfo.collected_amount).toFixed(2)}</strong>
+                              ⚠️ Deuda generada: <strong>${(order.total - routeOrder.collected_amount).toFixed(2)}</strong>
                             </p>
                           </div>
                         )}

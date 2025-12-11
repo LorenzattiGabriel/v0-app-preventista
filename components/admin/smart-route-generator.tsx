@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Zone, Profile } from "@/lib/types/database"
-import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle } from "lucide-react"
+import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, Calendar, ArrowUpDown, Filter } from "lucide-react"
 import Link from "next/link"
 import { generateRouteFromOrders } from "@/lib/services/rutasInteligentesService"
 import { RutasInteligentesError } from "@/lib/services/rutasInteligentesClient"
@@ -106,6 +106,53 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
   // Filtered orders by zone and date
   const [availableOrders, setAvailableOrders] = useState<any[]>([])
 
+  // UI Filters & Sorting
+
+
+  const PRIORITY_WEIGHTS: Record<string, number> = {
+    urgente: 5,
+    alta: 4,
+    media: 3,
+    normal: 2,
+    baja: 1
+  }
+
+  // State for sorting and filtering
+  const [filterPriority, setFilterPriority] = useState<string>("all")
+  const [sortBy, setSortBy] = useState<"date" | "priority">("priority")
+  // Sort order is now fixed: Priority always Highest->Lowest, Date always Oldest->Newest
+
+  // Derived state for displayed orders
+  const displayedOrders = availableOrders.filter(order => {
+    if (filterPriority === "all") return true
+    return order.priority === filterPriority
+  }).sort((a, b) => {
+    // Helper to get weight
+    const getWeight = (p: string) => PRIORITY_WEIGHTS[p] || 0
+    // Helper to get time
+    const getTime = (d: string) => new Date(d || "").getTime()
+
+    if (sortBy === "priority") {
+       // Primary: Priority (ALWAYS Highest First)
+       const weightA = getWeight(a.priority)
+       const weightB = getWeight(b.priority)
+       if (weightA !== weightB) {
+         return weightB - weightA // Descending (5 -> 1)
+       }
+       // Secondary: Date (ALWAYS Oldest First)
+       return getTime(a.delivery_date) - getTime(b.delivery_date)
+    } else {
+       // Primary: Date (ALWAYS Oldest First)
+       const dateA = getTime(a.delivery_date)
+       const dateB = getTime(b.delivery_date)
+       if (dateA !== dateB) {
+         return dateA - dateB
+       }
+       // Secondary: Priority (Highest First)
+       return getWeight(b.priority) - getWeight(a.priority)
+    }
+  })
+
   // Update available orders when zone or date changes
   // Using clean filtering functions for better maintainability
   useEffect(() => {
@@ -120,7 +167,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
       zone: selectedZone,
       totalPending: pendingOrders.length,
       filtered: filtered.length,
-      withAmounts: filtered.filter(o => o.total_amount).length
+      withAmounts: filtered.filter(o => o.total).length
     })
 
     setAvailableOrders(filtered)
@@ -303,7 +350,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
           customer_name: order.customers.commercial_name || order.customers.name,
           address: `${order.customers.street} ${order.customers.street_number}`,
           delivery_order: index + 1,
-          total_amount: order.total_amount
+          total_amount: order.total
         })),
         costCalculation: generatedRoute.costCalculation,
         optimizationData: generatedRoute.optimizedRouteData,
@@ -383,9 +430,9 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
     }
   }
 
-  // Get orders without coordinates for the selected date
+  // Get orders without coordinates for the selected date (including backlog)
   const ordersWithoutCoords = filterOrdersWithoutCoordinates(
-    pendingOrders.filter(order => order.delivery_date === deliveryDate)
+    pendingOrders.filter(order => order.delivery_date <= deliveryDate)
   )
   
   // Debug: Log cuando cambia la selección
@@ -505,27 +552,81 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
               {/* Orders Dashboard */}
               {availableOrders.length > 0 && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base font-semibold">Pedidos Disponibles</Label>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
-                        {selectedZone === "all" && " (todas las zonas)"}
-                      </p>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <Label className="text-base font-semibold">Pedidos Disponibles</Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
+                          {selectedZone === "all" && " (todas las zonas)"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAllOrders}
+                      >
+                        {selectedOrderIds.length === availableOrders.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSelectAllOrders}
-                    >
-                      {selectedOrderIds.length === availableOrders.length ? "Deseleccionar todos" : "Seleccionar todos"}
-                    </Button>
+
+                    {/* Filters & Sort Controls */}
+                    <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/30 rounded-lg border">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-medium mr-1">Filtrar por Prioridad:</span>
+                        <Select value={filterPriority} onValueChange={setFilterPriority}>
+                          <SelectTrigger className="w-[130px] h-8 text-xs">
+                            <SelectValue placeholder="Prioridad" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            <SelectItem value="urgente">Urgente</SelectItem>
+                            <SelectItem value="alta">Alta</SelectItem>
+                            <SelectItem value="media">Media</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="baja">Baja</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="h-4 w-px bg-border mx-1" />
+
+                      <div className="flex items-center gap-2">
+                        <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-medium mr-1">Ordenar:</span>
+                        
+                        <div className="flex items-center gap-2">
+                          <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                            <SelectTrigger className="w-[180px] h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="date">
+                                <span className="flex flex-col text-xs text-left">
+                                  <span>Principal: Fecha</span>
+                                  <span className="text-muted-foreground text-[10px]">Secundario: Prioridad</span>
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="priority">
+                                <span className="flex flex-col text-xs text-left">
+                                  <span>Principal: Prioridad</span>
+                                  <span className="text-muted-foreground text-[10px]">Secundario: Fecha</span>
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+
+
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Dashboard Grid - Using OrderCard component */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto p-1">
-                    {availableOrders.map((order) => (
+                    {displayedOrders.map((order) => (
                       <OrderCard
                         key={order.id}
                         order={order}
@@ -545,7 +646,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
 
               {deliveryDate && availableOrders.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay pedidos disponibles para {selectedZone === "all" ? "esta fecha" : "esta zona y fecha"} con coordenadas guardadas.
+                  No hay pedidos disponibles para {selectedZone === "all" ? "esta fecha (o anteriores)" : "esta zona y fecha (o anteriores)"} con coordenadas guardadas.
                 </p>
               )}
             </CardContent>

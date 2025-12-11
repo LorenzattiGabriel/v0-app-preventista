@@ -263,6 +263,36 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
     setError(null)
 
     try {
+      let lat = latitude
+      let lng = longitude
+
+      // Geocode address if required fields are filled but coordinates are missing
+      if (street && streetNumber && locality && province && (latitude === null || longitude === null)) {
+        const fullAddress = `${street} ${streetNumber}, ${locality}, ${province}`
+        console.log(`Geocoding address: ${fullAddress}`)
+
+        const geocodePromise = new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+          const geocoder = new google.maps.Geocoder()
+          geocoder.geocode({ address: fullAddress }, (results, status) => {
+            if (status === "OK" && results && results[0]) {
+              const location = results[0].geometry.location
+              resolve({ lat: location.lat(), lng: location.lng() })
+            } else {
+              reject(new Error(`Geocoding failed: ${status}`))
+            }
+          })
+        })
+
+        try {
+          const coords = await geocodePromise
+          lat = coords.lat
+          lng = coords.lng
+          console.log(`Geocoding successful:`, { lat, lng })
+        } catch (geocodeError) {
+          console.warn("Geocoding failed, saving customer without coordinates.", geocodeError)
+        }
+      }
+
       const supabase = createClient()
 
       // Generate customer code
@@ -294,8 +324,8 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         locality,
         province,
         postal_code: postalCode || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
+        latitude: lat,
+        longitude: lng,
         legal_name: legalName || null,
         tax_id: taxId || null,
         customer_type: customerType,
