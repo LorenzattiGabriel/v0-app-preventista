@@ -52,8 +52,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const { saveOrder, isLoading, error, setError, calculateTotals } = useOrderFormActions()
 
   // Form state
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialOrderData?.selectedCustomer || null)
-  const [deliveryDate, setDeliveryDate] = useState(initialOrderData?.deliveryDate || "")
+  const [deliveryDate, setDeliveryDate] = useState(initialOrderData?.deliveryDate || tomorrow)
   const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
   const [orderType, setOrderType] = useState<OrderType>(initialOrderData?.orderType || "presencial")
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
@@ -205,14 +206,21 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="deliveryDate">Fecha de Entrega</Label>
+              <Label htmlFor="deliveryDate" className="font-semibold">
+                📅 Fecha de Entrega <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="deliveryDate"
                 type="date"
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
                 min={new Date().toISOString().split("T")[0]}
+                className="border-2 border-primary/50 focus:border-primary"
+                required
               />
+              <p className="text-xs text-muted-foreground">
+                El admin generará rutas para esta fecha
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -310,36 +318,39 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           <CardDescription>Agregue productos al pedido</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-12 gap-4">
-            <div className="col-span-4 space-y-2">
-              <Label htmlFor="product">Producto</Label>
-              <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar producto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} {product.brand && `- ${product.brand}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Selector de producto - ancho completo */}
+          <div className="space-y-2">
+            <Label htmlFor="product">Producto</Label>
+            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar producto" />
+              </SelectTrigger>
+              <SelectContent>
+                {products.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name} {product.brand && `- ${product.brand}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="quantity">Cantidad</Label>
+          {/* Campos numéricos en grilla responsive */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="quantity" className="text-xs sm:text-sm">Cantidad</Label>
               <Input
                 id="quantity"
                 type="number"
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(Number.parseInt(e.target.value) || 1)}
+                className="text-center"
               />
             </div>
 
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="unitPrice">Precio Unit.</Label>
+            <div className="space-y-2">
+              <Label htmlFor="unitPrice" className="text-xs sm:text-sm">Precio</Label>
               <Input
                 id="unitPrice"
                 type="number"
@@ -356,8 +367,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               />
             </div>
 
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="itemDiscount">Descuento</Label>
+            <div className="space-y-2">
+              <Label htmlFor="itemDiscount" className="text-xs sm:text-sm">Descuento</Label>
               <Input
                 id="itemDiscount"
                 type="number"
@@ -367,14 +378,17 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 onChange={(e) => setItemDiscount(Number.parseFloat(e.target.value) || 0)}
               />
             </div>
-
-            <div className="col-span-2 flex items-end">
-              <Button onClick={handleAddProduct} disabled={!selectedProductId || quantity <= 0} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                Agregar
-              </Button>
-            </div>
           </div>
+
+          {/* Botón agregar - ancho completo en móvil */}
+          <Button 
+            onClick={handleAddProduct} 
+            disabled={!selectedProductId || quantity <= 0} 
+            className="w-full"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Agregar Producto
+          </Button>
 
           {orderItems.length > 0 && (
             <div className="border rounded-md overflow-x-auto -mx-4 md:mx-0">

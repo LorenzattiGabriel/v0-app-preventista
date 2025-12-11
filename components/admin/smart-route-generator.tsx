@@ -26,10 +26,10 @@ import {
 } from "@/lib/utils/order-filters"
 import { revalidateDashboard } from "@/app/actions/revalidate"
 
-// Coordenadas de Córdoba (hardcodeadas como punto de partida y llegada)
-const CORDOBA_COORDS = {
-  lat: -31.4190387,
-  lng: -64.1884742,
+// Coordenadas por defecto (solo si no hay depot configurado)
+const DEFAULT_COORDS = {
+  lat: -31.4201,
+  lng: -64.1888,
   address: "Córdoba, Argentina"
 }
 
@@ -38,6 +38,7 @@ interface SmartRouteGeneratorProps {
   drivers: Profile[]
   pendingOrders: any[]
   userId: string
+  depot: any | null // Depot configurado
 }
 
 interface CostCalculation {
@@ -70,12 +71,19 @@ interface GeneratedRoute {
   costCalculation?: CostCalculation
 }
 
-export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: SmartRouteGeneratorProps) {
+export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("configurar")
+
+  // Usar depot configurado o coordenadas por defecto
+  const startCoords = {
+    lat: depot?.latitude || DEFAULT_COORDS.lat,
+    lng: depot?.longitude || DEFAULT_COORDS.lng,
+    address: depot?.name || DEFAULT_COORDS.address
+  }
 
   // Form state
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split("T")[0])
@@ -209,11 +217,11 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
         })
       }
 
-      // Call microservice
+      // Call microservice con coordenadas del depot configurado
       const routeResponse = await generateRouteFromOrders(
         ordersToRoute,
-        CORDOBA_COORDS.lat,
-        CORDOBA_COORDS.lng,
+        startCoords.lat,
+        startCoords.lng,
         costParams
       )
 
@@ -750,7 +758,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                       {/* Mapa embebido */}
                       <div className="relative w-full h-64 rounded-lg overflow-hidden border-2 border-blue-300 dark:border-blue-700">
                         <iframe
-                          src={`https://www.google.com/maps/embed/v1/directions?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDRsczXb0roqcWOV3EXW9DCMVph0FKzpwY'}&origin=${CORDOBA_COORDS.lat},${CORDOBA_COORDS.lng}&destination=${CORDOBA_COORDS.lat},${CORDOBA_COORDS.lng}&waypoints=${generatedRoute.orders.map(o => `${o.customers.latitude},${o.customers.longitude}`).join('|')}`}
+                          src={`https://www.google.com/maps/embed/v1/directions?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDRsczXb0roqcWOV3EXW9DCMVph0FKzpwY'}&origin=${startCoords.lat},${startCoords.lng}&destination=${startCoords.lat},${startCoords.lng}&waypoints=${generatedRoute.orders.map(o => `${o.customers.latitude},${o.customers.longitude}`).join('|')}`}
                           width="100%"
                           height="100%"
                           style={{ border: 0 }}
@@ -872,7 +880,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                         <span className="flex items-center justify-center w-8 h-8 bg-green-600 text-white rounded-full text-sm font-bold">
                           ▶
                         </span>
-                        <span className="text-sm font-medium">Partida: {CORDOBA_COORDS.address}</span>
+                        <span className="text-sm font-medium">Partida: {startCoords.address}</span>
                       </li>
                       {generatedRoute.orders.map((order, index) => (
                         <li key={order.id} className="flex items-center gap-3 p-3 hover:bg-muted rounded border-l-4 border-blue-500">
@@ -907,7 +915,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId }: S
                         <span className="flex items-center justify-center w-8 h-8 bg-red-600 text-white rounded-full text-sm font-bold">
                           ■
                         </span>
-                        <span className="text-sm font-medium">Llegada: {CORDOBA_COORDS.address}</span>
+                        <span className="text-sm font-medium">Llegada: {startCoords.address}</span>
                       </li>
                     </ol>
                   </div>

@@ -7,6 +7,7 @@ import Link from "next/link"
 import { ArrowLeft, MapPin, CheckCircle, AlertCircle, Clock } from "lucide-react"
 import { ReceiptButton } from "@/components/repartidor/receipt-button"
 import { ShareButtons } from "@/components/repartidor/share-buttons"
+import { Camera, User, Calendar, CreditCard, CheckCircle2 } from "lucide-react"
 
 export default async function RepartidorOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -166,7 +167,7 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                 </div>
                 <div>
                   <span className="text-sm font-medium text-muted-foreground">Forma de Pago</span>
-                  <p className="font-semibold text-lg">{routeOrder.payment_method || order.payment_method || "Efectivo"}</p>
+                  <p className="font-semibold text-lg">{order.payment_method}</p>
                 </div>
                 {routeOrder.was_collected && (
                   <div className="col-span-2">
@@ -188,43 +189,6 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                 <div className="bg-muted p-3 rounded-md">
                   <span className="font-medium text-sm">Observaciones:</span>
                   <p className="text-sm text-muted-foreground mt-1">{order.observations}</p>
-                </div>
-              )}
-
-              {/* Delivery Evidence */}
-              {order.status === "ENTREGADO" && (
-                <div className="space-y-4 pt-4 border-t">
-                  <h3 className="font-semibold">Comprobante de Entrega</h3>
-                  
-                  <div className="grid gap-4">
-                    {order.received_by_name && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Recibido por:</span>
-                        <span className="font-medium">{order.received_by_name}</span>
-                      </div>
-                    )}
-
-                    {order.delivery_photo_url && (
-                        <div className="rounded-lg overflow-hidden border bg-muted/20">
-                           {/* Use standard img for now to avoid Next.js Image config issues with external URLs */}
-                           <img 
-                             src={order.delivery_photo_url} 
-                             alt="Foto de entrega" 
-                             className="w-full h-auto object-contain max-h-[400px]"
-                           />
-                           <div className="p-2 text-xs text-center text-muted-foreground bg-muted/50">
-                             <a 
-                               href={order.delivery_photo_url} 
-                               target="_blank" 
-                               rel="noopener noreferrer"
-                               className="hover:underline"
-                             >
-                               Ver imagen original
-                             </a>
-                           </div>
-                        </div>
-                    )}
-                  </div>
                 </div>
               )}
             </CardContent>
@@ -276,6 +240,146 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
               </div>
             </CardContent>
           </Card>
+
+          {/* Comprobante de Entrega - Solo si está entregado */}
+          {order.status === "ENTREGADO" && (
+            <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                  Comprobante de Entrega
+                </CardTitle>
+                <CardDescription>Evidencia de la entrega realizada</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Foto de entrega */}
+                {order.delivery_photo_url && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Camera className="h-4 w-4" />
+                      Foto de Entrega
+                    </div>
+                    <div className="relative">
+                      <img
+                        src={order.delivery_photo_url}
+                        alt="Foto de entrega"
+                        className="w-full max-w-md mx-auto rounded-lg border-2 border-green-300 shadow-md"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Información de entrega */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Recibido por */}
+                  {order.received_by_name && (
+                    <div className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border">
+                      <User className="h-5 w-5 text-blue-500 mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Recibido por</p>
+                        <p className="font-medium">{order.received_by_name}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fecha y hora */}
+                  {order.delivered_at && (
+                    <div className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border">
+                      <Calendar className="h-5 w-5 text-purple-500 mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Fecha de Entrega</p>
+                        <p className="font-medium">
+                          {new Date(order.delivered_at).toLocaleDateString("es-AR", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(order.delivered_at).toLocaleTimeString("es-AR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Información de cobro */}
+                {routeOrder && (
+                  <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border space-y-3">
+                    <div className="flex items-center gap-2 font-medium">
+                      <CreditCard className="h-5 w-5 text-green-600" />
+                      Información de Cobro
+                    </div>
+                    
+                    {routeOrder.was_collected ? (
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Monto Cobrado</p>
+                          <p className="text-xl font-bold text-green-600">
+                            ${routeOrder.collected_amount?.toFixed(2) || "0.00"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Método de Pago</p>
+                          <Badge variant="outline" className="mt-1">
+                            {order.payment_method }
+                          </Badge>
+                        </div>
+                        {routeOrder.collected_amount < order.total && (
+                          <div className="col-span-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                              ⚠️ Deuda generada: <strong>${(order.total - routeOrder.collected_amount).toFixed(2)}</strong>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                          ⚠️ No se realizó cobro - Deuda total: <strong>${order.total.toFixed(2)}</strong>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Notas de entrega */}
+                {order.delivery_notes && (
+                  <div className="p-3 bg-white dark:bg-gray-900 rounded-lg border">
+                    <p className="text-xs text-muted-foreground mb-1">Notas de Entrega</p>
+                    <p className="text-sm">{order.delivery_notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Motivo de no entrega - Si aplica */}
+          {order.no_delivery_reason && (
+            <Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-800">
+              <CardHeader>
+                <CardTitle className="text-red-700 dark:text-red-400">
+                  ❌ No se pudo entregar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Motivo</p>
+                  <p className="font-medium">{order.no_delivery_reason}</p>
+                </div>
+                {order.no_delivery_notes && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Notas adicionales</p>
+                    <p className="text-sm">{order.no_delivery_notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>

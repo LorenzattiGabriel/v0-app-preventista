@@ -27,6 +27,8 @@ import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/types/database"
+import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
+
 
 interface DeliveryRouteViewProps {
   route: any
@@ -53,6 +55,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const [collectedAmount, setCollectedAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method state
   const [deliveryNotes, setDeliveryNotes] = useState("")
+
   
   // 🆕 New states for delivery evidence and non-delivery
   const [deliveryPhoto, setDeliveryPhoto] = useState<File | null>(null)
@@ -240,7 +243,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setCollectedAmount("")
     setPaymentMethod(order.payment_method || "Efectivo") // 🆕 Default to preferred or Cash
     setDeliveryNotes("")
-    // 🆕 Reset delivery evidence fields
+    setPaymentMethod("Efectivo")
+    // Reset delivery evidence fields
     setDeliveryPhoto(null)
     setPhotoPreview(null)
     setReceivedByName("")
@@ -337,6 +341,15 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       return
     }
 
+    // 🆕 Validate collected amount if marked as collected
+    if (wasCollected) {
+      const amount = Number.parseFloat(collectedAmount)
+      if (!collectedAmount || isNaN(amount) || amount <= 0) {
+        setError("Debe ingresar un monto cobrado válido (mayor a $0)")
+        return
+      }
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -344,26 +357,39 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       const supabase = createClient()
 
       // 1. Upload photo to Supabase Storage
-      const fileExt = deliveryPhoto.name.split('.').pop()
-      const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
-      const filePath = `${fileName}`
+      let publicUrl = ""
+      
+      try {
+        const fileExt = deliveryPhoto.name.split('.').pop()
+        const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
+        const filePath = `${fileName}`
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('delivery')
-        .upload(filePath, deliveryPhoto, {
-          cacheControl: '3600',
-          upsert: false
-        })
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('delivery')
+          .upload(filePath, deliveryPhoto, {
+            cacheControl: '3600',
+            upsert: false
+          })
 
-      if (uploadError) {
-        console.error("Error uploading photo:", uploadError)
-        throw new Error("Error al subir la foto de entrega")
+        if (uploadError) {
+          console.error("Error uploading photo:", uploadError)
+          // Si el bucket no existe, continuamos sin foto
+          if (uploadError.message?.includes("Bucket not found") || uploadError.message?.includes("not found")) {
+            console.warn("[v0] Storage bucket 'delivery' not found - continuing without photo")
+          } else {
+            throw new Error(`Error al subir la foto: ${uploadError.message}`)
+          }
+        } else {
+          // 2. Get public URL only if upload succeeded
+          const { data } = supabase.storage
+            .from('delivery')
+            .getPublicUrl(filePath)
+          publicUrl = data.publicUrl
+        }
+      } catch (storageError: any) {
+        console.warn("[v0] Storage error (continuing without photo):", storageError)
+        // Continuar sin foto si hay error de storage
       }
-
-      // 2. Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('delivery')
-        .getPublicUrl(filePath)
 
       // 3. Update order with delivery evidence
       const { error: orderError } = await supabase
@@ -380,18 +406,44 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       if (orderError) throw orderError
 
       // Update route_orders
+      const collectedAmountNum = wasCollected ? Number.parseFloat(collectedAmount) || 0 : 0
       const { error: routeOrderError } = await supabase
         .from("route_orders")
         .update({
           actual_arrival_time: new Date().toISOString(),
           was_collected: wasCollected,
           collected_amount: wasCollected ? Number.parseFloat(collectedAmount) || 0 : null,
-          payment_method: wasCollected ? paymentMethod : null, // 🆕 Save payment method
+          payment_method: wasCollected ? paymentMethod : "Efectivo", // 🆕 Save payment method
         })
         .eq("route_id", route.id)
         .eq("order_id", selectedOrder.id)
 
       if (routeOrderError) throw routeOrderError
+
+      // 🆕 Actualizar estado de pago del pedido y generar deuda si hay faltante
+      const orderTotal = selectedOrder.total || 0
+      const debtAmount = orderTotal - collectedAmountNum
+
+      // Intentar usar el sistema de cuenta corriente si las tablas existen
+      try {
+        const accountService = createAccountMovementsService(supabase)
+        
+        // Actualizar el estado de pago del pedido (sin afectar cuenta corriente para cobros al momento)
+        await accountService.updateOrderPayment({
+          orderId: selectedOrder.id,
+          amountPaid: collectedAmountNum,
+        })
+
+        // Solo generar deuda en cuenta corriente si hay faltante
+        // El cobro al momento NO es un "pago de deuda", es dinero recibido directamente
+        if (debtAmount > 0) {
+          await accountService.generateDebt(selectedOrder.id, debtAmount, route.id, userId)
+        }
+      } catch (accountError) {
+        // Si las tablas de cuenta corriente no existen, continuar sin error
+        // Esto permite usar el sistema sin la migración de cuenta corriente
+        console.warn("[v0] Account system not available (tables may not exist):", accountError)
+      }
 
       // Create history entry
       await supabase.from("order_history").insert({
@@ -399,7 +451,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         previous_status: "EN_REPARTICION",
         new_status: "ENTREGADO",
         changed_by: userId,
-        change_reason: "Entrega confirmada",
+        change_reason: wasCollected 
+          ? `Entrega confirmada - Cobrado: $${collectedAmountNum.toFixed(2)} (${paymentMethod})${debtAmount > 0 ? ` - Deuda: $${debtAmount.toFixed(2)}` : ""}`
+          : `Entrega confirmada - Sin cobro - Deuda: $${orderTotal.toFixed(2)}`,
       })
 
       setShowDeliveryDialog(false)
@@ -415,19 +469,43 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
   // 🆕 MEDIUM-3: Show route summary before completing
   const handleShowRouteSummary = () => {
-    const supabase = createClient()
-    
     // Calculate summary statistics
     const orders = route.route_orders.map((ro: any) => ro.orders)
     const delivered = orders.filter((o: any) => o.status === "ENTREGADO")
     const notDelivered = orders.filter((o: any) => o.status !== "ENTREGADO" && o.no_delivery_reason)
     
-    const totalExpected = orders.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
+    // Solo contar totales de pedidos ENTREGADOS
+    const totalExpected = delivered.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
     
-    // Get collected amounts from route_orders
-    const totalCollected = route.route_orders
-      .filter((ro: any) => ro.was_collected)
-      .reduce((sum: number, ro: any) => sum + (ro.collected_amount || 0), 0)
+    // Desglose por método de pago
+    const collectedByMethod = route.route_orders
+      .filter((ro: any) => ro.was_collected && ro.orders?.status === "ENTREGADO")
+      .reduce((acc: any, ro: any) => {
+        const method = ro.payment_method || "efectivo"
+        acc[method] = (acc[method] || 0) + (ro.collected_amount || 0)
+        return acc
+      }, { efectivo: 0, transferencia: 0, tarjeta: 0 })
+    
+    const totalCollected = collectedByMethod.efectivo + collectedByMethod.transferencia + collectedByMethod.tarjeta
+
+    // Detalle de pedidos entregados con cobros y deudas
+    const deliveredOrders = route.route_orders
+      .filter((ro: any) => ro.orders?.status === "ENTREGADO")
+      .map((ro: any) => {
+        const order = ro.orders
+        const orderTotal = order.total || 0
+        const collectedAmount = ro.was_collected ? (ro.collected_amount || 0) : 0
+        const debtAmount = orderTotal - collectedAmount
+        return {
+          orderNumber: order.order_number,
+          customer: order.customers?.commercial_name || order.customers?.name,
+          orderTotal,
+          collectedAmount,
+          debtAmount,
+          paymentMethod: ro.payment_method || "efectivo",
+          wasCollected: ro.was_collected,
+        }
+      })
     
     const summary = {
       totalOrders: orders.length,
@@ -436,6 +514,12 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       totalExpected,
       totalCollected,
       difference: totalExpected - totalCollected,
+      // Desglose por método
+      cashCollected: collectedByMethod.efectivo,
+      transferCollected: collectedByMethod.transferencia,
+      cardCollected: collectedByMethod.tarjeta,
+      // Detalle de pedidos entregados
+      deliveredOrders,
       notDeliveredOrders: notDelivered.map((o: any) => ({
         orderNumber: o.order_number,
         customer: o.customers?.commercial_name || o.customers?.name,
@@ -566,6 +650,32 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         .eq("id", route.id)
 
       if (routeError) throw routeError
+
+      // 🆕 Crear cierre de caja automático e inmutable
+      const accountService = createAccountMovementsService(supabase)
+      
+      // Obtener datos actualizados de route_orders para el cierre
+      const { data: finalRouteOrders } = await supabase
+        .from("route_orders")
+        .select("order_id, was_collected, collected_amount, payment_method, orders(total, status)")
+        .eq("route_id", route.id)
+
+      const ordersForClosure = (finalRouteOrders || [])
+        .filter((ro: any) => ro.orders?.status === "ENTREGADO")
+        .map((ro: any) => ({
+          total: ro.orders?.total || 0,
+          wasCollected: ro.was_collected || false,
+          collectedAmount: ro.collected_amount || 0,
+          paymentMethod: (ro.payment_method || "efectivo") as PaymentMethod,
+        }))
+
+      if (ordersForClosure.length > 0) {
+        await accountService.createCashClosure({
+          routeId: route.id,
+          driverId: userId,
+          orders: ordersForClosure,
+        })
+      }
 
       setShowSummaryDialog(false)
       router.push("/repartidor/dashboard")
@@ -1068,8 +1178,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
               // Normal delivery form
               <>
                 {/* 🆕 Delivery Photo Evidence */}
-                <div className="space-y-2 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
-                  <Label htmlFor="delivery-photo" className="font-bold text-blue-900 dark:text-blue-100">
+                <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
+                  <Label className="font-bold text-blue-900 dark:text-blue-100">
                     📸 Foto de Entrega *
                   </Label>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
@@ -1077,12 +1187,29 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   </p>
                   <CameraCapture onCapture={handlePhotoCapture} />
                   {photoPreview && (
-                    <div className="mt-2">
-                      <img
-                        src={photoPreview}
-                        alt="Preview"
-                        className="w-full max-w-xs mx-auto rounded-lg border-2 border-blue-300"
-                      />
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
+                        />
+                        <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                          ✓ Foto cargada
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDeliveryPhoto(null)
+                          setPhotoPreview(null)
+                        }}
+                        className="w-full"
+                      >
+                        🔄 Cambiar foto
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1106,14 +1233,25 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   <Checkbox
                     id="collected"
                     checked={wasCollected}
-                    onCheckedChange={(checked) => setWasCollected(checked as boolean)}
+                    onCheckedChange={(checked) => {
+                      setWasCollected(checked as boolean)
+                      if (checked && selectedOrder?.total) {
+                        setCollectedAmount(selectedOrder.total.toFixed(2))
+                      }
+                    }}
                   />
                   <Label htmlFor="collected" className="font-normal">
                     Se cobró el pedido
                   </Label>
                 </div>
 
-                {wasCollected && (
+                {wasCollected && (() => {
+                  const amount = Number.parseFloat(collectedAmount) || 0
+                  const total = selectedOrder?.total || 0
+                  const debt = total - amount
+                  const isExact = Math.abs(debt) <= 0.01
+                  
+                  return (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="payment-method">Método de Pago</Label>
@@ -1130,18 +1268,48 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                         </SelectContent>
                       </Select>
                     </div>  
-                    <div className="space-y-2">
-                    <Label htmlFor="amount">Importe Cobrado ($)</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      placeholder={selectedOrder?.total?.toFixed(2)}
-                      value={collectedAmount}
-                      onChange={(e) => setCollectedAmount(e.target.value)}
-                    />
+
+                      <div className="space-y-2">
+                        <Label htmlFor="amount">Importe Cobrado ($) *</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={collectedAmount}
+                          onChange={(e) => setCollectedAmount(e.target.value)}
+                          className={!isExact && collectedAmount ? "border-yellow-500" : ""}
+                        />
+                        {collectedAmount && (
+                          <p className={`text-xs ${isExact ? "text-green-600" : "text-yellow-600"}`}>
+                            {isExact ? "✅ Cobro completo" : debt > 0 ? `⚠️ Quedará deuda: $${debt.toFixed(2)}` : `⚠️ Exceso: $${Math.abs(debt).toFixed(2)}`}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Total del pedido: <strong>${total.toFixed(2)}</strong>
+                        </p>
+                      </div>
+
+                      {/* Alerta de deuda */}
+                      {debt > 0 && collectedAmount && (
+                        <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3">
+                          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                            💳 Se generará una <strong>deuda de ${debt.toFixed(2)}</strong> en la cuenta corriente del cliente.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Info si NO se marca como cobrado */}
+                {!wasCollected && (
+                  <div className="bg-orange-50 dark:bg-orange-950 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
+                    <p className="text-sm text-orange-800 dark:text-orange-200">
+                      ⚠️ Si no se cobró, se generará una <strong>deuda de ${(selectedOrder?.total || 0).toFixed(2)}</strong> en la cuenta corriente del cliente.
+                    </p>
                   </div>
-                  </div>
+
                 )}
 
                 <div className="space-y-2">
@@ -1246,6 +1414,77 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                       : `✅ Cobrado completo (exceso de $${Math.abs(routeSummary.difference).toFixed(2)})`
                     }
                   </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                    Los clientes con pagos parciales tendrán esta deuda registrada automáticamente.
+                  </p>
+                </div>
+              )}
+
+              {/* Detalle de Pedidos Entregados */}
+              {routeSummary.deliveredOrders && routeSummary.deliveredOrders.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+                    📦 Detalle de Entregas ({routeSummary.deliveredCount})
+                  </h3>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left p-2 font-medium">Cliente</th>
+                          <th className="text-right p-2 font-medium">Total</th>
+                          <th className="text-right p-2 font-medium">Cobrado</th>
+                          <th className="text-right p-2 font-medium">Deuda</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routeSummary.deliveredOrders.map((order: any, idx: number) => (
+                          <tr key={idx} className="border-t">
+                            <td className="p-2">
+                              <div>
+                                <p className="font-medium text-xs">{order.orderNumber}</p>
+                                <p className="text-xs text-muted-foreground truncate max-w-[120px]">{order.customer}</p>
+                              </div>
+                            </td>
+                            <td className="p-2 text-right text-xs">
+                              ${order.orderTotal.toFixed(2)}
+                            </td>
+                            <td className="p-2 text-right">
+                              {order.wasCollected ? (
+                                <div>
+                                  <span className="text-xs text-green-600 font-medium">${order.collectedAmount.toFixed(2)}</span>
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    {order.paymentMethod === "efectivo" && "💵"}
+                                    {order.paymentMethod === "transferencia" && "🏦"}
+                                    {order.paymentMethod === "tarjeta" && "💳"}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </td>
+                            <td className="p-2 text-right">
+                              {order.debtAmount > 0 ? (
+                                <span className="text-xs text-red-600 font-medium">${order.debtAmount.toFixed(2)}</span>
+                              ) : (
+                                <span className="text-xs text-green-600">✓</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="border-t bg-muted/50 font-bold">
+                        <tr>
+                          <td className="p-2 text-xs">TOTALES</td>
+                          <td className="p-2 text-right text-xs">${routeSummary.totalExpected.toFixed(2)}</td>
+                          <td className="p-2 text-right text-xs text-green-600">${routeSummary.totalCollected.toFixed(2)}</td>
+                          <td className="p-2 text-right text-xs text-red-600">
+                            {routeSummary.difference > 0 ? `$${routeSummary.difference.toFixed(2)}` : "✓"}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               )}
 

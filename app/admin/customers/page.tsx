@@ -12,12 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import Link from "next/link"
-import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2, Plus } from "lucide-react"
+import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2, Plus, Wallet, AlertTriangle } from "lucide-react"
 
 export default async function AdminCustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; search?: string; zone?: string }>
+  searchParams: Promise<{ type?: string; search?: string; zone?: string; debt?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -53,11 +53,11 @@ export default async function AdminCustomersPage({
     `,
     )
 
-  if (params.type) {
+  if (params.type && params.type !== "all") {
     query = query.eq("customer_type", params.type)
   }
 
-  if (params.zone) {
+  if (params.zone && params.zone !== "all") {
     query = query.eq("zone_id", params.zone)
   }
 
@@ -67,7 +67,20 @@ export default async function AdminCustomersPage({
     )
   }
 
+  // Filtro de deuda
+  if (params.debt && params.debt !== "all") {
+    if (params.debt === "with_debt") {
+      query = query.gt("current_balance", 0)
+    } else if (params.debt === "no_debt") {
+      query = query.or("current_balance.lte.0,current_balance.is.null")
+    }
+  }
+
   const { data: customers } = await query.eq("is_active", true).order("commercial_name", { ascending: true }).limit(100)
+
+  // Calcular totales de deuda
+  const totalDebt = customers?.reduce((sum, c) => sum + (c.current_balance > 0 ? c.current_balance : 0), 0) || 0
+  const customersWithDebt = customers?.filter(c => c.current_balance > 0).length || 0
 
   // Count by type for stats
   const typeCounts = customers?.reduce(
@@ -132,7 +145,7 @@ export default async function AdminCustomersPage({
           </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
@@ -160,13 +173,32 @@ export default async function AdminCustomersPage({
                 <p className="text-xs text-muted-foreground">Clientes minoristas</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className={customersWithDebt > 0 ? "border-red-200 bg-red-50/50 dark:bg-red-950/20" : ""}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Zonas</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <AlertTriangle className={`h-4 w-4 ${customersWithDebt > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+                  Con Deuda
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{zones?.length || 0}</div>
-                <p className="text-xs text-muted-foreground">Zonas activas</p>
+                <div className={`text-2xl font-bold ${customersWithDebt > 0 ? "text-red-600" : ""}`}>
+                  {customersWithDebt}
+                </div>
+                <p className="text-xs text-muted-foreground">Clientes con saldo</p>
+              </CardContent>
+            </Card>
+            <Card className={totalDebt > 0 ? "border-red-200 bg-red-50/50 dark:bg-red-950/20" : ""}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Wallet className={`h-4 w-4 ${totalDebt > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+                  Total Deuda
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${totalDebt > 0 ? "text-red-600" : ""}`}>
+                  ${totalDebt.toFixed(2)}
+                </div>
+                <p className="text-xs text-muted-foreground">Cuentas corrientes</p>
               </CardContent>
             </Card>
           </div>
@@ -177,7 +209,9 @@ export default async function AdminCustomersPage({
               <CardTitle>Todos los Clientes</CardTitle>
               <CardDescription>
                 Gestiona y visualiza todos los clientes del sistema
-                {params.type && ` - Filtrando por: ${customerTypeLabels[params.type as keyof typeof customerTypeLabels]}`}
+                {params.type && params.type !== "all" && ` - Tipo: ${customerTypeLabels[params.type as keyof typeof customerTypeLabels] || params.type}`}
+                {params.debt === "with_debt" && " - 🔴 Solo con deuda"}
+                {params.debt === "no_debt" && " - 🟢 Solo sin deuda"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -216,6 +250,16 @@ export default async function AdminCustomersPage({
                       ))}
                     </SelectContent>
                   </Select>
+                  <Select name="debt" defaultValue={params.debt || "all"}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Deuda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="with_debt">🔴 Con deuda</SelectItem>
+                      <SelectItem value="no_debt">🟢 Sin deuda</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button type="submit">
                     <Search className="h-4 w-4 mr-2" />
                     Filtrar
@@ -237,6 +281,12 @@ export default async function AdminCustomersPage({
                               {customerTypeLabels[customer.customer_type as keyof typeof customerTypeLabels]}
                             </Badge>
                             <Badge variant="outline">{customer.code}</Badge>
+                            {customer.current_balance > 0 && (
+                              <Badge variant="destructive" className="gap-1">
+                                <Wallet className="h-3 w-3" />
+                                Deuda: ${customer.current_balance.toFixed(2)}
+                              </Badge>
+                            )}
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
@@ -310,4 +360,3 @@ export default async function AdminCustomersPage({
     </div>
   )
 }
-
