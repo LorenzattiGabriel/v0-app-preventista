@@ -36,7 +36,9 @@ export type AccountMovementType =
 
 export type PaymentStatus = "PENDIENTE" | "PAGO_PARCIAL" | "PAGADO" | "VENCIDO"
 
-export type PaymentMethod = "efectivo" | "transferencia" | "tarjeta"
+// PaymentMethod ahora se importa desde lib/constants/payment-methods.ts
+// Re-exportamos para compatibilidad
+export type { PaymentMethod } from "@/lib/constants/payment-methods"
 
 export interface Profile {
   id: string

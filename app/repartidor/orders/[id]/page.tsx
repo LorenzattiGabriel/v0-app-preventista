@@ -249,13 +249,15 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                         <div>
                           <p className="text-muted-foreground">Método de Pago</p>
                           <Badge variant="outline" className="mt-1">
-                            {order.payment_method === "efectivo" && "💵 Efectivo"}
-                            {order.payment_method === "transferencia" && "🏦 Transferencia"}
-                            {order.payment_method === "tarjeta" && "💳 Tarjeta"}
+                            {order.payment_method === "Efectivo" && "💵 Efectivo"}
+                            {order.payment_method === "Transferencia" && "🏦 Transferencia"}
+                            {order.payment_method === "Tarjeta de Crédito" && "💳 Tarjeta de Crédito"}
+                            {order.payment_method === "Tarjeta de Débito" && "💳 Tarjeta de Débito"}
+                            {!["Efectivo", "Transferencia", "Tarjeta de Crédito", "Tarjeta de Débito"].includes(order.payment_method) && order.payment_method}
                           </Badge>
                         </div>
                         {/* Mostrar comprobante de transferencia si existe */}
-                        {order.payment_method === "transferencia" && order.transfer_proof_url && (
+                        {order.payment_method === "Transferencia" && order.transfer_proof_url && (
                           <div className="col-span-2">
                             <p className="text-muted-foreground mb-2">Comprobante de Transferencia</p>
                             <a 

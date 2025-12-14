@@ -23,6 +23,11 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { DollarSign, Loader2 } from "lucide-react"
+import { 
+  PAYMENT_METHODS, 
+  getPaymentMethodLabel,
+  type PaymentMethod 
+} from "@/lib/constants/payment-methods"
 
 interface RegisterPaymentDialogProps {
   customerId: string
@@ -51,7 +56,7 @@ export function RegisterPaymentDialog({
   // Form state
   const [selectedOrder, setSelectedOrder] = useState<string>("")
   const [amount, setAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "transferencia" | "tarjeta">("transferencia")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS.TRANSFERENCIA)
   const [notes, setNotes] = useState("")
 
   const selectedOrderData = pendingOrders.find(o => o.id === selectedOrder)
@@ -113,7 +118,7 @@ export function RegisterPaymentDialog({
   const resetForm = () => {
     setSelectedOrder("")
     setAmount("")
-    setPaymentMethod("transferencia")
+    setPaymentMethod(PAYMENT_METHODS.TRANSFERENCIA)
     setNotes("")
     setError(null)
   }
@@ -205,14 +210,15 @@ export function RegisterPaymentDialog({
             {/* Método de pago */}
             <div className="space-y-2">
               <Label>Método de Pago *</Label>
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
+              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="transferencia">🏦 Transferencia</SelectItem>
-                  <SelectItem value="efectivo">💵 Efectivo</SelectItem>
-                  <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
+                  <SelectItem value={PAYMENT_METHODS.TRANSFERENCIA}>{getPaymentMethodLabel(PAYMENT_METHODS.TRANSFERENCIA)}</SelectItem>
+                  <SelectItem value={PAYMENT_METHODS.EFECTIVO}>{getPaymentMethodLabel(PAYMENT_METHODS.EFECTIVO)}</SelectItem>
+                  <SelectItem value={PAYMENT_METHODS.TARJETA_CREDITO}>{getPaymentMethodLabel(PAYMENT_METHODS.TARJETA_CREDITO)}</SelectItem>
+                  <SelectItem value={PAYMENT_METHODS.TARJETA_DEBITO}>{getPaymentMethodLabel(PAYMENT_METHODS.TARJETA_DEBITO)}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -238,7 +244,7 @@ export function RegisterPaymentDialog({
                 <ul className="text-sm text-blue-700 dark:text-blue-300 mt-2 space-y-1">
                   <li>• Pedido: {selectedOrderData?.order_number}</li>
                   <li>• Monto: ${parseFloat(amount).toFixed(2)}</li>
-                  <li>• Método: {paymentMethod === "transferencia" ? "Transferencia" : paymentMethod === "efectivo" ? "Efectivo" : "Tarjeta"}</li>
+                  <li>• Método: {getPaymentMethodLabel(paymentMethod)}</li>
                   <li>• Nueva deuda del pedido: ${Math.max(0, (selectedOrderData?.balance_due || 0) - parseFloat(amount)).toFixed(2)}</li>
                 </ul>
               </div>

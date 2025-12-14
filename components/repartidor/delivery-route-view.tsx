@@ -23,7 +23,13 @@ import {
 } from "@/components/ui/dialog"
 import { GeocodingService } from "@/lib/services/geocodingService"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
-import type { PaymentMethod } from "@/lib/types/database"
+import { 
+  PAYMENT_METHODS, 
+  DELIVERY_PAYMENT_METHODS,
+  requiresProof,
+  getPaymentMethodLabel,
+  type PaymentMethod 
+} from "@/lib/constants/payment-methods"
 
 interface DeliveryRouteViewProps {
   route: any
@@ -47,7 +53,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
   const [wasCollected, setWasCollected] = useState(false)
   const [collectedAmount, setCollectedAmount] = useState("")
   const [deliveryNotes, setDeliveryNotes] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS.EFECTIVO)
   
   // 🆕 New states for delivery evidence and non-delivery
   const [deliveryPhoto, setDeliveryPhoto] = useState<File | null>(null)
@@ -196,7 +202,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
     setWasCollected(false)
     setCollectedAmount("")
     setDeliveryNotes("")
-    setPaymentMethod("efectivo")
+    setPaymentMethod(PAYMENT_METHODS.EFECTIVO)
     // Reset delivery evidence fields
     setDeliveryPhoto(null)
     setPhotoPreview(null)
@@ -324,8 +330,8 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         return
       }
 
-      // 🆕 Validate transfer proof if payment method is "transferencia"
-      if (paymentMethod === "transferencia" && !transferProof) {
+      // 🆕 Validate transfer proof if payment method requires it
+      if (requiresProof(paymentMethod) && !transferProof) {
         setError("Debe adjuntar el comprobante de transferencia para este método de pago")
         return
       }
@@ -392,8 +398,8 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         bucketNotFound = true
       }
 
-      // 🆕 Upload transfer proof if payment method is "transferencia"
-      if (paymentMethod === "transferencia" && transferProof) {
+      // 🆕 Upload transfer proof if payment method requires it
+      if (requiresProof(paymentMethod) && transferProof) {
         // Si el bucket no existe, no intentamos subir el comprobante pero mostramos advertencia
         if (bucketNotFound) {
           console.warn("[v0] Skipping transfer proof upload - bucket not found")
@@ -540,7 +546,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       .filter((ro: any) => ro.orders?.was_collected_on_delivery && ro.orders?.status === "ENTREGADO")
       .reduce((acc: any, ro: any) => {
         const order = ro.orders
-        const method = order.payment_method || "efectivo"
+        const method = order.payment_method || "Efectivo"
         acc[method] = (acc[method] || 0) + (order.amount_paid || 0)
         return acc
       }, { efectivo: 0, transferencia: 0, tarjeta: 0 })
@@ -561,7 +567,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
           orderTotal,
           collectedAmount,
           debtAmount,
-          paymentMethod: order.payment_method || "efectivo",
+          paymentMethod: order.payment_method || PAYMENT_METHODS.EFECTIVO,
           wasCollected: order.was_collected_on_delivery,
         }
       })
@@ -713,7 +719,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
           total: ro.orders?.total || 0,
           wasCollected: ro.orders?.was_collected_on_delivery || false,
           collectedAmount: ro.orders?.amount_paid || 0,
-          paymentMethod: (ro.orders?.payment_method || "efectivo") as PaymentMethod,
+          paymentMethod: (ro.orders?.payment_method || PAYMENT_METHODS.EFECTIVO) as PaymentMethod,
         }))
 
       if (ordersForClosure.length > 0) {
@@ -1221,7 +1227,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                           onValueChange={(v) => {
                             setPaymentMethod(v as PaymentMethod)
                             // Reset transfer proof when changing payment method
-                            if (v !== "transferencia") {
+                            if (!requiresProof(v as PaymentMethod)) {
                               setTransferProof(null)
                               setTransferProofPreview(null)
                             }
@@ -1231,15 +1237,17 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="efectivo">💵 Efectivo</SelectItem>
-                            <SelectItem value="transferencia">🏦 Transferencia</SelectItem>
-                            <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
+                            {DELIVERY_PAYMENT_METHODS.map((method) => (
+                              <SelectItem key={method} value={method}>
+                                {getPaymentMethodLabel(method)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
 
                       {/* 🆕 Transfer Proof (comprobante de transferencia) */}
-                      {paymentMethod === "transferencia" && (
+                      {requiresProof(paymentMethod) && (
                         <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
                           <Label className="font-bold text-blue-900 dark:text-blue-100">
                             🧾 Comprobante de Transferencia *
@@ -1493,9 +1501,7 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                                 <div>
                                   <span className="text-xs text-green-600 font-medium">${order.collectedAmount.toFixed(2)}</span>
                                   <span className="text-xs text-muted-foreground ml-1">
-                                    {order.paymentMethod === "efectivo" && "💵"}
-                                    {order.paymentMethod === "transferencia" && "🏦"}
-                                    {order.paymentMethod === "tarjeta" && "💳"}
+                                    {getPaymentMethodLabel(order.paymentMethod).split(' ')[0]}
                                   </span>
                                 </div>
                               ) : (
