@@ -258,16 +258,24 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                         </div>
                         {/* Mostrar comprobante de transferencia si existe */}
                         {order.payment_method === "Transferencia" && order.transfer_proof_url && (
-                          <div className="col-span-2">
-                            <p className="text-muted-foreground mb-2">Comprobante de Transferencia</p>
-                            <a 
-                              href={order.transfer_proof_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-sm"
-                            >
-                              📎 Ver comprobante
-                            </a>
+                          <div className="col-span-2 space-y-2">
+                            <p className="text-muted-foreground font-medium">🧾 Comprobante de Transferencia</p>
+                            <div className="relative">
+                              <a 
+                                href={order.transfer_proof_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                              >
+                                <img
+                                  src={order.transfer_proof_url}
+                                  alt="Comprobante de transferencia"
+                                  className="w-full max-w-sm mx-auto rounded-lg border-2 border-blue-300 shadow-md hover:opacity-90 transition-opacity cursor-pointer"
+                                />
+                              </a>
+                            </div>
+                            <p className="text-xs text-center text-muted-foreground">
+                              Click en la imagen para ver en tamaño completo
+                            </p>
                           </div>
                         )}
                         {(order.amount_paid || 0) < order.total && (

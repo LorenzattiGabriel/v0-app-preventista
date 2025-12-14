@@ -3,9 +3,9 @@ import type {
   CustomerAccountMovement, 
   AccountMovementType, 
   OrderPayment,
-  RouteCashClosure,
-  PaymentMethod 
+  RouteCashClosure 
 } from "@/lib/types/database"
+import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/constants/payment-methods"
 
 interface CreateMovementParams {
   customerId: string
@@ -153,8 +153,8 @@ export class AccountMovementsService {
     }
 
     // Registrar movimiento de pago en cuenta corriente
-    const movementType = paymentMethod === "efectivo" ? "PAGO_EFECTIVO" 
-      : paymentMethod === "transferencia" ? "PAGO_TRANSFERENCIA" 
+    const movementType = paymentMethod === PAYMENT_METHODS.EFECTIVO ? "PAGO_EFECTIVO" 
+      : paymentMethod === PAYMENT_METHODS.TRANSFERENCIA ? "PAGO_TRANSFERENCIA" 
       : "PAGO_TARJETA"
 
     await this.createMovement({
@@ -282,15 +282,15 @@ export class AccountMovementsService {
     const ordersDelivered = orders.length
     const ordersCollected = orders.filter(o => o.wasCollected).length
 
-    // Desglose por método de pago
+    // Desglose por método de pago (usando constantes)
     const cashCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "efectivo")
+      .filter(o => o.wasCollected && o.paymentMethod === PAYMENT_METHODS.EFECTIVO)
       .reduce((sum, o) => sum + o.collectedAmount, 0)
     const transferCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "transferencia")
+      .filter(o => o.wasCollected && o.paymentMethod === PAYMENT_METHODS.TRANSFERENCIA)
       .reduce((sum, o) => sum + o.collectedAmount, 0)
     const cardCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "tarjeta")
+      .filter(o => o.wasCollected && (o.paymentMethod === PAYMENT_METHODS.TARJETA_CREDITO || o.paymentMethod === PAYMENT_METHODS.TARJETA_DEBITO))
       .reduce((sum, o) => sum + o.collectedAmount, 0)
 
     const { data, error } = await this.supabase

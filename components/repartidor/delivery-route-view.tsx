@@ -546,12 +546,20 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       .filter((ro: any) => ro.orders?.was_collected_on_delivery && ro.orders?.status === "ENTREGADO")
       .reduce((acc: any, ro: any) => {
         const order = ro.orders
-        const method = order.payment_method || "Efectivo"
+        const method = order.payment_method || PAYMENT_METHODS.EFECTIVO
         acc[method] = (acc[method] || 0) + (order.amount_paid || 0)
         return acc
-      }, { efectivo: 0, transferencia: 0, tarjeta: 0 })
+      }, { 
+        [PAYMENT_METHODS.EFECTIVO]: 0, 
+        [PAYMENT_METHODS.TRANSFERENCIA]: 0, 
+        [PAYMENT_METHODS.TARJETA_CREDITO]: 0,
+        [PAYMENT_METHODS.TARJETA_DEBITO]: 0 
+      })
     
-    const totalCollected = collectedByMethod.efectivo + collectedByMethod.transferencia + collectedByMethod.tarjeta
+    const totalCollected = (collectedByMethod[PAYMENT_METHODS.EFECTIVO] || 0) + 
+                           (collectedByMethod[PAYMENT_METHODS.TRANSFERENCIA] || 0) + 
+                           (collectedByMethod[PAYMENT_METHODS.TARJETA_CREDITO] || 0) +
+                           (collectedByMethod[PAYMENT_METHODS.TARJETA_DEBITO] || 0)
 
     // Detalle de pedidos entregados con cobros y deudas (datos desde orders)
     const deliveredOrders = route.route_orders
@@ -579,10 +587,10 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       totalExpected,
       totalCollected,
       difference: totalExpected - totalCollected,
-      // Desglose por método
-      cashCollected: collectedByMethod.efectivo,
-      transferCollected: collectedByMethod.transferencia,
-      cardCollected: collectedByMethod.tarjeta,
+      // Desglose por método (usando constantes)
+      cashCollected: collectedByMethod[PAYMENT_METHODS.EFECTIVO] || 0,
+      transferCollected: collectedByMethod[PAYMENT_METHODS.TRANSFERENCIA] || 0,
+      cardCollected: (collectedByMethod[PAYMENT_METHODS.TARJETA_CREDITO] || 0) + (collectedByMethod[PAYMENT_METHODS.TARJETA_DEBITO] || 0),
       // Detalle de pedidos entregados
       deliveredOrders,
       notDeliveredOrders: notDelivered.map((o: any) => ({
