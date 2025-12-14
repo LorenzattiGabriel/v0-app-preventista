@@ -63,12 +63,8 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
     redirect("/repartidor/dashboard")
   }
 
-  // Obtener información de cobro si existe
-  const { data: routeOrderInfo } = await supabase
-    .from("route_orders")
-    .select("was_collected, collected_amount, payment_method, actual_arrival_time")
-    .eq("order_id", id)
-    .single()
+  // Los datos de pago ahora están directamente en el pedido (normalizado)
+  // Ya no necesitamos consultar route_orders para esto
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -234,34 +230,48 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                   )}
                 </div>
 
-                {/* Información de cobro */}
-                {routeOrderInfo && (
+                {/* Información de cobro (datos ahora desde order, normalizados) */}
+                {order.status === "ENTREGADO" && (
                   <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border space-y-3">
                     <div className="flex items-center gap-2 font-medium">
                       <CreditCard className="h-5 w-5 text-green-600" />
                       Información de Cobro
                     </div>
                     
-                    {routeOrderInfo.was_collected ? (
+                    {order.was_collected_on_delivery ? (
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Monto Cobrado</p>
                           <p className="text-xl font-bold text-green-600">
-                            ${routeOrderInfo.collected_amount?.toFixed(2) || "0.00"}
+                            ${order.amount_paid?.toFixed(2) || "0.00"}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Método de Pago</p>
                           <Badge variant="outline" className="mt-1">
-                            {routeOrderInfo.payment_method === "efectivo" && "💵 Efectivo"}
-                            {routeOrderInfo.payment_method === "transferencia" && "🏦 Transferencia"}
-                            {routeOrderInfo.payment_method === "tarjeta" && "💳 Tarjeta"}
+                            {order.payment_method === "efectivo" && "💵 Efectivo"}
+                            {order.payment_method === "transferencia" && "🏦 Transferencia"}
+                            {order.payment_method === "tarjeta" && "💳 Tarjeta"}
                           </Badge>
                         </div>
-                        {routeOrderInfo.collected_amount < order.total && (
+                        {/* Mostrar comprobante de transferencia si existe */}
+                        {order.payment_method === "transferencia" && order.transfer_proof_url && (
+                          <div className="col-span-2">
+                            <p className="text-muted-foreground mb-2">Comprobante de Transferencia</p>
+                            <a 
+                              href={order.transfer_proof_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline text-sm"
+                            >
+                              📎 Ver comprobante
+                            </a>
+                          </div>
+                        )}
+                        {(order.amount_paid || 0) < order.total && (
                           <div className="col-span-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
                             <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                              ⚠️ Deuda generada: <strong>${(order.total - routeOrderInfo.collected_amount).toFixed(2)}</strong>
+                              ⚠️ Deuda generada: <strong>${(order.total - (order.amount_paid || 0)).toFixed(2)}</strong>
                             </p>
                           </div>
                         )}

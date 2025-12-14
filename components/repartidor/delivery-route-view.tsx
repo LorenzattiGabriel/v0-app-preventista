@@ -428,37 +428,39 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         }
       }
 
-      // 3. Update order with delivery evidence
+      // 3. Update order with delivery evidence AND payment data (normalized)
+      const collectedAmountNum = wasCollected ? Number.parseFloat(collectedAmount) || 0 : 0
+      
+      const orderUpdateData: any = {
+        status: "ENTREGADO",
+        delivered_at: new Date().toISOString(),
+        delivery_notes: deliveryNotes || null,
+        delivery_photo_url: publicUrl,
+        received_by_name: receivedByName.trim(),
+        // 🆕 Datos de pago normalizados (ahora en orders, no en route_orders)
+        amount_paid: collectedAmountNum,
+        was_collected_on_delivery: wasCollected,
+        payment_method: wasCollected ? paymentMethod : null,
+      }
+      
+      // Agregar URL del comprobante de transferencia si existe
+      if (transferProofUrl) {
+        orderUpdateData.transfer_proof_url = transferProofUrl
+      }
+
       const { error: orderError } = await supabase
         .from("orders")
-        .update({
-          status: "ENTREGADO",
-          delivered_at: new Date().toISOString(),
-          delivery_notes: deliveryNotes || null,
-          delivery_photo_url: publicUrl,
-          received_by_name: receivedByName.trim(),
-        })
+        .update(orderUpdateData)
         .eq("id", selectedOrder.id)
 
       if (orderError) throw orderError
 
-      // Update route_orders
-      const collectedAmountNum = wasCollected ? Number.parseFloat(collectedAmount) || 0 : 0
-      const routeOrderUpdateData: any = {
-          actual_arrival_time: new Date().toISOString(),
-          was_collected: wasCollected,
-        collected_amount: collectedAmountNum || null,
-        payment_method: wasCollected ? paymentMethod : "efectivo",
-      }
-      
-      // 🆕 Add transfer proof URL if available
-      if (transferProofUrl) {
-        routeOrderUpdateData.transfer_proof_url = transferProofUrl
-      }
-
+      // Update route_orders (solo tiempo de llegada, datos de pago ya no van aquí)
       const { error: routeOrderError } = await supabase
         .from("route_orders")
-        .update(routeOrderUpdateData)
+        .update({
+          actual_arrival_time: new Date().toISOString(),
+        })
         .eq("route_id", route.id)
         .eq("order_id", selectedOrder.id)
 
@@ -533,24 +535,25 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
     // Solo contar totales de pedidos ENTREGADOS
     const totalExpected = delivered.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
     
-    // Desglose por método de pago
+    // Desglose por método de pago (ahora desde orders, no route_orders)
     const collectedByMethod = route.route_orders
-      .filter((ro: any) => ro.was_collected && ro.orders?.status === "ENTREGADO")
+      .filter((ro: any) => ro.orders?.was_collected_on_delivery && ro.orders?.status === "ENTREGADO")
       .reduce((acc: any, ro: any) => {
-        const method = ro.payment_method || "efectivo"
-        acc[method] = (acc[method] || 0) + (ro.collected_amount || 0)
+        const order = ro.orders
+        const method = order.payment_method || "efectivo"
+        acc[method] = (acc[method] || 0) + (order.amount_paid || 0)
         return acc
       }, { efectivo: 0, transferencia: 0, tarjeta: 0 })
     
     const totalCollected = collectedByMethod.efectivo + collectedByMethod.transferencia + collectedByMethod.tarjeta
 
-    // Detalle de pedidos entregados con cobros y deudas
+    // Detalle de pedidos entregados con cobros y deudas (datos desde orders)
     const deliveredOrders = route.route_orders
       .filter((ro: any) => ro.orders?.status === "ENTREGADO")
       .map((ro: any) => {
         const order = ro.orders
         const orderTotal = order.total || 0
-        const collectedAmount = ro.was_collected ? (ro.collected_amount || 0) : 0
+        const collectedAmount = order.was_collected_on_delivery ? (order.amount_paid || 0) : 0
         const debtAmount = orderTotal - collectedAmount
         return {
           orderNumber: order.order_number,
@@ -558,8 +561,8 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
           orderTotal,
           collectedAmount,
           debtAmount,
-          paymentMethod: ro.payment_method || "efectivo",
-          wasCollected: ro.was_collected,
+          paymentMethod: order.payment_method || "efectivo",
+          wasCollected: order.was_collected_on_delivery,
         }
       })
     
@@ -700,16 +703,17 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       // Obtener datos actualizados de route_orders para el cierre
       const { data: finalRouteOrders } = await supabase
         .from("route_orders")
-        .select("order_id, was_collected, collected_amount, payment_method, orders(total, status)")
+        .select("order_id, orders(total, status, was_collected_on_delivery, amount_paid, payment_method)")
         .eq("route_id", route.id)
 
+      // Datos de pago ahora vienen de orders (normalizado)
       const ordersForClosure = (finalRouteOrders || [])
         .filter((ro: any) => ro.orders?.status === "ENTREGADO")
         .map((ro: any) => ({
           total: ro.orders?.total || 0,
-          wasCollected: ro.was_collected || false,
-          collectedAmount: ro.collected_amount || 0,
-          paymentMethod: (ro.payment_method || "efectivo") as PaymentMethod,
+          wasCollected: ro.orders?.was_collected_on_delivery || false,
+          collectedAmount: ro.orders?.amount_paid || 0,
+          paymentMethod: (ro.orders?.payment_method || "efectivo") as PaymentMethod,
         }))
 
       if (ordersForClosure.length > 0) {

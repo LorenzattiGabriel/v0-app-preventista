@@ -151,6 +151,10 @@ export interface Order {
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
   payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   payment_status: PaymentStatus // Estado de pago del pedido
+  // 🆕 Campos de pago normalizados (antes estaban en route_orders)
+  amount_paid?: number // Monto pagado al momento de la entrega
+  was_collected_on_delivery?: boolean // Si se cobró al momento de la entrega
+  transfer_proof_url?: string // URL del comprobante de transferencia bancaria
   // Time Windows (VRPTW) - Restricciones horarias para la entrega
   has_time_restriction: boolean // Si tiene restricción horaria
   delivery_window_start?: string // Hora inicio (HH:MM)
@@ -204,10 +208,16 @@ export interface RouteOrder {
   delivery_order: number
   estimated_arrival_time?: string
   actual_arrival_time?: string
-  was_collected: boolean
+  // ⚠️ DEPRECADOS: Estos campos se mantienen por compatibilidad pero ya no se usan
+  // Los datos de pago ahora están en orders (amount_paid, was_collected_on_delivery, transfer_proof_url)
+  /** @deprecated Usar orders.was_collected_on_delivery */
+  was_collected?: boolean
+  /** @deprecated Usar orders.amount_paid */
   collected_amount?: number
-  payment_method: PaymentMethod
-  transfer_proof_url?: string // URL del comprobante de transferencia (obligatorio si payment_method = "transferencia")
+  /** @deprecated Usar orders.payment_method */
+  payment_method?: PaymentMethod
+  /** @deprecated Usar orders.transfer_proof_url */
+  transfer_proof_url?: string
   created_at: string
 }
 
