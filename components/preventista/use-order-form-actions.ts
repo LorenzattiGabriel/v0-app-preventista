@@ -26,6 +26,11 @@ interface SaveOrderParams {
   userId: string
   isDraft: boolean
   orderId?: string // For updating existing orders
+  // 🆕 Time Windows (VRPTW)
+  hasTimeRestriction?: boolean
+  deliveryWindowStart?: string
+  deliveryWindowEnd?: string
+  timeRestrictionNotes?: string
 }
 
 export function useOrderFormActions() {
@@ -55,6 +60,11 @@ export function useOrderFormActions() {
     userId,
     isDraft,
     orderId,
+    // 🆕 Time Windows (VRPTW)
+    hasTimeRestriction,
+    deliveryWindowStart,
+    deliveryWindowEnd,
+    timeRestrictionNotes,
   }: SaveOrderParams) => {
     if (!selectedCustomer) {
       setError("Debe seleccionar un cliente")
@@ -130,8 +140,13 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
-            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
+            payment_method: paymentMethod || "Efectivo",
             observations,
+            // 🆕 Time Windows (VRPTW)
+            has_time_restriction: hasTimeRestriction || false,
+            delivery_window_start: hasTimeRestriction ? deliveryWindowStart : null,
+            delivery_window_end: hasTimeRestriction ? deliveryWindowEnd : null,
+            time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
           })
           .eq("id", orderId)
           .select()
@@ -161,9 +176,14 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
-            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
+            payment_method: paymentMethod || "Efectivo",
             created_by: userId,
             observations,
+            // 🆕 Time Windows (VRPTW)
+            has_time_restriction: hasTimeRestriction || false,
+            delivery_window_start: hasTimeRestriction ? deliveryWindowStart : null,
+            delivery_window_end: hasTimeRestriction ? deliveryWindowEnd : null,
+            time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
           })
           .select()
           .single();

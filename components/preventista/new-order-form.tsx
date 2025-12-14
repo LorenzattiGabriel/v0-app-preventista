@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -10,12 +10,39 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Customer, Product, OrderPriority, OrderType } from "@/lib/types/database"
-import { Plus, Trash2, ArrowLeft, Save } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
+
+// Constante para el radio máximo de validación presencial (en metros)
+const MAX_PRESENCIAL_DISTANCE_METERS = 200
+
+/**
+ * Calcula la distancia entre dos coordenadas usando la fórmula de Haversine
+ * @returns distancia en metros
+ */
+function calculateHaversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371000 // Radio de la Tierra en metros
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
 interface OrderItem {
   productId: string
   productName: string
@@ -62,11 +89,104 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [paymentMethod, setPaymentMethod] = useState<string>("Efectivo") // 🆕 Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
+  // 🆕 Time Windows (VRPTW) - Restricciones horarias
+  const [hasTimeRestriction, setHasTimeRestriction] = useState(false)
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState("08:00")
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("18:00")
+  const [timeRestrictionNotes, setTimeRestrictionNotes] = useState("")
+
+  // 🆕 Geolocalización para validación de pedidos presenciales
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [distanceToCustomer, setDistanceToCustomer] = useState<number | null>(null)
+  const [isWithinRange, setIsWithinRange] = useState<boolean | null>(null)
+
   // Add product form state
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
+
+  // 🆕 Obtener ubicación cuando el tipo es "presencial" y hay cliente seleccionado
+  useEffect(() => {
+    if (orderType === "presencial" && selectedCustomer) {
+      validatePresencialLocation()
+    } else {
+      // Limpiar estados de validación si no es presencial
+      setDistanceToCustomer(null)
+      setIsWithinRange(null)
+      setLocationError(null)
+    }
+  }, [orderType, selectedCustomer])
+
+  // 🆕 Función para validar la ubicación presencial
+  const validatePresencialLocation = () => {
+    if (!selectedCustomer?.latitude || !selectedCustomer?.longitude) {
+      setLocationError("El cliente no tiene coordenadas registradas. No se puede validar la ubicación presencial.")
+      setIsWithinRange(false)
+      return
+    }
+
+    setIsGettingLocation(true)
+    setLocationError(null)
+
+    if (!navigator.geolocation) {
+      setLocationError("Tu navegador no soporta geolocalización")
+      setIsGettingLocation(false)
+      setIsWithinRange(false)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLat = position.coords.latitude
+        const userLng = position.coords.longitude
+        setUserLocation({ lat: userLat, lng: userLng })
+
+        // Calcular distancia al cliente
+        const distance = calculateHaversineDistance(
+          userLat,
+          userLng,
+          selectedCustomer.latitude!,
+          selectedCustomer.longitude!
+        )
+
+        setDistanceToCustomer(Math.round(distance))
+        setIsWithinRange(distance <= MAX_PRESENCIAL_DISTANCE_METERS)
+        setIsGettingLocation(false)
+
+        if (distance > MAX_PRESENCIAL_DISTANCE_METERS) {
+          setLocationError(
+            `Estás a ${Math.round(distance)}m del cliente. Para un pedido presencial debes estar dentro de ${MAX_PRESENCIAL_DISTANCE_METERS}m.`
+          )
+        }
+      },
+      (error) => {
+        console.error("Error getting location:", error)
+        setIsGettingLocation(false)
+        setIsWithinRange(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError("Permiso de ubicación denegado. Activa la ubicación para pedidos presenciales.")
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError("No se pudo obtener la ubicación. Intenta nuevamente.")
+            break
+          case error.TIMEOUT:
+            setLocationError("Tiempo de espera agotado. Intenta nuevamente.")
+            break
+          default:
+            setLocationError("Error al obtener la ubicación.")
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    )
+  }
 
   // Initialize order items if provided
   useState(() => {
@@ -79,6 +199,11 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     if (customer.general_discount > 0) {
       setGeneralDiscount(customer.general_discount)
     }
+    // 🆕 Apply customer's time restriction if exists
+    setHasTimeRestriction(customer.has_time_restriction || false)
+    setDeliveryWindowStart(customer.delivery_window_start || "08:00")
+    setDeliveryWindowEnd(customer.delivery_window_end || "18:00")
+    setTimeRestrictionNotes(customer.time_restriction_notes || "")
   }
 
   const handleAddProduct = () => {
@@ -121,6 +246,34 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   }
 
   const handleSaveOrder = async (isDraft: boolean) => {
+    // 🆕 Validar ubicación para pedidos presenciales (no aplica a borradores)
+    if (!isDraft && orderType === "presencial") {
+      if (!selectedCustomer?.latitude || !selectedCustomer?.longitude) {
+        setError("El cliente no tiene coordenadas. No se puede crear un pedido presencial.")
+        return
+      }
+
+      if (isWithinRange === false) {
+        setError(
+          `No estás dentro del rango permitido (${MAX_PRESENCIAL_DISTANCE_METERS}m) del cliente. ` +
+          `Distancia actual: ${distanceToCustomer}m. Cambia el tipo de pedido o acércate al cliente.`
+        )
+        return
+      }
+
+      if (isWithinRange === null && !isGettingLocation) {
+        // Reintenta obtener ubicación
+        validatePresencialLocation()
+        setError("Validando ubicación... Por favor espera.")
+        return
+      }
+
+      if (isGettingLocation) {
+        setError("Obteniendo ubicación... Por favor espera.")
+        return
+      }
+    }
+
     // The saveOrder hook now returns the order ID on success
     const savedOrderId = await saveOrder({
       selectedCustomer,
@@ -130,11 +283,16 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       requiresInvoice,
       observations,
       generalDiscount,
-      paymentMethod, // 🆕 Pass payment method
+      paymentMethod,
       orderItems,
       userId,
       isDraft,
-      orderId, // Pass orderId if editing
+      orderId,
+      // 🆕 Time Windows (VRPTW)
+      hasTimeRestriction,
+      deliveryWindowStart,
+      deliveryWindowEnd,
+      timeRestrictionNotes,
     });
 
     // If the order was saved successfully, redirect to the dashboard
@@ -168,29 +326,100 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           <CustomerSelector customers={customers} onSelect={handleCustomerSelect} selectedCustomer={selectedCustomer} />
 
           {selectedCustomer && (
-            <div className="mt-4 p-4 bg-muted rounded-md space-y-2">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Dirección:</span>
-                  <p className="text-muted-foreground">
-                    {selectedCustomer.street} {selectedCustomer.street_number}
-                    {selectedCustomer.floor_apt && `, ${selectedCustomer.floor_apt}`}
+            <div className="mt-4 space-y-4">
+              {/* Info del cliente */}
+              <div className="p-4 bg-muted rounded-md space-y-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Dirección:</span>
+                    <p className="text-muted-foreground">
+                      {selectedCustomer.street} {selectedCustomer.street_number}
+                      {selectedCustomer.floor_apt && `, ${selectedCustomer.floor_apt}`}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Localidad:</span>
+                    <p className="text-muted-foreground">
+                      {selectedCustomer.locality}, {selectedCustomer.province}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Teléfono:</span>
+                    <p className="text-muted-foreground">{selectedCustomer.phone}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Tipo:</span>
+                    <p className="text-muted-foreground capitalize">{selectedCustomer.customer_type}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 🆕 Restricción Horaria (Time Window) */}
+              <div className={`p-4 rounded-md border-2 ${hasTimeRestriction ? 'border-orange-300 bg-orange-50 dark:bg-orange-950/30' : 'border-muted bg-muted/30'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="flex items-center gap-2 font-semibold">
+                    🕐 Franja Horaria de Entrega
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="hasTimeRestriction" className="text-sm text-muted-foreground">
+                      {hasTimeRestriction ? "Con restricción" : "Sin restricción"}
+                    </Label>
+                    <input
+                      type="checkbox"
+                      id="hasTimeRestriction"
+                      checked={hasTimeRestriction}
+                      onChange={(e) => setHasTimeRestriction(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </div>
+                </div>
+
+                {hasTimeRestriction && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="deliveryWindowStart" className="text-xs">Desde</Label>
+                        <Input
+                          id="deliveryWindowStart"
+                          type="time"
+                          value={deliveryWindowStart}
+                          onChange={(e) => setDeliveryWindowStart(e.target.value)}
+                          className="bg-white dark:bg-gray-900"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="deliveryWindowEnd" className="text-xs">Hasta</Label>
+                        <Input
+                          id="deliveryWindowEnd"
+                          type="time"
+                          value={deliveryWindowEnd}
+                          onChange={(e) => setDeliveryWindowEnd(e.target.value)}
+                          className="bg-white dark:bg-gray-900"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="timeRestrictionNotes" className="text-xs">Notas (opcional)</Label>
+                      <Input
+                        id="timeRestrictionNotes"
+                        type="text"
+                        placeholder="Ej: Solo por la mañana, cerrado al mediodía..."
+                        value={timeRestrictionNotes}
+                        onChange={(e) => setTimeRestrictionNotes(e.target.value)}
+                        className="bg-white dark:bg-gray-900 text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-orange-600 dark:text-orange-400">
+                      ⚠️ El pedido solo podrá ser entregado entre {deliveryWindowStart} y {deliveryWindowEnd}
+                    </p>
+                  </div>
+                )}
+
+                {!hasTimeRestriction && (
+                  <p className="text-xs text-muted-foreground">
+                    Sin restricción horaria - entrega flexible durante el horario comercial
                   </p>
-                </div>
-                <div>
-                  <span className="font-medium">Localidad:</span>
-                  <p className="text-muted-foreground">
-                    {selectedCustomer.locality}, {selectedCustomer.province}
-                  </p>
-                </div>
-                <div>
-                  <span className="font-medium">Teléfono:</span>
-                  <p className="text-muted-foreground">{selectedCustomer.phone}</p>
-                </div>
-                <div>
-                  <span className="font-medium">Tipo:</span>
-                  <p className="text-muted-foreground capitalize">{selectedCustomer.customer_type}</p>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -267,6 +496,66 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 </Label>
               </div>
             </RadioGroup>
+
+            {/* 🆕 Validación de ubicación para pedidos presenciales */}
+            {orderType === "presencial" && selectedCustomer && (
+              <div className="mt-3 p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="h-4 w-4" />
+                  <span className="font-medium text-sm">Validación de Ubicación</span>
+                </div>
+
+                {isGettingLocation && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Obteniendo tu ubicación...
+                  </div>
+                )}
+
+                {!isGettingLocation && isWithinRange === true && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    ✓ Estás a {distanceToCustomer}m del cliente (dentro del rango de {MAX_PRESENCIAL_DISTANCE_METERS}m)
+                  </div>
+                )}
+
+                {!isGettingLocation && isWithinRange === false && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      {locationError || `Estás a ${distanceToCustomer}m del cliente (máximo permitido: ${MAX_PRESENCIAL_DISTANCE_METERS}m)`}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={validatePresencialLocation}
+                        disabled={isGettingLocation}
+                      >
+                        <MapPin className="mr-1 h-3 w-3" />
+                        Reintentar
+                      </Button>
+                      <p className="text-xs text-muted-foreground self-center">
+                        O cambia a otro tipo de pedido
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!isGettingLocation && isWithinRange === null && !locationError && (
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={validatePresencialLocation}
+                  >
+                    <MapPin className="mr-1 h-3 w-3" />
+                    Validar mi ubicación
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-2 ">

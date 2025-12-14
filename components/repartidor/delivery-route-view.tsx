@@ -56,6 +56,10 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
   const [cannotDeliver, setCannotDeliver] = useState(false)
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
+  
+  // 🆕 Transfer proof (comprobante de transferencia)
+  const [transferProof, setTransferProof] = useState<File | null>(null)
+  const [transferProofPreview, setTransferProofPreview] = useState<string | null>(null)
 
   // Helper function to build Google Maps URL with depot as start and end point
   const buildGoogleMapsUrl = () => {
@@ -200,6 +204,9 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
     setCannotDeliver(false)
     setNoDeliveryReason("")
     setNoDeliveryNotes("")
+    // 🆕 Reset transfer proof
+    setTransferProof(null)
+    setTransferProofPreview(null)
     setShowDeliveryDialog(true)
   }
 
@@ -222,6 +229,30 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       const reader = new FileReader()
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // 🆕 Handle transfer proof selection
+  const handleTransferProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError("Por favor selecciona una imagen válida para el comprobante")
+        return
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("El comprobante no puede ser mayor a 5MB")
+        return
+      }
+      setTransferProof(file)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setTransferProofPreview(reader.result as string)
       }
       reader.readAsDataURL(file)
     }
@@ -292,6 +323,12 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
         setError("Debe ingresar un monto cobrado válido (mayor a $0)")
         return
       }
+
+      // 🆕 Validate transfer proof if payment method is "transferencia"
+      if (paymentMethod === "transferencia" && !transferProof) {
+        setError("Debe adjuntar el comprobante de transferencia para este método de pago")
+        return
+      }
     }
 
     setIsLoading(true)
@@ -302,37 +339,93 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
       // 1. Upload photo to Supabase Storage
       let publicUrl = ""
+      let transferProofUrl = ""
+      let bucketNotFound = false
       
+      // Helper function to get file extension safely
+      const getFileExtension = (file: File): string => {
+        const nameParts = file.name.split('.')
+        if (nameParts.length > 1) {
+          return nameParts.pop() || 'jpg'
+        }
+        // Fallback based on MIME type
+        if (file.type.includes('png')) return 'png'
+        if (file.type.includes('gif')) return 'gif'
+        if (file.type.includes('webp')) return 'webp'
+        return 'jpg' // Default to jpg
+      }
+
+      // Upload delivery photo
       try {
-        const fileExt = deliveryPhoto.name.split('.').pop()
-        const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
-        const filePath = `${fileName}`
+        const fileExt = getFileExtension(deliveryPhoto)
+      const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('delivery')
-          .upload(filePath, deliveryPhoto, {
-            cacheControl: '3600',
-            upsert: false
-          })
+        const { error: uploadError } = await supabase.storage
+        .from('delivery')
+          .upload(fileName, deliveryPhoto, {
+          cacheControl: '3600',
+          upsert: false
+        })
 
-        if (uploadError) {
-          console.error("Error uploading photo:", uploadError)
-          // Si el bucket no existe, continuamos sin foto
+      if (uploadError) {
+        console.error("Error uploading photo:", uploadError)
+          // Si el bucket no existe, marcamos para continuar sin fotos
           if (uploadError.message?.includes("Bucket not found") || uploadError.message?.includes("not found")) {
-            console.warn("[v0] Storage bucket 'delivery' not found - continuing without photo")
+            console.warn("[v0] Storage bucket 'delivery' not found - continuing without photos")
+            bucketNotFound = true
           } else {
-            throw new Error(`Error al subir la foto: ${uploadError.message}`)
+            throw new Error(`Error al subir la foto de entrega: ${uploadError.message}`)
           }
         } else {
-          // 2. Get public URL only if upload succeeded
+          // Get public URL only if upload succeeded
           const { data } = supabase.storage
             .from('delivery')
-            .getPublicUrl(filePath)
+            .getPublicUrl(fileName)
           publicUrl = data.publicUrl
         }
-      } catch (storageError: any) {
-        console.warn("[v0] Storage error (continuing without photo):", storageError)
-        // Continuar sin foto si hay error de storage
+      } catch (photoError: any) {
+        // Re-throw if it's not a bucket error - this is a real error
+        if (!photoError.message?.includes("Bucket not found")) {
+          throw photoError
+        }
+        console.warn("[v0] Storage error for delivery photo:", photoError)
+        bucketNotFound = true
+      }
+
+      // 🆕 Upload transfer proof if payment method is "transferencia"
+      if (paymentMethod === "transferencia" && transferProof) {
+        // Si el bucket no existe, no intentamos subir el comprobante pero mostramos advertencia
+        if (bucketNotFound) {
+          console.warn("[v0] Skipping transfer proof upload - bucket not found")
+        } else {
+          try {
+            const proofExt = getFileExtension(transferProof)
+            const proofFileName = `${selectedOrder.id}_transfer_proof_${Date.now()}.${proofExt}`
+            
+            const { error: proofUploadError } = await supabase.storage
+        .from('delivery')
+              .upload(proofFileName, transferProof, {
+                cacheControl: '3600',
+                upsert: false
+              })
+
+            if (proofUploadError) {
+              console.error("Error uploading transfer proof:", proofUploadError)
+              // Para el comprobante de transferencia, el error ES crítico (no continuamos)
+              throw new Error(`Error al subir el comprobante de transferencia: ${proofUploadError.message}`)
+            } else {
+              const { data: proofData } = supabase.storage
+                .from('delivery')
+                .getPublicUrl(proofFileName)
+              transferProofUrl = proofData.publicUrl
+              console.log("[v0] Transfer proof uploaded successfully:", transferProofUrl)
+            }
+          } catch (proofError: any) {
+            // Re-throw transfer proof errors - they are mandatory
+            console.error("[v0] Transfer proof upload failed:", proofError)
+            throw new Error(`Error al subir el comprobante de transferencia: ${proofError.message || 'Error desconocido'}`)
+          }
+        }
       }
 
       // 3. Update order with delivery evidence
@@ -351,14 +444,21 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
       // Update route_orders
       const collectedAmountNum = wasCollected ? Number.parseFloat(collectedAmount) || 0 : 0
-      const { error: routeOrderError } = await supabase
-        .from("route_orders")
-        .update({
+      const routeOrderUpdateData: any = {
           actual_arrival_time: new Date().toISOString(),
           was_collected: wasCollected,
-          collected_amount: collectedAmountNum || null,
-          payment_method: wasCollected ? paymentMethod : "efectivo",
-        })
+        collected_amount: collectedAmountNum || null,
+        payment_method: wasCollected ? paymentMethod : "efectivo",
+      }
+      
+      // 🆕 Add transfer proof URL if available
+      if (transferProofUrl) {
+        routeOrderUpdateData.transfer_proof_url = transferProofUrl
+      }
+
+      const { error: routeOrderError } = await supabase
+        .from("route_orders")
+        .update(routeOrderUpdateData)
         .eq("route_id", route.id)
         .eq("order_id", selectedOrder.id)
 
@@ -403,9 +503,21 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
       setShowDeliveryDialog(false)
       setSelectedOrder(null)
       router.refresh()
-    } catch (err) {
+    } catch (err: any) {
       console.error("[v0] Error confirming delivery:", err)
-      setError(err instanceof Error ? err.message : "Error al confirmar la entrega")
+      // Mostrar mensaje de error más detallado
+      let errorMessage = "Error al confirmar la entrega"
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (err?.message) {
+        errorMessage = err.message
+      } else if (err?.error?.message) {
+        errorMessage = err.error.message
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      }
+      console.error("[v0] Error details:", JSON.stringify(err, null, 2))
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -1009,10 +1121,10 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                       </label>
                       <input
                         id="delivery-photo-camera"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handlePhotoChange}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
                         className="hidden"
                       />
                       
@@ -1034,9 +1146,9 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                   ) : (
                     <div className="space-y-3">
                       <div className="relative">
-                        <img
-                          src={photoPreview}
-                          alt="Preview"
+                      <img
+                        src={photoPreview}
+                        alt="Preview"
                           className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
                         />
                         <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
@@ -1098,9 +1210,19 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
 
                   return (
                     <div className="space-y-3">
-                      <div className="space-y-2">
+                  <div className="space-y-2">
                         <Label htmlFor="payment-method">Método de Pago *</Label>
-                        <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
+                        <Select 
+                          value={paymentMethod} 
+                          onValueChange={(v) => {
+                            setPaymentMethod(v as PaymentMethod)
+                            // Reset transfer proof when changing payment method
+                            if (v !== "transferencia") {
+                              setTransferProof(null)
+                              setTransferProofPreview(null)
+                            }
+                          }}
+                        >
                           <SelectTrigger id="payment-method">
                             <SelectValue />
                           </SelectTrigger>
@@ -1112,15 +1234,88 @@ export function DeliveryRouteView({ route, userId, today, depot }: DeliveryRoute
                         </Select>
                       </div>
 
+                      {/* 🆕 Transfer Proof (comprobante de transferencia) */}
+                      {paymentMethod === "transferencia" && (
+                        <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
+                          <Label className="font-bold text-blue-900 dark:text-blue-100">
+                            🧾 Comprobante de Transferencia *
+                          </Label>
+                          
+                          {!transferProofPreview ? (
+                            <div className="space-y-3">
+                              {/* Botón principal para tomar foto del comprobante */}
+                              <label 
+                                htmlFor="transfer-proof-camera"
+                                className="flex items-center justify-center gap-2 w-full p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors text-center font-medium"
+                              >
+                                📷 Fotografiar Comprobante
+                              </label>
+                              <input
+                                id="transfer-proof-camera"
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleTransferProofChange}
+                                className="hidden"
+                              />
+                              
+                              {/* Opción secundaria para galería */}
+                              <label 
+                                htmlFor="transfer-proof-gallery"
+                                className="flex items-center justify-center gap-2 w-full p-3 border-2 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors text-center text-sm"
+                              >
+                                🖼️ Seleccionar de Galería
+                              </label>
+                              <input
+                                id="transfer-proof-gallery"
+                                type="file"
+                                accept="image/*"
+                                onChange={handleTransferProofChange}
+                                className="hidden"
+                              />
+                              
+                              <p className="text-xs text-blue-600 dark:text-blue-400 text-center">
+                                ⚠️ El comprobante es obligatorio para pagos con transferencia
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="relative">
+                                <img
+                                  src={transferProofPreview}
+                                  alt="Comprobante de transferencia"
+                                  className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
+                                />
+                                <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                                  ✓ Comprobante cargado
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setTransferProof(null)
+                                  setTransferProofPreview(null)
+                                }}
+                                className="w-full"
+                              >
+                                🔄 Cambiar comprobante
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="space-y-2">
                         <Label htmlFor="amount">Importe Cobrado ($) *</Label>
-                        <Input
-                          id="amount"
-                          type="number"
-                          step="0.01"
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
                           min="0"
-                          value={collectedAmount}
-                          onChange={(e) => setCollectedAmount(e.target.value)}
+                      value={collectedAmount}
+                      onChange={(e) => setCollectedAmount(e.target.value)}
                           className={!isExact && collectedAmount ? "border-yellow-500" : ""}
                         />
                         {collectedAmount && (

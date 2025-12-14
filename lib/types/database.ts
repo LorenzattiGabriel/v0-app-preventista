@@ -86,6 +86,11 @@ export interface Customer {
   observations?: string
   is_active: boolean
   current_balance: number // Saldo cuenta corriente (positivo = deuda)
+  // Time Windows (VRPTW)
+  has_time_restriction: boolean // Si tiene ventana de tiempo para entregas
+  delivery_window_start?: string // Hora inicio (HH:MM)
+  delivery_window_end?: string // Hora fin (HH:MM)
+  time_restriction_notes?: string // Notas sobre la restricción
   created_at: string
   updated_at: string
 }
@@ -146,6 +151,11 @@ export interface Order {
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
   payment_method?: string // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   payment_status: PaymentStatus // Estado de pago del pedido
+  // Time Windows (VRPTW) - Restricciones horarias para la entrega
+  has_time_restriction: boolean // Si tiene restricción horaria
+  delivery_window_start?: string // Hora inicio (HH:MM)
+  delivery_window_end?: string // Hora fin (HH:MM)
+  time_restriction_notes?: string // Notas sobre la restricción
   updated_at: string
 }
 
@@ -197,6 +207,7 @@ export interface RouteOrder {
   was_collected: boolean
   collected_amount?: number
   payment_method: PaymentMethod
+  transfer_proof_url?: string // URL del comprobante de transferencia (obligatorio si payment_method = "transferencia")
   created_at: string
 }
 

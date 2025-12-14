@@ -26,6 +26,14 @@ export interface CostParams {
 }
 
 /**
+ * 🆕 Parámetros VRPTW para el microservicio
+ */
+export interface VRPTWParams {
+  routeStartTime?: string      // Hora de inicio de ruta "08:00"
+  serviceTimeMinutes?: number  // Tiempo por entrega (default: 5)
+}
+
+/**
  * Genera una ruta optimizada a partir de un array de pedidos
  * 
  * @param orders - Array de pedidos con información del cliente (customers)
@@ -34,6 +42,7 @@ export interface CostParams {
  * @param costParams - Parámetros opcionales para cálculo de costos
  * @param endLat - Latitud del punto de llegada (opcional, por defecto usa startLat)
  * @param endLng - Longitud del punto de llegada (opcional, por defecto usa startLng)
+ * @param vrptwParams - 🆕 Parámetros VRPTW (hora inicio, tiempo por entrega)
  * @returns Datos de la ruta optimizada con orden, distancia, duración, costos, etc.
  */
 export async function generateRouteFromOrders(
@@ -42,7 +51,8 @@ export async function generateRouteFromOrders(
   startLng: number = DEFAULT_DEPOT.lng,
   costParams?: CostParams,
   endLat?: number,
-  endLng?: number
+  endLng?: number,
+  vrptwParams?: VRPTWParams
 ) {
   try {
     // Si no se especifica punto de llegada, usar el mismo que partida
@@ -71,6 +81,7 @@ export async function generateRouteFromOrders(
     // 2. Agregar cada pedido como punto intermedio
     let ordersWithCoordinates = 0
     let ordersWithoutCoordinates = 0
+    let ordersWithTimeRestriction = 0
 
     for (const order of orders) {
       const customer = order.customers
@@ -92,14 +103,27 @@ export async function generateRouteFromOrders(
         continue
       }
 
-      locations.push({
+      // 🆕 Construir objeto de location con time windows (VRPTW)
+      const location: Location = {
         id: order.id, // Usar el ID del pedido
         lat,
         lng,
         type: 'intermedio',
         address: `${customer.commercial_name || customer.name} - ${customer.address || customer.street || ''}`.trim(),
-      })
+      }
 
+      // Agregar restricción horaria si existe
+      if (order.has_time_restriction && order.delivery_window_start && order.delivery_window_end) {
+        location.isTimeRestricted = true
+        location.timeWindow = {
+          start: order.delivery_window_start,
+          end: order.delivery_window_end,
+        }
+        ordersWithTimeRestriction++
+        console.log(`🕐 Pedido ${order.order_number} - Restricción horaria: ${order.delivery_window_start} - ${order.delivery_window_end}`)
+      }
+
+      locations.push(location)
       ordersWithCoordinates++
     }
 
@@ -115,6 +139,7 @@ export async function generateRouteFromOrders(
     console.log(`📊 Resumen:`)
     console.log(`   ✅ ${ordersWithCoordinates} pedidos con coordenadas`)
     console.log(`   ⚠️ ${ordersWithoutCoordinates} pedidos sin coordenadas`)
+    console.log(`   🕐 ${ordersWithTimeRestriction} pedidos con restricción horaria (VRPTW)`)
     console.log(`   📍 Total ubicaciones: ${locations.length}`)
 
     // Validar que tengamos al menos 1 pedido (3 locations: partida + 1 intermedio + llegada)
@@ -133,6 +158,16 @@ export async function generateRouteFromOrders(
       locations,
       travelMode: 'DRIVING',
       language: 'es',
+    }
+
+    // 🆕 Agregar parámetros VRPTW si están disponibles
+    if (vrptwParams?.routeStartTime) {
+      request.routeStartTime = vrptwParams.routeStartTime
+      console.log(`   🕐 Hora inicio de ruta: ${vrptwParams.routeStartTime}`)
+    }
+    if (vrptwParams?.serviceTimeMinutes) {
+      request.serviceTimeMinutes = vrptwParams.serviceTimeMinutes
+      console.log(`   📦 Tiempo por entrega: ${vrptwParams.serviceTimeMinutes} min`)
     }
 
     // Agregar parámetros de costos si están disponibles
@@ -156,6 +191,19 @@ export async function generateRouteFromOrders(
     if (result.costCalculation) {
       console.log(`   💰 Costo total: $${result.costCalculation.totalCost}`)
     }
+    
+    // 🆕 Log VRPTW v2.0 si está disponible
+    if (result.vrptw) {
+      console.log(`   🕐 VRPTW v2.0:`)
+      console.log(`      ✅ Factible: ${result.vrptw.feasible}`)
+      console.log(`      🚗 Tiempo conduciendo: ${result.vrptw.totalDrivingTime} min`)
+      console.log(`      ⏳ Tiempo esperando: ${result.vrptw.totalWaitTime} min`)
+      console.log(`      📦 Tiempo servicio: ${result.vrptw.totalServiceTime} min`)
+      console.log(`      ⏱️ Duración total VRPTW: ${result.vrptw.totalDuration} min`)
+      if (result.vrptw.warnings?.length > 0) {
+        console.log(`      ⚠️ Warnings: ${result.vrptw.warnings.join(', ')}`)
+      }
+    }
 
     // Extraer métricas para retornar
     const totalDistance = result.routes[0].distance.value / 1000 // metros a km
@@ -167,9 +215,11 @@ export async function generateRouteFromOrders(
       estimatedDuration,
       googleMapsUrl: result.googleMapsUrl,
       costCalculation: result.costCalculation,
+      vrptw: result.vrptw, // 🆕 Datos VRPTW v2.0
       stats: {
         ordersWithCoordinates,
         ordersWithoutCoordinates,
+        ordersWithTimeRestriction,
         totalOrders: orders.length,
       },
     }

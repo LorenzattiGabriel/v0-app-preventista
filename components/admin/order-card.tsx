@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Package } from "lucide-react"
+import { MapPin, Package, Clock } from "lucide-react"
 
 interface OrderCardProps {
   order: any
@@ -29,6 +29,12 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
   // Customer info
   const customerType = order.customers?.customer_type
   const priority = order.priority
+
+  // 🆕 Time window restriction
+  const hasTimeRestriction = order.has_time_restriction
+  const deliveryWindowStart = order.delivery_window_start
+  const deliveryWindowEnd = order.delivery_window_end
+  const timeRestrictionNotes = order.time_restriction_notes
 
   const getPriorityBadgeVariant = (priority: string) => {
     switch (priority) {
@@ -100,14 +106,26 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
           )}
         </div>
 
-        {/* Customer Type */}
-        {customerType && (
-          <div className="pt-1">
+        {/* Customer Type & Time Restriction */}
+        <div className="flex flex-wrap items-center gap-1 pt-1">
+          {customerType && (
             <Badge variant="outline" className="text-xs">
               {customerType === 'mayorista' ? 'Mayorista' : 'Minorista'}
             </Badge>
-          </div>
-        )}
+          )}
+
+          {/* 🆕 Time Window Badge */}
+          {hasTimeRestriction && (
+            <Badge 
+              variant="secondary" 
+              className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border-orange-300"
+              title={timeRestrictionNotes || `${deliveryWindowStart} - ${deliveryWindowEnd}`}
+            >
+              <Clock className="h-3 w-3 mr-1" />
+              {deliveryWindowStart?.slice(0, 5)} - {deliveryWindowEnd?.slice(0, 5)}
+            </Badge>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
