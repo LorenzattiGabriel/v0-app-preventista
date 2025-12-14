@@ -12,32 +12,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { Zone, CustomerType, IvaCondition } from '@/lib/types/database'
 import { MapPin, Loader2, AlertCircle } from 'lucide-react'
+import { useGoogleMapsScript } from '@/lib/hooks/useGoogleMapsScript'
 
 interface AdminNewCustomerFormProps {
   zones: Zone[]
   userId: string
-}
-
-/**
- * Hook for loading Google Maps API
- */
-function useGoogleMapsScript() {
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.google) {
-      const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`
-      script.async = true
-      script.defer = true
-      script.onload = () => setIsLoaded(true)
-      document.head.appendChild(script)
-    } else if (window.google) {
-      setIsLoaded(true)
-    }
-  }, [])
-
-  return isLoaded
 }
 
 /**
@@ -72,6 +51,12 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
   const [observations, setObservations] = useState('')
   const [latitude, setLatitude] = useState<number | null>(null)
   const [longitude, setLongitude] = useState<number | null>(null)
+  
+  // 🆕 Time Windows (VRPTW) - Restricciones horarias por defecto
+  const [hasTimeRestriction, setHasTimeRestriction] = useState(false)
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState('08:00')
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState('18:00')
+  const [timeRestrictionNotes, setTimeRestrictionNotes] = useState('')
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [addressSearchValue, setAddressSearchValue] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -289,6 +274,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
         zone_id: zoneId || null,
         created_by: userId,
         observations: observations || null,
+        // 🆕 Time Windows (VRPTW)
+        has_time_restriction: hasTimeRestriction,
+        delivery_window_start: hasTimeRestriction ? deliveryWindowStart : null,
+        delivery_window_end: hasTimeRestriction ? deliveryWindowEnd : null,
+        time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
       })
 
       if (customerError) throw customerError
@@ -603,6 +593,74 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               rows={3}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 🆕 Time Windows (VRPTW) - Restricciones Horarias */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            🕐 Restricción Horaria de Entrega
+          </CardTitle>
+          <CardDescription>
+            Configura la franja horaria por defecto para las entregas de este cliente
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+            <div>
+              <Label htmlFor="hasTimeRestriction" className="font-medium">
+                ¿El cliente tiene restricción horaria?
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Si está activo, los pedidos solo podrán ser entregados en la franja definida
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              id="hasTimeRestriction"
+              checked={hasTimeRestriction}
+              onChange={(e) => setHasTimeRestriction(e.target.checked)}
+              className="h-5 w-5 rounded border-gray-300"
+            />
+          </div>
+
+          {hasTimeRestriction && (
+            <div className="space-y-4 p-4 rounded-lg border-2 border-orange-200 bg-orange-50 dark:bg-orange-950/30">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="deliveryWindowStart">Hora de Inicio</Label>
+                  <Input
+                    id="deliveryWindowStart"
+                    type="time"
+                    value={deliveryWindowStart}
+                    onChange={(e) => setDeliveryWindowStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deliveryWindowEnd">Hora de Fin</Label>
+                  <Input
+                    id="deliveryWindowEnd"
+                    type="time"
+                    value={deliveryWindowEnd}
+                    onChange={(e) => setDeliveryWindowEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="timeRestrictionNotes">Notas sobre la restricción</Label>
+                <Input
+                  id="timeRestrictionNotes"
+                  placeholder="Ej: Cerrado al mediodía, solo mañanas..."
+                  value={timeRestrictionNotes}
+                  onChange={(e) => setTimeRestrictionNotes(e.target.value)}
+                />
+              </div>
+              <p className="text-sm text-orange-600 dark:text-orange-400">
+                ⚠️ Los pedidos de este cliente solo podrán ser entregados entre {deliveryWindowStart} y {deliveryWindowEnd}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
