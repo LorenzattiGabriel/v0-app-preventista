@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Zone, Profile } from "@/lib/types/database"
-import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, Calendar, ArrowUpDown, Filter } from "lucide-react"
+import type { VRPTWResult } from "@/lib/types/rutas-inteligentes.types"
+import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, AlertTriangle, Timer, Car, Package, Calendar, ArrowUpDown, Filter } from "lucide-react"
 import Link from "next/link"
 import { generateRouteFromOrders } from "@/lib/services/rutasInteligentesService"
 import { RutasInteligentesError } from "@/lib/services/rutasInteligentesClient"
@@ -69,6 +70,7 @@ interface GeneratedRoute {
   googleMapsUrl?: string
   optimizedRouteData?: any
   costCalculation?: CostCalculation
+  vrptw?: VRPTWResult  // 🆕 Datos VRPTW v2.0
 }
 
 export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
@@ -217,12 +219,21 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
         })
       }
 
+      // 🆕 Prepare VRPTW parameters
+      const vrptwParams = {
+        routeStartTime: startTime,
+        serviceTimeMinutes: avgDeliveryTime
+      }
+
       // Call microservice con coordenadas del depot configurado
       const routeResponse = await generateRouteFromOrders(
         ordersToRoute,
         startCoords.lat,
         startCoords.lng,
-        costParams
+        costParams,
+        undefined, // endLat (usa startLat)
+        undefined, // endLng (usa startLng)
+        vrptwParams // 🆕 Parámetros VRPTW
       )
 
       console.log('✅ Ruta generada:', routeResponse)
@@ -247,7 +258,8 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
         estimatedDuration: routeResponse.estimatedDuration,
         googleMapsUrl: routeResponse.googleMapsUrl,
         optimizedRouteData: routeResponse.data,
-        costCalculation: routeResponse.costCalculation // Corregido: ya está en el primer nivel
+        costCalculation: routeResponse.costCalculation,
+        vrptw: routeResponse.vrptw // 🆕 Datos VRPTW v2.0
       }
       
       console.log('🎯 Estado de la ruta generada:', {
@@ -789,31 +801,142 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                     </Alert>
                   )}
 
-                  {/* Distance and Duration */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1 p-4 border rounded-lg">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Route className="h-4 w-4" />
-                        Distancia
+                  {/* 🆕 VRPTW v2.0 Metrics - Métricas detalladas */}
+                  {generatedRoute.vrptw ? (
+                    <div className="space-y-4">
+                      {/* Feasibility Alert */}
+                      {!generatedRoute.vrptw.feasible && (
+                        <Alert variant="destructive">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            ⚠️ La ruta no es 100% factible. Algunas entregas no podrán realizarse dentro de su ventana horaria.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      
+                      {/* VRPTW Warnings */}
+                      {generatedRoute.vrptw.warnings?.length > 0 && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            <ul className="list-disc pl-4 space-y-1">
+                              {generatedRoute.vrptw.warnings.map((w, i) => (
+                                <li key={i} className="text-sm">{w}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Main Metrics Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="space-y-1 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Route className="h-4 w-4 text-blue-600" />
+                            Distancia
+                          </div>
+                          <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                            {generatedRoute.vrptw.totalDistance.toFixed(1)} km
+                          </p>
+                        </div>
+                        <div className="space-y-1 p-4 border rounded-lg bg-green-50 dark:bg-green-950">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Clock className="h-4 w-4 text-green-600" />
+                            Duración Total
+                          </div>
+                          <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                            {Math.round(generatedRoute.vrptw.totalDuration)} min
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {Math.floor(generatedRoute.vrptw.totalDuration / 60)}h {Math.round(generatedRoute.vrptw.totalDuration % 60)}m
+                          </p>
+                        </div>
+                        <div className="space-y-1 p-4 border rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Car className="h-4 w-4" />
+                            Conduciendo
+                          </div>
+                          <p className="text-xl font-bold">
+                            {generatedRoute.vrptw.totalDrivingTime} min
+                          </p>
+                        </div>
+                        <div className="space-y-1 p-4 border rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Package className="h-4 w-4" />
+                            En Entregas
+                          </div>
+                          <p className="text-xl font-bold">
+                            {generatedRoute.vrptw.totalServiceTime} min
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {avgDeliveryTime} min × {generatedRoute.orders.length} pedidos
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-2xl font-bold">
-                        {generatedRoute.totalDistance.toFixed(2)} km
-                      </p>
-                    </div>
-                    <div className="space-y-1 p-4 border rounded-lg">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="h-4 w-4" />
-                        Duración Total
+
+                      {/* Wait Time Highlight */}
+                      {generatedRoute.vrptw.totalWaitTime > 0 && (
+                        <div className="p-4 border-2 border-orange-300 dark:border-orange-700 rounded-lg bg-orange-50 dark:bg-orange-950">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Timer className="h-5 w-5 text-orange-600" />
+                              <span className="font-medium text-orange-800 dark:text-orange-200">
+                                Tiempo de Espera Total
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                                {generatedRoute.vrptw.totalWaitTime} min
+                              </span>
+                              <p className="text-xs text-orange-600">
+                                {Math.floor(generatedRoute.vrptw.totalWaitTime / 60)}h {generatedRoute.vrptw.totalWaitTime % 60}m esperando en ubicaciones
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Schedule Summary */}
+                      <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
+                        <span className="text-sm font-medium">📅 Horario de la Ruta:</span>
+                        <span className="text-sm">
+                          <strong>{generatedRoute.vrptw.routeStartTime}</strong>
+                          {' → '}
+                          <strong>
+                            {generatedRoute.vrptw.arrivalTimes?.length > 0 
+                              ? generatedRoute.vrptw.arrivalTimes[generatedRoute.vrptw.arrivalTimes.length - 1]?.estimatedArrival
+                              : '--:--'}
+                          </strong>
+                        </span>
                       </div>
-                      <p className="text-2xl font-bold">
-                        {Math.round(generatedRoute.estimatedDuration + (avgDeliveryTime * generatedRoute.orders.length))} min
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Google Maps: {Math.round(generatedRoute.estimatedDuration)} min + 
-                        Entregas: {avgDeliveryTime * generatedRoute.orders.length} min
-                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    /* Fallback: Old metrics display */
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1 p-4 border rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Route className="h-4 w-4" />
+                          Distancia
+                        </div>
+                        <p className="text-2xl font-bold">
+                          {generatedRoute.totalDistance.toFixed(2)} km
+                        </p>
+                      </div>
+                      <div className="space-y-1 p-4 border rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          Duración Total
+                        </div>
+                        <p className="text-2xl font-bold">
+                          {Math.round(generatedRoute.estimatedDuration + (avgDeliveryTime * generatedRoute.orders.length))} min
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Google Maps: {Math.round(generatedRoute.estimatedDuration)} min + 
+                          Entregas: {avgDeliveryTime * generatedRoute.orders.length} min
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Cost Calculation */}
                   {generatedRoute.costCalculation ? (
@@ -871,51 +994,138 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
 
                   {/* Optimized Order */}
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <TrendingUp className="h-4 w-4" />
-                      Orden Optimizado de Entregas
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <TrendingUp className="h-4 w-4" />
+                        Orden Optimizado de Entregas
+                      </div>
+                      {/* 🆕 Summary of time restrictions */}
+                      {generatedRoute.orders.some(o => o.has_time_restriction) && (
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {generatedRoute.orders.filter(o => o.has_time_restriction).length} con restricción horaria
+                        </Badge>
+                      )}
                     </div>
                     <ol className="space-y-2 border rounded-lg p-4">
+                      {/* Depot Start */}
                       <li className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 rounded">
                         <span className="flex items-center justify-center w-8 h-8 bg-green-600 text-white rounded-full text-sm font-bold">
                           ▶
                         </span>
-                        <span className="text-sm font-medium">Partida: {startCoords.address}</span>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">Partida: {startCoords.address}</span>
+                        </div>
+                        {generatedRoute.vrptw?.arrivalTimes?.[0] && (
+                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                            🕐 {generatedRoute.vrptw.arrivalTimes[0].estimatedDeparture}
+                          </Badge>
+                        )}
                       </li>
-                      {generatedRoute.orders.map((order, index) => (
-                        <li key={order.id} className="flex items-center gap-3 p-3 hover:bg-muted rounded border-l-4 border-blue-500">
-                          <span className="flex items-center justify-center w-10 h-10 bg-blue-600 text-white rounded-full text-sm font-bold">
-                            {index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-bold text-primary">
-                                {order.customers.commercial_name || order.customers.name}
-                              </span>
-                              <Badge variant="outline" className="text-xs">
-                                #{order.order_number}
+                      
+                      {/* Orders - match with VRPTW arrival times */}
+                      {generatedRoute.orders.map((order, index) => {
+                        // Find arrival time for this order from VRPTW data
+                        const arrivalInfo = generatedRoute.vrptw?.arrivalTimes?.find(
+                          at => at.locationId === order.id
+                        )
+                        
+                        return (
+                          <li 
+                            key={order.id} 
+                            className={`flex items-start gap-3 p-3 hover:bg-muted rounded border-l-4 ${
+                              order.has_time_restriction 
+                                ? 'border-orange-500 bg-orange-50/30 dark:bg-orange-950/30' 
+                                : 'border-blue-500'
+                            }`}
+                          >
+                            <span className={`flex items-center justify-center w-10 h-10 text-white rounded-full text-sm font-bold shrink-0 ${
+                              order.has_time_restriction ? 'bg-orange-500' : 'bg-blue-600'
+                            }`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="text-sm font-bold text-primary">
+                                  {order.customers.commercial_name || order.customers.name}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  #{order.order_number}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {order.customers.street} {order.customers.street_number}
+                                {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {order.customers.locality}
+                              </p>
+                              
+                              {/* 🆕 VRPTW Arrival Time Display */}
+                              {arrivalInfo && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      arrivalInfo.withinWindow 
+                                        ? 'bg-green-50 text-green-700 border-green-300' 
+                                        : 'bg-red-50 text-red-700 border-red-300'
+                                    }`}
+                                  >
+                                    🕐 Llega: {arrivalInfo.estimatedArrival} → Sale: {arrivalInfo.estimatedDeparture}
+                                  </Badge>
+                                  {arrivalInfo.waitTime && arrivalInfo.waitTime > 0 && (
+                                    <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-300">
+                                      ⏳ Espera: {arrivalInfo.waitTime} min
+                                    </Badge>
+                                  )}
+                                  {arrivalInfo.lateBy && arrivalInfo.lateBy > 0 && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      ❌ Tarde: +{arrivalInfo.lateBy} min
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Time Window Display */}
+                              {order.has_time_restriction && (
+                                <div className="mt-2 p-2 rounded bg-orange-100 dark:bg-orange-900/50 border border-orange-300 dark:border-orange-700">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-3 w-3 text-orange-600" />
+                                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-300">
+                                      Franja horaria: {order.delivery_window_start?.slice(0, 5)} - {order.delivery_window_end?.slice(0, 5)}
+                                    </span>
+                                  </div>
+                                  {order.time_restriction_notes && (
+                                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                      📝 {order.time_restriction_notes}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <Badge variant="secondary" className="text-sm font-semibold">
+                                ${order.total_amount?.toLocaleString('es-AR') || '0'}
                               </Badge>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              {order.customers.street} {order.customers.street_number}
-                              {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {order.customers.locality}
-                            </p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <Badge variant="secondary" className="text-sm font-semibold">
-                              ${order.total_amount?.toLocaleString('es-AR') || '0'}
-                            </Badge>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        )
+                      })}
+                      
+                      {/* Depot End */}
                       <li className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950 rounded">
                         <span className="flex items-center justify-center w-8 h-8 bg-red-600 text-white rounded-full text-sm font-bold">
                           ■
                         </span>
-                        <span className="text-sm font-medium">Llegada: {startCoords.address}</span>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">Llegada: {startCoords.address}</span>
+                        </div>
+                        {generatedRoute.vrptw?.arrivalTimes && generatedRoute.vrptw.arrivalTimes.length > 0 && (
+                          <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                            🕐 {generatedRoute.vrptw.arrivalTimes[generatedRoute.vrptw.arrivalTimes.length - 1].estimatedArrival}
+                          </Badge>
+                        )}
                       </li>
                     </ol>
                   </div>

@@ -26,6 +26,11 @@ interface SaveOrderParams {
   userId: string
   isDraft: boolean
   orderId?: string // For updating existing orders
+  // 🆕 Time Windows (VRPTW)
+  hasTimeRestriction?: boolean
+  deliveryWindowStart?: string
+  deliveryWindowEnd?: string
+  timeRestrictionNotes?: string
 }
 
 export function useOrderFormActions() {
@@ -36,10 +41,14 @@ export function useOrderFormActions() {
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const calculateTotals = (items: OrderItem[], discount: number) => {
+  const calculateTotals = (items: OrderItem[], discount: number, discountType: "fixed" | "percentage" = "fixed") => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
-    const total = subtotal - discount
-    return { subtotal, total }
+    // Calcular descuento según tipo
+    const discountAmount = discountType === "percentage" 
+      ? (subtotal * discount / 100) 
+      : discount
+    const total = Math.max(0, subtotal - discountAmount)
+    return { subtotal, total, discountAmount }
   }
 
   const saveOrder = async ({
@@ -55,6 +64,11 @@ export function useOrderFormActions() {
     userId,
     isDraft,
     orderId,
+    // 🆕 Time Windows (VRPTW)
+    hasTimeRestriction,
+    deliveryWindowStart,
+    deliveryWindowEnd,
+    timeRestrictionNotes,
   }: SaveOrderParams) => {
     if (!selectedCustomer) {
       setError("Debe seleccionar un cliente")
@@ -130,8 +144,13 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
-            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
+            payment_method: paymentMethod || "Efectivo",
             observations,
+            // 🆕 Time Windows (VRPTW)
+            has_time_restriction: hasTimeRestriction || false,
+            delivery_window_start: hasTimeRestriction ? deliveryWindowStart : null,
+            delivery_window_end: hasTimeRestriction ? deliveryWindowEnd : null,
+            time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
           })
           .eq("id", orderId)
           .select()
@@ -161,9 +180,14 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
-            payment_method: paymentMethod || "Efectivo", // 🆕 Payment method
+            payment_method: paymentMethod || "Efectivo",
             created_by: userId,
             observations,
+            // 🆕 Time Windows (VRPTW)
+            has_time_restriction: hasTimeRestriction || false,
+            delivery_window_start: hasTimeRestriction ? deliveryWindowStart : null,
+            delivery_window_end: hasTimeRestriction ? deliveryWindowEnd : null,
+            time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
           })
           .select()
           .single();

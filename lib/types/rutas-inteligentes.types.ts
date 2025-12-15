@@ -42,6 +42,12 @@ export interface Location {
   lng: number
   type: LocationType
   address?: string
+  // 🆕 Time Windows (VRPTW) - Restricciones horarias
+  isTimeRestricted?: boolean // Si tiene franja horaria delimitada
+  timeWindow?: {
+    start: string // Hora de inicio (HH:MM)
+    end: string   // Hora de fin (HH:MM)
+  }
 }
 
 /**
@@ -126,6 +132,35 @@ export interface CostCalculation {
 }
 
 /**
+ * 🆕 VRPTW v2.0 - Tiempo de llegada para cada ubicación
+ */
+export interface VRPTWArrivalTime {
+  locationId: string
+  estimatedArrival: string    // "09:00"
+  estimatedDeparture: string  // "09:05" (arrival + service time)
+  withinWindow: boolean
+  timeWindow: { start: string; end: string } | null
+  waitTime?: number | null    // minutos esperando en esta ubicación
+  lateBy?: number | null      // si llegó tarde, cuántos minutos
+}
+
+/**
+ * 🆕 VRPTW v2.0 - Resultado de optimización con ventanas de tiempo
+ */
+export interface VRPTWResult {
+  feasible: boolean
+  routeStartTime: string
+  totalDistance: number        // km
+  totalDuration: number        // minutos (viaje + espera + servicio)
+  totalDrivingTime: number     // minutos (solo conducción)
+  totalWaitTime: number        // minutos (tiempo esperando en ubicaciones)
+  totalServiceTime: number     // minutos (tiempo en cada entrega)
+  arrivalTimes: VRPTWArrivalTime[]
+  warnings: string[]
+  optimizedOrder: Location[]
+}
+
+/**
  * Response exitosa del API
  */
 export interface RutaInteligenteSuccessResponse {
@@ -136,6 +171,7 @@ export interface RutaInteligenteSuccessResponse {
     optimizedOrder: Location[]
     googleMapsUrl: string
     costCalculation?: CostCalculation
+    vrptw?: VRPTWResult  // 🆕 VRPTW v2.0
   }
   savedRouteId?: string
 }

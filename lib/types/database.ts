@@ -17,6 +17,8 @@ export type OrderType = "web" | "presencial" | "telefono" | "whatsapp"
 
 export type CustomerType = "mayorista" | "minorista"
 
+export type CustomerPriority = "baja" | "normal" | "alta"
+
 export type IvaCondition = "responsable_inscripto" | "monotributista" | "exento" | "consumidor_final"
 
 export type ShortageReason = "sin_stock" | "producto_danado" | "producto_discontinuado" | "error_pedido" | "otro"
@@ -77,6 +79,7 @@ export interface Customer {
   legal_name?: string
   tax_id?: string
   customer_type: CustomerType
+  priority: CustomerPriority // Prioridad del cliente (baja/normal/alta)
   iva_condition?: IvaCondition
   credit_days: number
   credit_limit: number
@@ -86,6 +89,11 @@ export interface Customer {
   observations?: string
   is_active: boolean
   current_balance: number // Saldo cuenta corriente (positivo = deuda)
+  // Time Windows (VRPTW)
+  has_time_restriction: boolean // Si tiene ventana de tiempo para entregas
+  delivery_window_start?: string // Hora inicio (HH:MM)
+  delivery_window_end?: string // Hora fin (HH:MM)
+  time_restriction_notes?: string // Notas sobre la restricción
   created_at: string
   updated_at: string
 }
@@ -165,6 +173,15 @@ export interface Order {
   no_delivery_notes?: string // 🆕 MEDIUM-2: Additional notes for non-delivery
   payment_method?: PaymentMethod // Payment method: Efectivo, Transferencia, Tarjeta, etc.
   payment_status: PaymentStatus // Estado de pago del pedido
+  // 🆕 Campos de pago normalizados (antes estaban en route_orders)
+  amount_paid?: number // Monto pagado al momento de la entrega
+  was_collected_on_delivery?: boolean // Si se cobró al momento de la entrega
+  transfer_proof_url?: string // URL del comprobante de transferencia bancaria
+  // Time Windows (VRPTW) - Restricciones horarias para la entrega
+  has_time_restriction: boolean // Si tiene restricción horaria
+  delivery_window_start?: string // Hora inicio (HH:MM)
+  delivery_window_end?: string // Hora fin (HH:MM)
+  time_restriction_notes?: string // Notas sobre la restricción
   updated_at: string
 }
 
@@ -213,9 +230,16 @@ export interface RouteOrder {
   delivery_order: number
   estimated_arrival_time?: string
   actual_arrival_time?: string
-  was_collected: boolean
+  // ⚠️ DEPRECADOS: Estos campos se mantienen por compatibilidad pero ya no se usan
+  // Los datos de pago ahora están en orders (amount_paid, was_collected_on_delivery, transfer_proof_url)
+  /** @deprecated Usar orders.was_collected_on_delivery */
+  was_collected?: boolean
+  /** @deprecated Usar orders.amount_paid */
   collected_amount?: number
+  /** @deprecated Usar orders.payment_method */
   payment_method?: PaymentMethod
+  /** @deprecated Usar orders.transfer_proof_url */
+  transfer_proof_url?: string
   created_at: string
 }
 

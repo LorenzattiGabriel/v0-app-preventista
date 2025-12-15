@@ -5,6 +5,7 @@ import { OrdersReport } from "@/components/admin/orders-report"
 import { DeliveryReport } from "@/components/admin/delivery-report"
 import { PerformanceReport } from "@/components/admin/performance-report"
 import { FinancialReport } from "@/components/admin/financial-report"
+import { DriverStats } from "@/components/admin/driver-stats"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -38,9 +39,10 @@ export default async function ReportsPage({
       </div>
 
       <Tabs defaultValue="orders" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="orders">Pedidos</TabsTrigger>
           <TabsTrigger value="delivery">Entregas</TabsTrigger>
+          <TabsTrigger value="drivers">Repartidores</TabsTrigger>
           <TabsTrigger value="performance">Rendimiento</TabsTrigger>
           <TabsTrigger value="financial">Financiero</TabsTrigger>
         </TabsList>
@@ -54,6 +56,12 @@ export default async function ReportsPage({
         <TabsContent value="delivery" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
             <DeliveryReport startDate={fromDate} endDate={toDate} />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="drivers" className="space-y-6">
+          <Suspense fallback={<ReportSkeleton />}>
+            <DriverStats />
           </Suspense>
         </TabsContent>
 

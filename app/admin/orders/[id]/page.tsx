@@ -178,13 +178,22 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               </Link>
             </Button>
             
-            {/* Cancel Order Button */}
-            <CancelOrderButton
-              orderId={order.id}
-              orderNumber={order.order_number}
-              status={order.status}
-              wasAssembled={["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION"].includes(order.status)}
-            />
+            <div className="flex items-center gap-2">
+              {/* Edit Order Button */}
+              <Button variant="outline" asChild>
+                <Link href={`/admin/orders/${order.id}/edit`}>
+                  ✏️ Editar
+                </Link>
+              </Button>
+              
+              {/* Cancel Order Button */}
+              <CancelOrderButton
+                orderId={order.id}
+                orderNumber={order.order_number}
+                status={order.status}
+                wasAssembled={["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION"].includes(order.status)}
+              />
+            </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
