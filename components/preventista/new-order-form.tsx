@@ -87,6 +87,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
+  const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed") // 🆕 Tipo de descuento
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
@@ -303,7 +304,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     }
   }
 
-  const { subtotal, total } = calculateTotals(orderItems, generalDiscount)
+  const { subtotal, total, discountAmount } = calculateTotals(orderItems, generalDiscount, discountType)
   const selectedProduct = products.find((p) => p.id === selectedProductId)
 
   return (
@@ -720,15 +721,43 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="generalDiscount">Descuento General ($)</Label>
-            <Input
-              id="generalDiscount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={generalDiscount}
-              onChange={(e) => setGeneralDiscount(Number.parseFloat(e.target.value) || 0)}
-            />
+            <Label htmlFor="generalDiscount">Descuento General</Label>
+            <div className="flex gap-2">
+              <Input
+                id="generalDiscount"
+                type="number"
+                step="0.01"
+                min="0"
+                max={discountType === "percentage" ? 100 : undefined}
+                value={generalDiscount}
+                onChange={(e) => setGeneralDiscount(Number.parseFloat(e.target.value) || 0)}
+                className="flex-1"
+              />
+              <div className="flex border rounded-md overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setDiscountType("fixed")}
+                  className={`px-3 py-2 text-sm font-medium transition-colors ${
+                    discountType === "fixed" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted hover:bg-muted/80"
+                  }`}
+                >
+                  $
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountType("percentage")}
+                  className={`px-3 py-2 text-sm font-medium transition-colors ${
+                    discountType === "percentage" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted hover:bg-muted/80"
+                  }`}
+                >
+                  %
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -748,8 +777,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               <span className="font-medium">${subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Descuento General:</span>
-              <span className="font-medium text-destructive">-${generalDiscount.toFixed(2)}</span>
+              <span>Descuento General {discountType === "percentage" ? `(${generalDiscount}%)` : ""}:</span>
+              <span className="font-medium text-destructive">-${discountAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-lg font-bold border-t pt-2">
               <span>Total:</span>

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { Zone, CustomerType, IvaCondition } from "@/lib/types/database"
+import type { Zone, CustomerType, IvaCondition, CustomerPriority } from "@/lib/types/database"
 import { ArrowLeft, MapPin, Loader2 } from "lucide-react"
 import { useNavigationHistory } from "@/contexts/navigation-history-context"
 import { useGoogleMapsScript } from "@/lib/hooks/useGoogleMapsScript"
@@ -42,6 +42,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   const [legalName, setLegalName] = useState("")
   const [taxId, setTaxId] = useState("")
   const [customerType, setCustomerType] = useState<CustomerType>("minorista")
+  const [priority, setPriority] = useState<CustomerPriority>("normal")
   const [ivaCondition, setIvaCondition] = useState<IvaCondition>("consumidor_final")
   const [creditDays, setCreditDays] = useState(0)
   const [creditLimit, setCreditLimit] = useState(0)
@@ -314,6 +315,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         legal_name: legalName || null,
         tax_id: taxId || null,
         customer_type: customerType,
+        priority: priority,
         iva_condition: ivaCondition,
         credit_days: creditDays,
         credit_limit: creditLimit,
@@ -429,6 +431,22 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="priority">Prioridad</Label>
+              <Select value={priority} onValueChange={(value) => setPriority(value as CustomerPriority)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="baja">🟢 Baja</SelectItem>
+                  <SelectItem value="normal">🟡 Normal</SelectItem>
+                  <SelectItem value="alta">🔴 Alta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="ivaCondition">Condición IVA</Label>
               <Select value={ivaCondition} onValueChange={(value) => setIvaCondition(value as IvaCondition)}>

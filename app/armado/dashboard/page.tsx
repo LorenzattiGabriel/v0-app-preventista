@@ -1,11 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
-import { Package, Clock, AlertTriangle, CheckCircle } from "lucide-react"
+import { Package, Clock, CheckCircle } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
+import { PaginatedOrdersList } from "@/components/armado/paginated-orders-list"
 
 export default async function ArmadoDashboardPage() {
   const supabase = await createClient()
@@ -65,82 +63,6 @@ export default async function ArmadoDashboardPage() {
     ESPERANDO_STOCK: "Esperando Stock",
   } as const
 
-
-  function PedidoCardFinished({ order }: { order: any }) {
-    const isIncomplete = order.has_shortages === true;
-    return (
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-4 border rounded-lg bg-white">
-        <div className="flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold">{order.order_number}</span>
-            <Badge variant="secondary">Completado</Badge>
-            {isIncomplete && (
-              <Badge variant="destructive">Faltantes</Badge>
-            )}
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            {order.customers?.commercial_name ?? "Sin cliente"} – {order.customers?.locality}
-          </p>
-
-          <p className="text-xs text-muted-foreground">
-            Entrega: {new Date(order.delivery_date).toLocaleDateString("es-AR")}
-          </p>
-
-          <p className="text-xs text-green-600 font-medium">
-            Finalizado hoy
-          </p>
-        </div>
-
-        <Button asChild variant="outline">
-          <Link href={`/armado/orders/${order.id}/detalle`}>
-            Ver detalle
-          </Link>
-        </Button>
-      </div>
-    );
-  }
-
-
-  function PedidoCard({ order, userId }: { order: any, userId: string }) {
-    const isTakenByOther =
-      order.status === "EN_ARMADO" &&
-      order.assembled_by &&
-      order.assembled_by !== userId;
-
-    return (
-      <div className={`flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-4 border rounded-lg bg-white ${isTakenByOther ? "opacity-60" : ""}`}>
-        <div className="flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold">{order.order_number}</span>
-            <Badge variant="outline">{order.priority}</Badge>
-            {isTakenByOther && <Badge variant="destructive">Ya asignado</Badge>}
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            {order.customers?.commercial_name ?? "Sin cliente"} – {order.customers?.locality}
-          </p>
-
-          <p className="text-xs text-muted-foreground">
-            Entrega: {new Date(order.delivery_date).toLocaleDateString("es-AR")}
-          </p>
-
-          {isTakenByOther && (
-            <p className="text-xs text-red-600 font-medium">
-              Otro armador está trabajando en este pedido
-            </p>
-          )}
-        </div>
-
-        {/* BOTÓN BLOQUEADO O HABILITADO */}
-        <Button asChild disabled={isTakenByOther} className="w-full md:w-auto">
-          <Link href={`/armado/orders/${order.id}`}>
-            {order.status === "EN_ARMADO" ? "Continuar" : "Armar"}
-          </Link>
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -207,43 +129,35 @@ export default async function ArmadoDashboardPage() {
             <CardContent>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Pendientes - con paginación */}
+                <PaginatedOrdersList
+                  orders={pending}
+                  userId={user.id}
+                  itemsPerPage={10}
+                  title="Pendientes"
+                  emptyMessage="No hay pedidos pendientes"
+                  variant="pending"
+                />
 
-                {/*   --- PENDIENTES ---   */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg">Pendientes</h3>
-                  {pending.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No hay pedidos pendientes</p>
-                  ) : (
-                    pending.map((order) => (
-                      <PedidoCard key={order.id} order={order} userId={user.id} />
-                    ))
-                  )}
-                </div>
+                {/* En Proceso - con paginación */}
+                <PaginatedOrdersList
+                  orders={inProgress}
+                  userId={user.id}
+                  itemsPerPage={10}
+                  title="En Proceso"
+                  emptyMessage="No hay pedidos en proceso"
+                  variant="inProgress"
+                />
 
-                {/*   --- EN ARMADO ---   */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg">En Proceso</h3>
-                  {inProgress.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No hay pedidos en proceso</p>
-                  ) : (
-                    inProgress.map((order) => (
-                      <PedidoCard key={order.id} order={order} userId={user.id} />
-                    ))
-                  )}
-                </div>
-
-                {/*   --- TERMINADOS HOY ---   */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg">Terminados Hoy</h3>
-                  {finishedToday.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">Ningún pedido terminado hoy</p>
-                  ) : (
-                    finishedToday.map((order) => (
-                      <PedidoCardFinished key={order.id} order={order} />
-                    ))
-                  )}
-                </div>
-
+                {/* Terminados Hoy - con paginación */}
+                <PaginatedOrdersList
+                  orders={finishedToday}
+                  userId={user.id}
+                  itemsPerPage={10}
+                  title="Terminados Hoy"
+                  emptyMessage="Ningún pedido terminado hoy"
+                  variant="finished"
+                />
               </div>
 
 

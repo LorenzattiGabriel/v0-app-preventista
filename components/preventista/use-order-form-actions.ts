@@ -41,10 +41,14 @@ export function useOrderFormActions() {
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const calculateTotals = (items: OrderItem[], discount: number) => {
+  const calculateTotals = (items: OrderItem[], discount: number, discountType: "fixed" | "percentage" = "fixed") => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
-    const total = subtotal - discount
-    return { subtotal, total }
+    // Calcular descuento según tipo
+    const discountAmount = discountType === "percentage" 
+      ? (subtotal * discount / 100) 
+      : discount
+    const total = Math.max(0, subtotal - discountAmount)
+    return { subtotal, total, discountAmount }
   }
 
   const saveOrder = async ({

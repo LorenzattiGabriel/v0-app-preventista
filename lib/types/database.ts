@@ -17,6 +17,8 @@ export type OrderType = "web" | "presencial" | "telefono" | "whatsapp"
 
 export type CustomerType = "mayorista" | "minorista"
 
+export type CustomerPriority = "baja" | "normal" | "alta"
+
 export type IvaCondition = "responsable_inscripto" | "monotributista" | "exento" | "consumidor_final"
 
 export type ShortageReason = "sin_stock" | "producto_danado" | "producto_discontinuado" | "error_pedido" | "otro"
@@ -77,6 +79,7 @@ export interface Customer {
   legal_name?: string
   tax_id?: string
   customer_type: CustomerType
+  priority: CustomerPriority // Prioridad del cliente (baja/normal/alta)
   iva_condition?: IvaCondition
   credit_days: number
   credit_limit: number

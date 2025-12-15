@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { OrdersTable } from "./orders-table"
-import { Package } from "lucide-react"
+import { Package, ArrowLeft } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 export default async function OrdersListPage() {
   const supabase = await createClient()
@@ -58,11 +60,18 @@ const { data: pedidos, error } = await supabase
   return (
     <div className="container mx-auto p-6">
 
-      <header className="border-b bg-background">
+      <header className="border-b bg-background mb-6">
         <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Package className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">Sistema de Gestión - Preventista</h1>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/preventista/dashboard">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="flex items-center gap-2">
+              <Package className="h-6 w-6" />
+              <h1 className="text-xl font-semibold">Mis Pedidos</h1>
+            </div>
           </div>
         </div>
       </header>
