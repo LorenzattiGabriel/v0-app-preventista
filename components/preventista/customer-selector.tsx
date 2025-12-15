@@ -62,7 +62,7 @@ export function CustomerSelector({ customers, onSelect, selectedCustomer }: Cust
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[400px] p-0">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput placeholder="Buscar cliente..." value={searchValue} onValueChange={setSearchValue} />
               <CommandList>
                 <CommandEmpty>
@@ -80,7 +80,7 @@ export function CustomerSelector({ customers, onSelect, selectedCustomer }: Cust
                   {filteredCustomers.map((customer) => (
                     <CommandItem
                       key={customer.id}
-                      value={customer.id}
+                      value={`${customer.code} ${customer.commercial_name} ${customer.locality || ''}`}
                       onSelect={() => {
                         onSelect(customer)
                         setOpen(false)
