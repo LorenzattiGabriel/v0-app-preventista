@@ -154,6 +154,14 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
             </div>
           </div>
 
+          {/* Price */}
+          <div className="text-right">
+            <span className="text-sm font-bold text-foreground">
+              ${order.total?.toLocaleString('es-AR') || '0'}
+            </span>
+          </div>
+        </div>
+
         {/* Customer Type & Time Restriction */}
         <div className="flex flex-wrap items-center gap-1 pt-1">
           {customerType && (
@@ -173,11 +181,6 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
               {deliveryWindowStart?.slice(0, 5)} - {deliveryWindowEnd?.slice(0, 5)}
             </Badge>
           )}
-        </div>
-        <div className="text-right">
-          <span className="text-sm font-bold text-foreground">
-            ${order.total?.toLocaleString('es-AR') || '0'}
-          </span>
         </div>
       </CardContent>
     </Card>
