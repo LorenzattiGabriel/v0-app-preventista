@@ -169,28 +169,36 @@ export class StockMovementsService {
           .eq("id", item.productId)
 
         if (updateError) {
-          result.errors.push({ code: item.productCode, error: updateError.message })
+          result.errors.push({ code: item.productCode, error: `Error actualizando: ${updateError.message}` })
           continue
         }
 
         // Registrar movimiento
-        await this.recordMovement({
-          productId: item.productId,
-          productCode: item.productCode,
-          productName: item.productName,
-          previousStock: item.currentStock,
-          newStock: item.newStock,
-          movementType: "csv_import",
-          createdBy: userId,
-          notes: notes || `Importación CSV - Lote ${batchId.slice(0, 8)}`,
-          batchId,
-        })
+        try {
+          console.log(`[StockService] Registrando movimiento: ${item.productCode} | ${item.currentStock} → ${item.newStock}`)
+          await this.recordMovement({
+            productId: item.productId,
+            productCode: item.productCode,
+            productName: item.productName,
+            previousStock: item.currentStock,
+            newStock: item.newStock,
+            movementType: "csv_import",
+            createdBy: userId,
+            notes: notes || `Importación CSV - Lote ${batchId.slice(0, 8)}`,
+            batchId,
+          })
+          console.log(`[StockService] ✅ Movimiento registrado para ${item.productCode}`)
+        } catch (movementError) {
+          // Si falla el registro de movimiento, loguear pero continuar
+          console.error(`[StockService] ❌ Error registrando movimiento para ${item.productCode}:`, movementError)
+        }
 
         result.totalUpdated++
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Error desconocido"
         result.errors.push({
           code: item.productCode,
-          error: err instanceof Error ? err.message : "Error desconocido",
+          error: errorMessage,
         })
       }
     }

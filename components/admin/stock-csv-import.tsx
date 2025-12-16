@@ -55,15 +55,23 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
   const [parsedProducts, setParsedProducts] = useState<ProductMatch[]>([])
   const [importProgress, setImportProgress] = useState(0)
   const [importResult, setImportResult] = useState<{
-    success: number
-    failed: number
+    totalUpdated: number
+    totalSkipped: number
+    totalProcessed: number
     batchId: string
-    errors: Array<{ productCode: string; error: string }>
+    errors: Array<{ code: string; error: string }>
   } | null>(null)
 
   const validProducts = parsedProducts.filter(p => p.isValid && p.willUpdate)
   const invalidProducts = parsedProducts.filter(p => !p.isValid)
   const unchangedProducts = parsedProducts.filter(p => p.isValid && !p.willUpdate)
+
+  // Ordenar: primero los que se van a actualizar, luego sin cambios, luego errores
+  const sortedProducts = [
+    ...validProducts,
+    ...unchangedProducts,
+    ...invalidProducts,
+  ]
 
   const handleDownloadTemplate = async () => {
     const supabase = createClient()
@@ -163,8 +171,8 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
         productId: p.productId!,
         productCode: p.code,
         productName: p.productName!,
-        previousStock: p.previousStock!,
-        newStock: p.currentStock,
+        currentStock: p.previousStock!,  // Stock actual en DB
+        newStock: p.currentStock,         // Nuevo stock del CSV
       }))
 
       const result = await stockService.bulkUpdateStock(
@@ -333,13 +341,22 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {parsedProducts.map((product, index) => {
+                    {sortedProducts.map((product, index) => {
                       const diff = product.willUpdate 
                         ? product.currentStock - (product.previousStock || 0)
                         : 0
                       
                       return (
-                        <TableRow key={index} className={!product.isValid ? "bg-red-50" : ""}>
+                        <TableRow 
+                          key={index} 
+                          className={
+                            !product.isValid 
+                              ? "bg-red-50 dark:bg-red-950" 
+                              : product.willUpdate 
+                                ? "bg-green-50 dark:bg-green-950" 
+                                : ""
+                          }
+                        >
                           <TableCell className="font-mono">{product.code}</TableCell>
                           <TableCell>{product.productName || product.name || "-"}</TableCell>
                           <TableCell className="text-right">
@@ -348,7 +365,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
                           <TableCell className="text-right font-medium">
                             {product.currentStock}
                           </TableCell>
-                          <TableCell className={`text-right ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : ""}`}>
+                          <TableCell className={`text-right font-medium ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : ""}`}>
                             {product.willUpdate ? (diff > 0 ? `+${diff}` : diff) : "-"}
                           </TableCell>
                           <TableCell>
@@ -412,15 +429,19 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <p className="text-sm text-muted-foreground">Productos actualizados</p>
-                <p className="text-2xl font-bold text-green-600">{importResult.success}</p>
+                <p className="text-2xl font-bold text-green-600">{importResult.totalUpdated}</p>
               </div>
-              {importResult.failed > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground">Sin cambios</p>
+                <p className="text-2xl font-bold text-muted-foreground">{importResult.totalSkipped}</p>
+              </div>
+              {importResult.errors.length > 0 && (
                 <div>
                   <p className="text-sm text-muted-foreground">Con errores</p>
-                  <p className="text-2xl font-bold text-red-600">{importResult.failed}</p>
+                  <p className="text-2xl font-bold text-red-600">{importResult.errors.length}</p>
                 </div>
               )}
             </div>
@@ -430,7 +451,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
                 <p className="font-medium text-red-700">Errores:</p>
                 <ul className="list-disc list-inside text-sm text-red-600">
                   {importResult.errors.map((err, i) => (
-                    <li key={i}>{err.productCode}: {err.error}</li>
+                    <li key={i}>{err.code}: {err.error}</li>
                   ))}
                 </ul>
               </div>
