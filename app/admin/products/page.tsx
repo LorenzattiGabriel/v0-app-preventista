@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createProductsService, PRODUCTS_PER_PAGE } from "@/lib/services/productsService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX, ArrowLeft } from "lucide-react"
+import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX, ArrowLeft, Upload, History } from "lucide-react"
 import { ProductsFilters } from "@/components/admin/products-filters"
 import { ProductsList } from "@/components/admin/products-list"
 import { ProductsPagination } from "@/components/admin/products-pagination"
@@ -73,12 +73,26 @@ export default async function ProductsPage({
             <p className="text-muted-foreground">Administra tu catálogo de productos</p>
           </div>
         </div>
-        <Button asChild>
-          <Link href="/admin/products/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Producto
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/admin/products/stock-history">
+              <History className="mr-2 h-4 w-4" />
+              Historial
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/products/import-stock">
+              <Upload className="mr-2 h-4 w-4" />
+              Importar Stock
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/admin/products/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Producto
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
