@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createProductsService, PRODUCTS_PER_PAGE } from "@/lib/services/productsService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX } from "lucide-react"
+import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX, ArrowLeft } from "lucide-react"
 import { ProductsFilters } from "@/components/admin/products-filters"
 import { ProductsList } from "@/components/admin/products-list"
 import { ProductsPagination } from "@/components/admin/products-pagination"
@@ -62,9 +62,16 @@ export default async function ProductsPage({
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Productos</h1>
-          <p className="text-muted-foreground">Administra tu catálogo de productos</p>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/admin/dashboard">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Productos</h1>
+            <p className="text-muted-foreground">Administra tu catálogo de productos</p>
+          </div>
         </div>
         <Button asChild>
           <Link href="/admin/products/new">

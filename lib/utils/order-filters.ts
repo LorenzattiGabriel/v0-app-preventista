@@ -11,6 +11,7 @@ interface OrderForFiltering {
   status: OrderStatus
   customers: {
     zone_id?: string
+    locality?: string
     latitude?: number | null
     longitude?: number | null
   }
@@ -36,6 +37,32 @@ export function filterOrdersByZone<T extends OrderForFiltering>(
 ): T[] {
   if (!zoneId) return []
   return orders.filter(order => order.customers.zone_id === zoneId)
+}
+
+/**
+ * Filtra pedidos por localidad del cliente
+ */
+export function filterOrdersByLocality<T extends OrderForFiltering>(
+  orders: T[],
+  locality: string
+): T[] {
+  if (!locality) return []
+  return orders.filter(order => 
+    order.customers.locality?.toLowerCase() === locality.toLowerCase()
+  )
+}
+
+/**
+ * Obtiene lista única de localidades de los pedidos
+ */
+export function getUniqueLocalities<T extends OrderForFiltering>(
+  orders: T[]
+): string[] {
+  const localities = orders
+    .map(order => order.customers.locality)
+    .filter((locality): locality is string => !!locality && locality.trim() !== "")
+  
+  return [...new Set(localities)].sort((a, b) => a.localeCompare(b, 'es'))
 }
 
 /**
@@ -86,17 +113,18 @@ export function filterOrdersUpToDate<T extends OrderForFiltering>(
 
 /**
  * Obtiene pedidos disponibles para una ruta
- * Aplica todos los filtros necesarios: fecha, zona, estado y coordenadas
+ * Aplica todos los filtros necesarios: fecha, localidad/zona, estado y coordenadas
  */
 export function getAvailableOrdersForRoute<T extends OrderForFiltering>(
   orders: T[],
   params: {
     deliveryDate: string
-    zoneId: string
+    zoneId?: string
+    locality?: string
     status?: OrderStatus
   }
 ): T[] {
-  const { deliveryDate, zoneId, status = "PENDIENTE_ENTREGA" } = params
+  const { deliveryDate, zoneId, locality, status = "PENDIENTE_ENTREGA" } = params
 
   // Si no hay fecha de entrega, no mostrar nada
   if (!deliveryDate) {
@@ -117,8 +145,10 @@ export function getAvailableOrdersForRoute<T extends OrderForFiltering>(
     filteredOrders = filterOrdersByDeliveryDate(filteredOrders, deliveryDate)
   }
   
-  // Solo filtrar por zona si se especifica una zona válida (no vacía y no "all")
-  if (zoneId && zoneId !== "" && zoneId !== "all") {
+  // Filtrar por localidad (prioridad) o zona
+  if (locality && locality !== "" && locality !== "all") {
+    filteredOrders = filterOrdersByLocality(filteredOrders, locality)
+  } else if (zoneId && zoneId !== "" && zoneId !== "all") {
     filteredOrders = filterOrdersByZone(filteredOrders, zoneId)
   }
   

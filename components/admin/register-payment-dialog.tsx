@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { DollarSign, Loader2 } from "lucide-react"
+import { DollarSign, Loader2, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react"
 
 interface RegisterPaymentDialogProps {
   customerId: string
@@ -53,9 +54,63 @@ export function RegisterPaymentDialog({
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "transferencia" | "tarjeta">("transferencia")
   const [notes, setNotes] = useState("")
+  const [proofFile, setProofFile] = useState<File | null>(null)
+  const [proofPreview, setProofPreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedOrderData = pendingOrders.find(o => o.id === selectedOrder)
   const maxAmount = selectedOrderData?.balance_due || currentBalance
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validar tamaño (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("El archivo no puede superar 5MB")
+        return
+      }
+      setProofFile(file)
+      // Preview para imágenes
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader()
+        reader.onloadend = () => setProofPreview(reader.result as string)
+        reader.readAsDataURL(file)
+      } else {
+        setProofPreview(null)
+      }
+    }
+  }
+
+  const removeFile = () => {
+    setProofFile(null)
+    setProofPreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const uploadProofFile = async (): Promise<string | null> => {
+    if (!proofFile) return null
+
+    const supabase = createClient()
+    const fileExt = proofFile.name.split(".").pop() || "file"
+    const fileName = `payment_proof_${customerId}_${Date.now()}.${fileExt}`
+
+    const { data, error } = await supabase.storage
+      .from("delivery")
+      .upload(fileName, proofFile, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (error) {
+      console.warn("Error uploading proof file:", error)
+      return null
+    }
+
+    const { data: publicData } = supabase.storage.from("delivery").getPublicUrl(fileName)
+    return publicData.publicUrl
+  }
 
   const handleSubmit = async () => {
     if (!selectedOrder) {
@@ -78,6 +133,12 @@ export function RegisterPaymentDialog({
     setError(null)
 
     try {
+      // Subir comprobante si existe (opcional)
+      let proofUrl: string | null = null
+      if (proofFile) {
+        proofUrl = await uploadProofFile()
+      }
+
       const response = await fetch("/api/admin/register-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,6 +148,7 @@ export function RegisterPaymentDialog({
           amount: amountNum,
           paymentMethod,
           notes: notes.trim() || null,
+          proofUrl, // URL del comprobante (opcional)
         }),
       })
 
@@ -115,7 +177,12 @@ export function RegisterPaymentDialog({
     setAmount("")
     setPaymentMethod("transferencia")
     setNotes("")
+    setProofFile(null)
+    setProofPreview(null)
     setError(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   if (currentBalance <= 0) {
@@ -227,6 +294,63 @@ export function RegisterPaymentDialog({
                 placeholder="Ej: Transferencia recibida el 10/12, comprobante #123"
                 rows={2}
               />
+            </div>
+
+            {/* Comprobante (opcional) */}
+            <div className="space-y-2">
+              <Label htmlFor="proof">Comprobante (opcional)</Label>
+              <input
+                ref={fileInputRef}
+                id="proof"
+                type="file"
+                accept="image/*,.pdf,.doc,.docx"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              
+              {!proofFile ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-20 border-dashed"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                    <Paperclip className="h-5 w-5" />
+                    <span className="text-sm">Adjuntar comprobante</span>
+                    <span className="text-xs">Imagen, PDF o documento (max 5MB)</span>
+                  </div>
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-muted rounded-lg border">
+                  {proofPreview ? (
+                    <img
+                      src={proofPreview}
+                      alt="Preview"
+                      className="w-12 h-12 object-cover rounded"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{proofFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(proofFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={removeFile}
+                    className="shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Resumen */}

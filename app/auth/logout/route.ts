@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { NextResponse, NextRequest } from "next/server"
 import { cookies } from "next/headers"
 
 async function performLogout() {
@@ -19,26 +19,33 @@ async function performLogout() {
 }
 
 // GET: Para navegación directa a /auth/logout
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     await performLogout()
-    
-    // Redirigir a la página de login
-    const url = new URL('/auth/login', request.url)
-    return NextResponse.redirect(url)
   } catch (error) {
     console.error('Logout error:', error)
-    // En caso de error, igual redirigir a login
-    const url = new URL('/auth/login', request.url)
-    return NextResponse.redirect(url)
   }
+  
+  // Siempre redirigir a login usando la URL base del request
+  // Esto funciona mejor en Vercel que new URL()
+  const origin = request.nextUrl.origin
+  return NextResponse.redirect(`${origin}/auth/login`, {
+    status: 302,
+    headers: {
+      // Forzar que no se cachee el redirect
+      'Cache-Control': 'no-store, max-age=0',
+    }
+  })
 }
 
 // POST: Para llamadas desde componentes/botones
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     await performLogout()
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ 
+      success: true,
+      redirectUrl: '/auth/login' 
+    })
   } catch (error) {
     console.error('Logout error:', error)
     return NextResponse.json({ error: 'Error al cerrar sesión' }, { status: 500 })

@@ -65,6 +65,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
   
+  // 🆕 Foto de comprobante cuando no se puede entregar
+  const [noDeliveryPhoto, setNoDeliveryPhoto] = useState<File | null>(null)
+  const [noDeliveryPhotoPreview, setNoDeliveryPhotoPreview] = useState<string | null>(null)
+  
   // 🆕 Transfer proof (comprobante de transferencia)
   const [transferProof, setTransferProof] = useState<File | null>(null)
   const [transferProofPreview, setTransferProofPreview] = useState<string | null>(null)
@@ -255,6 +259,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setCannotDeliver(false)
     setNoDeliveryReason("")
     setNoDeliveryNotes("")
+    // 🆕 Reset no-delivery photo
+    setNoDeliveryPhoto(null)
+    setNoDeliveryPhotoPreview(null)
     // 🆕 Reset transfer proof
     setTransferProof(null)
     setTransferProofPreview(null)
@@ -280,6 +287,57 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         setPhotoPreview(reader.result as string)
       }
       reader.readAsDataURL(file)
+  }
+  
+  // 🆕 Handle no-delivery photo selection
+  const handleNoDeliveryPhotoCapture = (file: File) => {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError("Por favor selecciona una imagen válida")
+        return
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("La imagen no puede ser mayor a 5MB")
+        return
+      }
+      setNoDeliveryPhoto(file)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setNoDeliveryPhotoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+  }
+  
+  // 🆕 Send receipt via WhatsApp
+  const handleSendWhatsApp = (order: any) => {
+    const customer = order.customers
+    if (!customer?.phone) {
+      setError("El cliente no tiene número de teléfono registrado")
+      return
+    }
+    
+    // Clean phone number (remove spaces, dashes, etc.)
+    let phone = customer.phone.replace(/[\s\-\(\)]/g, "")
+    // Add country code if not present (Argentina default)
+    if (!phone.startsWith("+")) {
+      phone = "+54" + phone.replace(/^0/, "")
+    }
+    
+    // Build message
+    const message = encodeURIComponent(
+      `🧾 *Comprobante de Entrega*\n\n` +
+      `📦 Pedido: ${order.order_number}\n` +
+      `👤 Cliente: ${customer.commercial_name}\n` +
+      `📅 Fecha: ${new Date().toLocaleDateString("es-AR")}\n` +
+      `💰 Total: $${order.total?.toFixed(2) || "0.00"}\n` +
+      `✅ Estado: ENTREGADO\n\n` +
+      `Gracias por su compra!`
+    )
+    
+    // Open WhatsApp
+    window.open(`https://wa.me/${phone.replace("+", "")}?text=${message}`, "_blank")
   }
 
   // 🆕 Handle transfer proof selection
@@ -315,12 +373,40 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         setError("Debe seleccionar un motivo de no-entrega")
         return
       }
+      
+      // 🆕 Validar foto de no-entrega (opcional pero recomendada)
+      // Si hay foto, la subimos
 
       setIsLoading(true)
       setError(null)
 
       try {
         const supabase = createClient()
+        
+        // 🆕 Upload no-delivery photo if provided
+        let noDeliveryPhotoUrl: string | null = null
+        if (noDeliveryPhoto) {
+          const fileExt = noDeliveryPhoto.name.split(".").pop() || "jpg"
+          const fileName = `no_delivery_${selectedOrder.id}_${Date.now()}.${fileExt}`
+          
+          const { error: uploadError } = await supabase.storage
+            .from("delivery")
+            .upload(fileName, noDeliveryPhoto, {
+              cacheControl: "3600",
+              upsert: false,
+            })
+          
+          if (uploadError) {
+            console.warn("[v0] Error uploading no-delivery photo:", uploadError)
+            // Continue without photo if bucket doesn't exist
+            if (!uploadError.message.includes("Bucket not found")) {
+              throw uploadError
+            }
+          } else {
+            const { data: publicData } = supabase.storage.from("delivery").getPublicUrl(fileName)
+            noDeliveryPhotoUrl = publicData.publicUrl
+          }
+        }
 
         // Update order with non-delivery info and reset status to PENDIENTE_ENTREGA
         const { error: orderError } = await supabase
@@ -329,6 +415,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             status: "PENDIENTE_ENTREGA", // Return to pending so it can be re-assigned
             no_delivery_reason: noDeliveryReason,
             no_delivery_notes: noDeliveryNotes || null,
+            no_delivery_photo_url: noDeliveryPhotoUrl, // 🆕 Foto de comprobante
             // Clear delivery evidence and assignment
             delivered_at: null,
             received_by_name: null,
@@ -347,7 +434,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           previous_status: selectedOrder.status,
           new_status: "PENDIENTE_ENTREGA", 
           changed_by: userId,
-          change_reason: `No se pudo entregar: ${noDeliveryReason}`,
+          change_reason: `No se pudo entregar: ${noDeliveryReason}${noDeliveryPhotoUrl ? ' (con foto)' : ''}`,
         })
 
         setShowDeliveryDialog(false)
@@ -1288,6 +1375,43 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                     onChange={(e) => setNoDeliveryNotes(e.target.value)}
                     rows={3}
                   />
+                </div>
+                
+                {/* 🆕 Foto de comprobante de no-entrega (opcional) */}
+                <div className="space-y-3 p-4 bg-orange-50 dark:bg-orange-950 border-2 border-orange-300 dark:border-orange-700 rounded-lg">
+                  <Label className="font-bold text-orange-900 dark:text-orange-100">
+                    📸 Foto de Comprobante (opcional)
+                  </Label>
+                  <p className="text-sm text-orange-700 dark:text-orange-300 mb-2">
+                    Toma una foto como evidencia (ej: local cerrado, dirección vacía)
+                  </p>
+                  <CameraCapture onCapture={handleNoDeliveryPhotoCapture} />
+                  {noDeliveryPhotoPreview && (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <img
+                          src={noDeliveryPhotoPreview}
+                          alt="Preview"
+                          className="w-full max-w-xs mx-auto rounded-lg border-2 border-orange-500"
+                        />
+                        <div className="absolute top-2 right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                          ✓ Foto cargada
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setNoDeliveryPhoto(null)
+                          setNoDeliveryPhotoPreview(null)
+                        }}
+                        className="w-full"
+                      >
+                        Eliminar foto
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

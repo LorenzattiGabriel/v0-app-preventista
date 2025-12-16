@@ -18,9 +18,6 @@ export default async function GenerateSmartRoutesPage() {
     redirect("/auth/login")
   }
 
-  // Get zones
-  const { data: zones } = await supabase.from("zones").select("*").eq("is_active", true).order("name")
-
   // Get active drivers
   const { data: drivers } = await supabase
     .from("profiles")
@@ -65,7 +62,6 @@ export default async function GenerateSmartRoutesPage() {
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto max-w-4xl">
           <SmartRouteGenerator
-            zones={zones || []}
             drivers={drivers || []}
             pendingOrders={pendingOrders || []}
             userId={user.id}

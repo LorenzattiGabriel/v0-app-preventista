@@ -34,6 +34,9 @@ interface ProductFormProps {
     product_margin: number
     location?: string
     supplier?: string
+    // 🆕 Configuración de cantidades decimales
+    allows_decimal_quantity?: boolean
+    unit_of_measure?: string
   }
   initialCode: string
 }
@@ -61,6 +64,9 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
     product_margin: product?.product_margin?.toString() || "0",
     location: product?.location || "",
     supplier: product?.supplier || "",
+    // 🆕 Configuración de cantidades decimales
+    allows_decimal_quantity: product?.allows_decimal_quantity ?? false,
+    unit_of_measure: product?.unit_of_measure || "unidad",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,6 +96,9 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
         product_margin: parseFloat(formData.product_margin),
         location: formData.location || null,
         supplier: formData.supplier || null,
+        // 🆕 Configuración de cantidades decimales
+        allows_decimal_quantity: formData.allows_decimal_quantity,
+        unit_of_measure: formData.unit_of_measure || "unidad",
       }
 
       if (product) {
@@ -269,6 +278,69 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
                 onChange={(e) => setFormData({ ...formData, retail_price: e.target.value })}
                 placeholder="0.00"
               />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 🆕 Sales Configuration - Decimal Quantities */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuración de Venta</CardTitle>
+          <CardDescription>Define cómo se vende este producto</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="unit_of_measure">Unidad de Medida</Label>
+              <select
+                id="unit_of_measure"
+                value={formData.unit_of_measure}
+                onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="unidad">Unidad</option>
+                <option value="kg">Kilogramo (kg)</option>
+                <option value="g">Gramo (g)</option>
+                <option value="litro">Litro</option>
+                <option value="ml">Mililitro (ml)</option>
+                <option value="metro">Metro</option>
+                <option value="cm">Centímetro (cm)</option>
+                <option value="docena">Docena</option>
+                <option value="caja">Caja</option>
+                <option value="pack">Pack</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Unidad en la que se vende el producto
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="allows_decimal_quantity">Permite Cantidades Decimales</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Activa para productos vendidos por peso (ej: 1.5 kg de queso)
+                  </p>
+                </div>
+                <Switch
+                  id="allows_decimal_quantity"
+                  checked={formData.allows_decimal_quantity}
+                  onCheckedChange={(checked) => setFormData({ ...formData, allows_decimal_quantity: checked })}
+                />
+              </div>
+              
+              {formData.allows_decimal_quantity && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                  ✓ Los preventistas podrán pedir cantidades como 1.5, 2.25, etc.
+                </div>
+              )}
+              
+              {!formData.allows_decimal_quantity && (
+                <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                  Solo se permiten cantidades enteras (1, 2, 3...)
+                </div>
+              )}
             </div>
           </div>
         </CardContent>

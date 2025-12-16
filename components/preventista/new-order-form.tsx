@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Customer, Product, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
 import { PAYMENT_METHODS } from "@/lib/types/database"
-import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
@@ -51,6 +51,7 @@ interface OrderItem {
   unitPrice: number
   discount: number
   subtotal: number
+  unitOfMeasure?: string // Unidad de medida (kg, unidad, litro, etc.)
 }
 
 interface InitialOrderData {
@@ -214,6 +215,13 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     const product = products.find((p) => p.id === selectedProductId)
     if (!product) return
 
+    // 🆕 Validar cantidad según tipo de producto
+    const finalQuantity = product.allows_decimal_quantity 
+      ? quantity 
+      : Math.round(quantity) // Forzar entero si no permite decimales
+
+    if (finalQuantity <= 0) return
+
     // Determine price based on customer type
     let basePrice = product.base_price
     if (selectedCustomer?.customer_type === "mayorista" && product.wholesale_price) {
@@ -223,15 +231,16 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     }
 
     const unitPrice = customPrice !== null ? customPrice : basePrice
-    const subtotal = quantity * unitPrice - itemDiscount
+    const subtotal = finalQuantity * unitPrice - itemDiscount
 
     const newItem: OrderItem = {
       productId: product.id,
       productName: `${product.name} ${product.brand ? `- ${product.brand}` : ""}`,
-      quantity,
+      quantity: finalQuantity,
       unitPrice,
       discount: itemDiscount,
       subtotal,
+      unitOfMeasure: product.unit_of_measure || "unidad",
     }
 
     setOrderItems([...orderItems, newItem])
@@ -616,27 +625,88 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 <SelectValue placeholder="Seleccionar producto" />
               </SelectTrigger>
               <SelectContent>
-                {products.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.name} {product.brand && `- ${product.brand}`}
-                  </SelectItem>
-                ))}
+                {products.map((product) => {
+                  const hasNoStock = product.current_stock === 0
+                  const hasLowStock = product.current_stock > 0 && product.current_stock <= product.min_stock
+                  
+                  return (
+                    <SelectItem 
+                      key={product.id} 
+                      value={product.id}
+                      className={hasNoStock ? "text-red-600" : hasLowStock ? "text-amber-600" : ""}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <span>{product.name} {product.brand && `- ${product.brand}`}</span>
+                        <span className={`text-xs font-medium ml-2 ${
+                          hasNoStock 
+                            ? "text-red-600 bg-red-100 px-1.5 py-0.5 rounded" 
+                            : hasLowStock 
+                              ? "text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded" 
+                              : "text-muted-foreground"
+                        }`}>
+                          {hasNoStock ? "❌ Sin Stock" : hasLowStock ? `⚠️ Stock: ${product.current_stock}` : `Stock: ${product.current_stock}`}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
           </div>
+          
+          {/* 🆕 Warning de stock del producto seleccionado */}
+          {selectedProduct && selectedProduct.current_stock === 0 && (
+            <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-start gap-2 text-red-700 dark:text-red-300">
+                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">¡Producto sin stock!</p>
+                  <p className="text-sm">Este producto no tiene stock disponible. El pedido podría tener faltantes.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {selectedProduct && selectedProduct.current_stock > 0 && selectedProduct.current_stock <= selectedProduct.min_stock && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Stock bajo: {selectedProduct.current_stock} unidades</p>
+                  <p className="text-sm">Este producto tiene stock bajo (mínimo: {selectedProduct.min_stock}). Verificar disponibilidad.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Campos numéricos en grilla responsive */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="quantity" className="text-xs sm:text-sm">Cantidad</Label>
+              <Label htmlFor="quantity" className="text-xs sm:text-sm">
+                Cantidad {selectedProduct?.unit_of_measure && `(${selectedProduct.unit_of_measure})`}
+              </Label>
               <Input
                 id="quantity"
                 type="number"
-                min="1"
+                min={selectedProduct?.allows_decimal_quantity ? "0.1" : "1"}
+                step={selectedProduct?.allows_decimal_quantity ? "0.1" : "1"}
                 value={quantity}
-                onChange={(e) => setQuantity(Number.parseInt(e.target.value) || 1)}
+                onChange={(e) => {
+                  const value = Number.parseFloat(e.target.value) || 1
+                  // Si no permite decimales, redondear a entero
+                  if (selectedProduct && !selectedProduct.allows_decimal_quantity) {
+                    setQuantity(Math.round(value))
+                  } else {
+                    setQuantity(value)
+                  }
+                }}
                 className="text-center"
               />
+              {selectedProduct?.allows_decimal_quantity && (
+                <p className="text-xs text-muted-foreground">
+                  Acepta decimales (ej: 1.5 {selectedProduct.unit_of_measure || 'unidades'})
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -697,7 +767,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   {orderItems.map((item, index) => (
                     <tr key={index} className="border-t">
                       <td className="p-2 text-sm">{item.productName}</td>
-                      <td className="p-2 text-sm text-right">{item.quantity}</td>
+                      <td className="p-2 text-sm text-right">
+                        {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
+                        {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && (
+                          <span className="text-xs text-muted-foreground ml-1">{item.unitOfMeasure}</span>
+                        )}
+                      </td>
                       <td className="p-2 text-sm text-right">${item.unitPrice.toFixed(2)}</td>
                       <td className="p-2 text-sm text-right">${item.discount.toFixed(2)}</td>
                       <td className="p-2 text-sm text-right font-medium">${item.subtotal.toFixed(2)}</td>

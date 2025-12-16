@@ -16,6 +16,7 @@ interface CreateMovementParams {
   routeId?: string
   createdBy?: string
   notes?: string
+  proofUrl?: string // URL del comprobante (opcional)
 }
 
 interface RecordPaymentParams {
@@ -25,6 +26,7 @@ interface RecordPaymentParams {
   routeId?: string
   createdBy?: string
   notes?: string
+  proofUrl?: string // URL del comprobante de pago (opcional)
 }
 
 interface UpdateOrderPaymentParams {
@@ -65,7 +67,7 @@ export class AccountMovementsService {
    * Crea un movimiento en la cuenta corriente del cliente
    */
   async createMovement(params: CreateMovementParams): Promise<CustomerAccountMovement> {
-    const { customerId, movementType, description, amount, orderId, routeId, createdBy, notes } = params
+    const { customerId, movementType, description, amount, orderId, routeId, createdBy, notes, proofUrl } = params
 
     // Obtener saldo actual
     const currentBalance = await this.getCustomerBalance(customerId)
@@ -89,6 +91,7 @@ export class AccountMovementsService {
         route_id: routeId,
         created_by: createdBy,
         notes,
+        proof_url: proofUrl, // Comprobante de pago (opcional)
       })
       .select()
       .single()
@@ -103,7 +106,7 @@ export class AccountMovementsService {
    * NO usar para cobros al momento de la entrega (usar updateOrderPayment)
    */
   async recordDebtPayment(params: RecordPaymentParams): Promise<OrderPayment> {
-    const { orderId, amount, paymentMethod, routeId, createdBy, notes } = params
+    const { orderId, amount, paymentMethod, routeId, createdBy, notes, proofUrl } = params
 
     // Obtener info del pedido y cliente
     const { data: order, error: orderError } = await this.supabase
@@ -166,6 +169,7 @@ export class AccountMovementsService {
       routeId,
       createdBy,
       notes,
+      proofUrl, // Comprobante de pago (opcional)
     })
 
     return payment!

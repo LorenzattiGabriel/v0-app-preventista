@@ -113,6 +113,9 @@ export interface Product {
   current_stock: number
   min_stock: number
   is_active: boolean
+  // 🆕 Control de cantidades decimales
+  allows_decimal_quantity: boolean // Si permite cantidades decimales (ej: 1.5 kg)
+  unit_of_measure: string // Unidad de medida (unidad, kg, litro, metro, etc.)
   created_at: string
   updated_at: string
   barcode?: string

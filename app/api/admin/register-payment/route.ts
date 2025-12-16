@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { orderId, customerId, amount, paymentMethod, notes } = body
+    const { orderId, customerId, amount, paymentMethod, notes, proofUrl } = body
 
     // Validaciones
     if (!orderId || !customerId || !amount || !paymentMethod) {
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       createdBy: user.id,
       notes,
+      proofUrl, // URL del comprobante (opcional)
     })
 
     return NextResponse.json({
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

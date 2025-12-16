@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Zone, Profile } from "@/lib/types/database"
+import type { Profile } from "@/lib/types/database"
 import type { VRPTWResult } from "@/lib/types/rutas-inteligentes.types"
 import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, AlertTriangle, Timer, Car, Package, Calendar, ArrowUpDown, Filter } from "lucide-react"
 import Link from "next/link"
@@ -23,7 +23,8 @@ import { OrdersSummaryStats } from "@/components/admin/orders-summary-stats"
 import { 
   getAvailableOrdersForRoute, 
   filterOrdersWithoutCoordinates,
-  validateOrderSelection 
+  validateOrderSelection,
+  getUniqueLocalities
 } from "@/lib/utils/order-filters"
 import { revalidateDashboard } from "@/app/actions/revalidate"
 
@@ -35,7 +36,6 @@ const DEFAULT_COORDS = {
 }
 
 interface SmartRouteGeneratorProps {
-  zones: Zone[]
   drivers: Profile[]
   pendingOrders: any[]
   userId: string
@@ -73,7 +73,7 @@ interface GeneratedRoute {
   vrptw?: VRPTWResult  // 🆕 Datos VRPTW v2.0
 }
 
-export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
+export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -89,10 +89,13 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
 
   // Form state
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split("T")[0])
-  const [selectedZone, setSelectedZone] = useState<string>("all") // Default to "all" zones
+  const [selectedLocality, setSelectedLocality] = useState<string>("all") // Default to "all" localities
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [startTime, setStartTime] = useState("08:00")
   const [avgDeliveryTime, setAvgDeliveryTime] = useState(10)
+  
+  // Lista de localidades únicas de los pedidos
+  const availableLocalities = getUniqueLocalities(pendingOrders)
   
   // Cost parameters
   const [vehicleType, setVehicleType] = useState<VehicleType>("commercial")
@@ -155,18 +158,18 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
     }
   })
 
-  // Update available orders when zone or date changes
+  // Update available orders when locality or date changes
   // Using clean filtering functions for better maintainability
   useEffect(() => {
     const filtered = getAvailableOrdersForRoute(pendingOrders, {
       deliveryDate,
-      zoneId: selectedZone,
+      locality: selectedLocality,
       status: "PENDIENTE_ENTREGA"
     })
 
     console.log('🔄 Pedidos filtrados:', {
       date: deliveryDate,
-      zone: selectedZone,
+      locality: selectedLocality,
       totalPending: pendingOrders.length,
       filtered: filtered.length,
       withAmounts: filtered.filter(o => o.total).length
@@ -174,7 +177,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
 
     setAvailableOrders(filtered)
     setSelectedOrderIds([])
-  }, [selectedZone, deliveryDate, pendingOrders])
+  }, [selectedLocality, deliveryDate, pendingOrders])
 
   const handleOrderToggle = (orderId: string) => {
     setSelectedOrderIds((prev) =>
@@ -246,13 +249,12 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
         estimatedDuration: routeResponse.estimatedDuration
       })
 
-      // Get zone name
-      const zone = zones.find((z) => z.id === selectedZone)
-      const zoneName = selectedZone === "all" ? "Múltiples Zonas" : (zone?.name || "Zona")
+      // Get locality name
+      const localityName = selectedLocality === "all" ? "Múltiples Localidades" : selectedLocality
 
       const newRoute = {
-        zone: zoneName,
-        zoneId: selectedZone === "all" ? "" : selectedZone,
+        zone: localityName, // Mantener "zone" por compatibilidad
+        zoneId: "", // Ya no usamos zoneId
         orders: ordersToRoute,
         totalDistance: routeResponse.totalDistance,
         estimatedDuration: routeResponse.estimatedDuration,
@@ -390,7 +392,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
         .insert({
           route_code: routeCode,
           driver_id: selectedDriver,
-          zone_id: selectedZone === "all" ? null : selectedZone, // Si es "all", guardar como null
+          zone_id: null, // Ya no usamos zone_id, filtramos por localidad
           scheduled_date: deliveryDate,
           scheduled_start_time: startTime,
           scheduled_end_time: endTime,
@@ -543,22 +545,27 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                 </div>
               </div>
 
-              {/* Zone */}
+              {/* Locality */}
               <div className="space-y-2">
-                <Label htmlFor="zone">Zona</Label>
-                <Select value={selectedZone} onValueChange={setSelectedZone}>
-                  <SelectTrigger id="zone">
-                    <SelectValue placeholder="Selecciona una zona" />
+                <Label htmlFor="locality">Localidad</Label>
+                <Select value={selectedLocality} onValueChange={setSelectedLocality}>
+                  <SelectTrigger id="locality">
+                    <SelectValue placeholder="Selecciona una localidad" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">🌐 Todas las zonas</SelectItem>
-                    {zones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name}
+                    <SelectItem value="all">🌐 Todas las localidades</SelectItem>
+                    {availableLocalities.map((locality) => (
+                      <SelectItem key={locality} value={locality}>
+                        📍 {locality}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {availableLocalities.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No hay localidades disponibles en los pedidos pendientes
+                  </p>
+                )}
               </div>
 
               {/* Orders Dashboard */}
@@ -566,21 +573,21 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                 <div className="space-y-4">
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <Label className="text-base font-semibold">Pedidos Disponibles</Label>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
-                          {selectedZone === "all" && " (todas las zonas)"}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleSelectAllOrders}
-                      >
-                        {selectedOrderIds.length === availableOrders.length ? "Deseleccionar todos" : "Seleccionar todos"}
-                      </Button>
+                    <div>
+                      <Label className="text-base font-semibold">Pedidos Disponibles</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
+                        {selectedLocality === "all" && " (todas las localidades)"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAllOrders}
+                    >
+                      {selectedOrderIds.length === availableOrders.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                    </Button>
                     </div>
 
                     {/* Filters & Sort Controls */}
@@ -658,7 +665,7 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
 
               {deliveryDate && availableOrders.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay pedidos disponibles para {selectedZone === "all" ? "esta fecha (o anteriores)" : "esta zona y fecha (o anteriores)"} con coordenadas guardadas.
+                  No hay pedidos disponibles para {selectedLocality === "all" ? "esta fecha (o anteriores)" : `la localidad "${selectedLocality}" y fecha (o anteriores)`} con coordenadas guardadas.
                 </p>
               )}
             </CardContent>
@@ -912,30 +919,30 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                     </div>
                   ) : (
                     /* Fallback: Old metrics display */
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1 p-4 border rounded-lg">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Route className="h-4 w-4" />
-                          Distancia
-                        </div>
-                        <p className="text-2xl font-bold">
-                          {generatedRoute.totalDistance.toFixed(2)} km
-                        </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1 p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Route className="h-4 w-4" />
+                        Distancia
                       </div>
-                      <div className="space-y-1 p-4 border rounded-lg">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="h-4 w-4" />
-                          Duración Total
-                        </div>
-                        <p className="text-2xl font-bold">
-                          {Math.round(generatedRoute.estimatedDuration + (avgDeliveryTime * generatedRoute.orders.length))} min
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Google Maps: {Math.round(generatedRoute.estimatedDuration)} min + 
-                          Entregas: {avgDeliveryTime * generatedRoute.orders.length} min
-                        </p>
-                      </div>
+                      <p className="text-2xl font-bold">
+                        {generatedRoute.totalDistance.toFixed(2)} km
+                      </p>
                     </div>
+                    <div className="space-y-1 p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        Duración Total
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {Math.round(generatedRoute.estimatedDuration + (avgDeliveryTime * generatedRoute.orders.length))} min
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Google Maps: {Math.round(generatedRoute.estimatedDuration)} min + 
+                        Entregas: {avgDeliveryTime * generatedRoute.orders.length} min
+                      </p>
+                    </div>
+                  </div>
                   )}
 
                   {/* Cost Calculation */}
@@ -995,9 +1002,9 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                   {/* Optimized Order */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <TrendingUp className="h-4 w-4" />
-                        Orden Optimizado de Entregas
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <TrendingUp className="h-4 w-4" />
+                      Orden Optimizado de Entregas
                       </div>
                       {/* 🆕 Summary of time restrictions */}
                       {generatedRoute.orders.some(o => o.has_time_restriction) && (
@@ -1042,24 +1049,24 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                             <span className={`flex items-center justify-center w-10 h-10 text-white rounded-full text-sm font-bold shrink-0 ${
                               order.has_time_restriction ? 'bg-orange-500' : 'bg-blue-600'
                             }`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <span className="text-sm font-bold text-primary">
-                                  {order.customers.commercial_name || order.customers.name}
-                                </span>
-                                <Badge variant="outline" className="text-xs">
-                                  #{order.order_number}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {order.customers.street} {order.customers.street_number}
-                                {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {order.customers.locality}
-                              </p>
+                              <span className="text-sm font-bold text-primary">
+                                {order.customers.commercial_name || order.customers.name}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                #{order.order_number}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {order.customers.street} {order.customers.street_number}
+                              {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {order.customers.locality}
+                            </p>
                               
                               {/* 🆕 VRPTW Arrival Time Display */}
                               {arrivalInfo && (
@@ -1103,13 +1110,13 @@ export function SmartRouteGenerator({ zones, drivers, pendingOrders, userId, dep
                                   )}
                                 </div>
                               )}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <Badge variant="secondary" className="text-sm font-semibold">
-                                ${order.total_amount?.toLocaleString('es-AR') || '0'}
-                              </Badge>
-                            </div>
-                          </li>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <Badge variant="secondary" className="text-sm font-semibold">
+                              ${order.total_amount?.toLocaleString('es-AR') || '0'}
+                            </Badge>
+                          </div>
+                        </li>
                         )
                       })}
                       
