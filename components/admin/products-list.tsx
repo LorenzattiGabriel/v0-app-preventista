@@ -2,8 +2,9 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Edit, Trash2, AlertTriangle } from "lucide-react"
+import { Edit, AlertTriangle } from "lucide-react"
 import { DeleteProductButton } from "./delete-product-button"
+import { StockInlineEdit } from "./stock-inline-edit"
 
 interface Product {
   id: string
@@ -27,9 +28,10 @@ interface Product {
 
 interface ProductsListProps {
   products: Product[]
+  userId: string // 🆕 Para auditoría de cambios
 }
 
-export function ProductsList({ products }: ProductsListProps) {
+export function ProductsList({ products, userId }: ProductsListProps) {
   if (products.length === 0) {
     return (
       <Card>
@@ -149,12 +151,14 @@ export function ProductsList({ products }: ProductsListProps) {
               )}
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Stock Actual</p>
-                <p
-                  className={`text-lg font-bold ${product.current_stock <= product.min_stock ? "text-red-600" : "text-green-600"}`}
-                >
-                  {product.current_stock} unidades
-                </p>
-                <p className="text-xs text-muted-foreground">Mínimo: {product.min_stock}</p>
+                <StockInlineEdit
+                  productId={product.id}
+                  productCode={product.code}
+                  productName={product.name}
+                  currentStock={product.current_stock}
+                  minStock={product.min_stock}
+                  userId={userId}
+                />
               </div>
             </div>
           </CardContent>

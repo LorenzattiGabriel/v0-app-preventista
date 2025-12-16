@@ -145,7 +145,7 @@ export default async function ProductsPage({
       <ProductsFilters categories={categories} />
 
       {/* Products List */}
-      <ProductsList products={products} />
+      <ProductsList products={products} userId={user.id} />
 
       {/* Pagination */}
       <ProductsPagination currentPage={page} totalPages={totalPages} totalItems={total} />
