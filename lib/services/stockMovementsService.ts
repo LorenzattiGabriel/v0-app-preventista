@@ -1,7 +1,11 @@
 import { SupabaseClient } from "@supabase/supabase-js"
 import type { StockMovement, StockMovementType, StockMovementWithUser } from "@/lib/types/database"
 
-interface RecordStockMovementParams {
+// =====================================================
+// Interfaces
+// =====================================================
+
+interface RecordMovementParams {
   productId: string
   productCode: string
   productName: string
@@ -15,24 +19,42 @@ interface RecordStockMovementParams {
   referenceType?: string
 }
 
-interface BulkStockUpdate {
+interface BulkUpdateItem {
   productId: string
   productCode: string
   productName: string
-  previousStock: number
+  currentStock: number
   newStock: number
 }
 
-interface GetMovementsParams {
+interface BulkUpdateResult {
+  success: boolean
+  totalProcessed: number
+  totalUpdated: number
+  totalSkipped: number
+  errors: Array<{ code: string; error: string }>
+  batchId: string
+}
+
+interface StockHistoryFilters {
   productId?: string
   movementType?: StockMovementType
-  batchId?: string
   userId?: string
+  batchId?: string
   fromDate?: string
   toDate?: string
-  limit?: number
-  offset?: number
 }
+
+interface PaginatedStockHistory {
+  movements: StockMovementWithUser[]
+  total: number
+  page: number
+  totalPages: number
+}
+
+// =====================================================
+// Service
+// =====================================================
 
 export class StockMovementsService {
   constructor(private supabase: SupabaseClient) {}
@@ -40,38 +62,24 @@ export class StockMovementsService {
   /**
    * Registra un movimiento de stock individual
    */
-  async recordMovement(params: RecordStockMovementParams): Promise<StockMovement> {
-    const {
-      productId,
-      productCode,
-      productName,
-      previousStock,
-      newStock,
-      movementType,
-      createdBy,
-      notes,
-      batchId,
-      referenceId,
-      referenceType,
-    } = params
-
-    const quantityChanged = newStock - previousStock
+  async recordMovement(params: RecordMovementParams): Promise<StockMovement> {
+    const quantityChanged = params.newStock - params.previousStock
 
     const { data, error } = await this.supabase
       .from("stock_movements")
       .insert({
-        product_id: productId,
-        product_code: productCode,
-        product_name: productName,
-        previous_stock: previousStock,
-        new_stock: newStock,
+        product_id: params.productId,
+        product_code: params.productCode,
+        product_name: params.productName,
+        previous_stock: params.previousStock,
+        new_stock: params.newStock,
         quantity_changed: quantityChanged,
-        movement_type: movementType,
-        created_by: createdBy,
-        notes,
-        batch_id: batchId,
-        reference_id: referenceId,
-        reference_type: referenceType,
+        movement_type: params.movementType,
+        created_by: params.createdBy,
+        notes: params.notes || null,
+        batch_id: params.batchId || null,
+        reference_id: params.referenceId || null,
+        reference_type: params.referenceType || null,
       })
       .select()
       .single()
@@ -81,39 +89,39 @@ export class StockMovementsService {
   }
 
   /**
-   * Actualiza stock de un producto y registra el movimiento
+   * Actualiza stock de un producto individual con auditoría
    */
-  async updateStockWithAudit(
+  async updateProductStock(
     productId: string,
     newStock: number,
-    movementType: StockMovementType,
     userId: string,
+    movementType: StockMovementType = "manual_edit",
     notes?: string
   ): Promise<{ product: any; movement: StockMovement }> {
-    // Obtener producto actual
-    const { data: product, error: productError } = await this.supabase
+    // 1. Obtener producto actual
+    const { data: product, error: fetchError } = await this.supabase
       .from("products")
       .select("id, code, name, current_stock")
       .eq("id", productId)
       .single()
 
-    if (productError || !product) {
+    if (fetchError || !product) {
       throw new Error(`Producto no encontrado: ${productId}`)
     }
 
     const previousStock = product.current_stock
 
-    // Actualizar stock
+    // 2. Actualizar stock del producto
     const { error: updateError } = await this.supabase
       .from("products")
-      .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+      .update({ current_stock: newStock })
       .eq("id", productId)
 
     if (updateError) throw updateError
 
-    // Registrar movimiento
+    // 3. Registrar movimiento
     const movement = await this.recordMovement({
-      productId: product.id,
+      productId,
       productCode: product.code,
       productName: product.name,
       previousStock,
@@ -128,112 +136,107 @@ export class StockMovementsService {
 
   /**
    * Actualización masiva de stock (para importación CSV)
-   * Retorna un resumen de los cambios realizados
    */
   async bulkUpdateStock(
-    updates: BulkStockUpdate[],
+    items: BulkUpdateItem[],
     userId: string,
     notes?: string
-  ): Promise<{
-    success: number
-    failed: number
-    batchId: string
-    movements: StockMovement[]
-    errors: Array<{ productCode: string; error: string }>
-  }> {
+  ): Promise<BulkUpdateResult> {
+    // Generar batch ID único para esta importación
     const batchId = crypto.randomUUID()
-    const movements: StockMovement[] = []
-    const errors: Array<{ productCode: string; error: string }> = []
-    let success = 0
-    let failed = 0
+    
+    const result: BulkUpdateResult = {
+      success: true,
+      totalProcessed: items.length,
+      totalUpdated: 0,
+      totalSkipped: 0,
+      errors: [],
+      batchId,
+    }
 
-    for (const update of updates) {
+    for (const item of items) {
       try {
-        // Actualizar stock
+        // Verificar si el stock cambió
+        if (item.currentStock === item.newStock) {
+          result.totalSkipped++
+          continue
+        }
+
+        // Actualizar producto
         const { error: updateError } = await this.supabase
           .from("products")
-          .update({ 
-            current_stock: update.newStock, 
-            updated_at: new Date().toISOString() 
-          })
-          .eq("id", update.productId)
+          .update({ current_stock: item.newStock })
+          .eq("id", item.productId)
 
-        if (updateError) throw updateError
+        if (updateError) {
+          result.errors.push({ code: item.productCode, error: updateError.message })
+          continue
+        }
 
         // Registrar movimiento
-        const movement = await this.recordMovement({
-          productId: update.productId,
-          productCode: update.productCode,
-          productName: update.productName,
-          previousStock: update.previousStock,
-          newStock: update.newStock,
+        await this.recordMovement({
+          productId: item.productId,
+          productCode: item.productCode,
+          productName: item.productName,
+          previousStock: item.currentStock,
+          newStock: item.newStock,
           movementType: "csv_import",
           createdBy: userId,
-          notes: notes || "Importación CSV",
+          notes: notes || `Importación CSV - Lote ${batchId.slice(0, 8)}`,
           batchId,
         })
 
-        movements.push(movement)
-        success++
+        result.totalUpdated++
       } catch (err) {
-        failed++
-        errors.push({
-          productCode: update.productCode,
+        result.errors.push({
+          code: item.productCode,
           error: err instanceof Error ? err.message : "Error desconocido",
         })
       }
     }
 
-    return { success, failed, batchId, movements, errors }
+    result.success = result.errors.length === 0
+
+    return result
   }
 
   /**
-   * Obtiene movimientos de stock con filtros
+   * Obtiene historial de movimientos con filtros y paginación
    */
-  async getMovements(params: GetMovementsParams = {}): Promise<{
-    movements: StockMovementWithUser[]
-    total: number
-  }> {
-    const {
-      productId,
-      movementType,
-      batchId,
-      userId,
-      fromDate,
-      toDate,
-      limit = 50,
-      offset = 0,
-    } = params
-
+  async getStockHistory(
+    filters: StockHistoryFilters = {},
+    page: number = 1,
+    perPage: number = 20
+  ): Promise<PaginatedStockHistory> {
     let query = this.supabase
       .from("stock_movements_with_user")
       .select("*", { count: "exact" })
 
-    if (productId) {
-      query = query.eq("product_id", productId)
+    // Aplicar filtros
+    if (filters.productId) {
+      query = query.eq("product_id", filters.productId)
+    }
+    if (filters.movementType) {
+      query = query.eq("movement_type", filters.movementType)
+    }
+    if (filters.userId) {
+      query = query.eq("created_by", filters.userId)
+    }
+    if (filters.batchId) {
+      query = query.eq("batch_id", filters.batchId)
+    }
+    if (filters.fromDate) {
+      query = query.gte("created_at", filters.fromDate)
+    }
+    if (filters.toDate) {
+      query = query.lte("created_at", filters.toDate)
     }
 
-    if (movementType) {
-      query = query.eq("movement_type", movementType)
-    }
+    // Ordenar y paginar
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
 
-    if (batchId) {
-      query = query.eq("batch_id", batchId)
-    }
-
-    if (userId) {
-      query = query.eq("created_by", userId)
-    }
-
-    if (fromDate) {
-      query = query.gte("created_at", fromDate)
-    }
-
-    if (toDate) {
-      query = query.lte("created_at", toDate)
-    }
-
-    query = query.order("created_at", { ascending: false }).range(offset, offset + limit - 1)
+    query = query.order("created_at", { ascending: false }).range(from, to)
 
     const { data, error, count } = await query
 
@@ -242,81 +245,120 @@ export class StockMovementsService {
     return {
       movements: data || [],
       total: count || 0,
+      page,
+      totalPages: Math.ceil((count || 0) / perPage),
     }
   }
 
   /**
-   * Obtiene el historial de un producto específico
+   * Obtiene historial de un producto específico
    */
-  async getProductHistory(productId: string, limit = 50): Promise<StockMovementWithUser[]> {
-    const { movements } = await this.getMovements({ productId, limit })
-    return movements
-  }
-
-  /**
-   * Obtiene estadísticas de movimientos
-   */
-  async getMovementStats(fromDate?: string, toDate?: string): Promise<{
-    totalMovements: number
-    byType: Record<string, number>
-    byUser: Array<{ userId: string; userName: string; count: number }>
-  }> {
-    let query = this.supabase
+  async getProductHistory(productId: string, limit: number = 50): Promise<StockMovementWithUser[]> {
+    const { data, error } = await this.supabase
       .from("stock_movements_with_user")
-      .select("movement_type, created_by, user_name")
+      .select("*")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false })
+      .limit(limit)
 
-    if (fromDate) {
-      query = query.gte("created_at", fromDate)
-    }
+    if (error) throw error
+    return data || []
+  }
 
-    if (toDate) {
-      query = query.lte("created_at", toDate)
-    }
-
-    const { data, error } = await query
+  /**
+   * Obtiene resumen de un lote de importación
+   */
+  async getBatchSummary(batchId: string): Promise<{
+    totalMovements: number
+    totalIncrease: number
+    totalDecrease: number
+    createdAt: string | null
+    userName: string | null
+  }> {
+    const { data, error } = await this.supabase
+      .from("stock_movements_with_user")
+      .select("quantity_changed, created_at, user_name")
+      .eq("batch_id", batchId)
 
     if (error) throw error
 
-    const byType: Record<string, number> = {}
-    const userCounts: Record<string, { name: string; count: number }> = {}
-
-    for (const movement of data || []) {
-      // Contar por tipo
-      byType[movement.movement_type] = (byType[movement.movement_type] || 0) + 1
-
-      // Contar por usuario
-      if (movement.created_by) {
-        if (!userCounts[movement.created_by]) {
-          userCounts[movement.created_by] = { name: movement.user_name || "Desconocido", count: 0 }
-        }
-        userCounts[movement.created_by].count++
-      }
-    }
-
-    const byUser = Object.entries(userCounts).map(([userId, data]) => ({
-      userId,
-      userName: data.name,
-      count: data.count,
-    }))
-
+    const movements = data || []
+    
     return {
-      totalMovements: data?.length || 0,
-      byType,
-      byUser,
+      totalMovements: movements.length,
+      totalIncrease: movements
+        .filter(m => m.quantity_changed > 0)
+        .reduce((sum, m) => sum + m.quantity_changed, 0),
+      totalDecrease: Math.abs(
+        movements
+          .filter(m => m.quantity_changed < 0)
+          .reduce((sum, m) => sum + m.quantity_changed, 0)
+      ),
+      createdAt: movements[0]?.created_at || null,
+      userName: movements[0]?.user_name || null,
     }
   }
 
   /**
-   * Obtiene los movimientos de un batch específico (importación CSV)
+   * Exporta historial a formato CSV
    */
-  async getBatchMovements(batchId: string): Promise<StockMovementWithUser[]> {
-    const { movements } = await this.getMovements({ batchId, limit: 1000 })
-    return movements
+  async exportHistoryToCSV(filters: StockHistoryFilters = {}): Promise<string> {
+    const { movements } = await this.getStockHistory(filters, 1, 10000) // Max 10k registros
+
+    const headers = [
+      "Fecha",
+      "Código",
+      "Producto",
+      "Stock Anterior",
+      "Stock Nuevo",
+      "Cambio",
+      "Tipo",
+      "Usuario",
+      "Notas",
+    ]
+
+    const rows = movements.map(m => [
+      new Date(m.created_at).toLocaleString("es-AR"),
+      m.product_code,
+      m.product_name,
+      m.previous_stock.toString(),
+      m.new_stock.toString(),
+      m.quantity_changed > 0 ? `+${m.quantity_changed}` : m.quantity_changed.toString(),
+      this.getMovementTypeLabel(m.movement_type),
+      m.user_name || "Sistema",
+      m.notes || "",
+    ])
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(",")),
+    ].join("\n")
+
+    return csvContent
+  }
+
+  /**
+   * Obtiene etiqueta legible para tipo de movimiento
+   */
+  getMovementTypeLabel(type: StockMovementType): string {
+    const labels: Record<StockMovementType, string> = {
+      manual_edit: "Edición Manual",
+      csv_import: "Importación CSV",
+      order_assembly: "Armado de Pedido",
+      inventory_adjustment: "Ajuste de Inventario",
+      purchase_receipt: "Recepción de Compra",
+      return: "Devolución",
+      damage: "Baja por Daño",
+      expiration: "Baja por Vencimiento",
+    }
+    return labels[type] || type
   }
 }
 
-// Factory function
+// =====================================================
+// Factory
+// =====================================================
+
 export function createStockMovementsService(supabase: SupabaseClient): StockMovementsService {
   return new StockMovementsService(supabase)
 }
-
