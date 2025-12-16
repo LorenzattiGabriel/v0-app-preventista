@@ -233,9 +233,9 @@ export function StockHistoryView({ users, products }: StockHistoryViewProps) {
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
               <History className="h-8 w-8" />
-              Historial de Stock
+              Historial de Actualizaciones
             </h1>
-            <p className="text-muted-foreground">Auditoría de todos los movimientos de inventario</p>
+            <p className="text-muted-foreground">Auditoría de todos los cambios de stock y precios</p>
           </div>
         </div>
         <Button onClick={handleExportCSV} variant="outline">

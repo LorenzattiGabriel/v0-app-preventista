@@ -83,7 +83,7 @@ export default async function ProductsPage({
           <Button variant="outline" asChild>
             <Link href="/admin/products/import-stock">
               <Upload className="mr-2 h-4 w-4" />
-              Importar Stock
+              Actualizar Masivo
             </Link>
           </Button>
           <Button asChild>

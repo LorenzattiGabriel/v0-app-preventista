@@ -1,5 +1,6 @@
 /**
- * Utilidades para parsear y generar archivos CSV
+ * Utilidades para parsear y generar archivos CSV de productos
+ * Soporta actualización de stock Y precios
  */
 
 export interface CSVProductRow {
@@ -7,6 +8,9 @@ export interface CSVProductRow {
   name: string
   current_stock: string
   min_stock: string
+  base_price: string
+  wholesale_price: string
+  retail_price: string
 }
 
 export interface ParsedProduct {
@@ -14,6 +18,9 @@ export interface ParsedProduct {
   name: string
   currentStock: number
   minStock: number
+  basePrice: number | null
+  wholesalePrice: number | null
+  retailPrice: number | null
   isValid: boolean
   error?: string
 }
@@ -32,7 +39,7 @@ export function parseCSV(content: string): ParsedProduct[] {
   const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim())
   
   // Validar encabezados requeridos
-  const requiredHeaders = ['code', 'current_stock']
+  const requiredHeaders = ['code']
   const missingHeaders = requiredHeaders.filter(h => !headers.includes(h))
   
   if (missingHeaders.length > 0) {
@@ -44,6 +51,9 @@ export function parseCSV(content: string): ParsedProduct[] {
   const nameIndex = headers.indexOf('name')
   const stockIndex = headers.indexOf('current_stock')
   const minStockIndex = headers.indexOf('min_stock')
+  const basePriceIndex = headers.indexOf('base_price')
+  const wholesalePriceIndex = headers.indexOf('wholesale_price')
+  const retailPriceIndex = headers.indexOf('retail_price')
 
   // Parsear filas de datos
   const products: ParsedProduct[] = []
@@ -56,11 +66,17 @@ export function parseCSV(content: string): ParsedProduct[] {
     
     const code = values[codeIndex]?.trim() || ''
     const name = nameIndex >= 0 ? values[nameIndex]?.trim() || '' : ''
-    const stockStr = values[stockIndex]?.trim() || ''
+    const stockStr = stockIndex >= 0 ? values[stockIndex]?.trim() || '' : ''
     const minStockStr = minStockIndex >= 0 ? values[minStockIndex]?.trim() || '' : '0'
+    const basePriceStr = basePriceIndex >= 0 ? values[basePriceIndex]?.trim() || '' : ''
+    const wholesalePriceStr = wholesalePriceIndex >= 0 ? values[wholesalePriceIndex]?.trim() || '' : ''
+    const retailPriceStr = retailPriceIndex >= 0 ? values[retailPriceIndex]?.trim() || '' : ''
 
-    const currentStock = parseFloat(stockStr)
+    const currentStock = stockStr ? parseFloat(stockStr) : 0
     const minStock = parseFloat(minStockStr)
+    const basePrice = basePriceStr ? parseFloat(basePriceStr) : null
+    const wholesalePrice = wholesalePriceStr ? parseFloat(wholesalePriceStr) : null
+    const retailPrice = retailPriceStr ? parseFloat(retailPriceStr) : null
 
     let isValid = true
     let error: string | undefined
@@ -68,12 +84,21 @@ export function parseCSV(content: string): ParsedProduct[] {
     if (!code) {
       isValid = false
       error = 'Código vacío'
-    } else if (isNaN(currentStock)) {
+    } else if (stockStr && isNaN(currentStock)) {
       isValid = false
       error = 'Stock no es un número válido'
-    } else if (currentStock < 0) {
+    } else if (stockStr && currentStock < 0) {
       isValid = false
       error = 'Stock no puede ser negativo'
+    } else if (basePriceStr && (isNaN(basePrice!) || basePrice! < 0)) {
+      isValid = false
+      error = 'Precio base inválido'
+    } else if (wholesalePriceStr && (isNaN(wholesalePrice!) || wholesalePrice! < 0)) {
+      isValid = false
+      error = 'Precio mayorista inválido'
+    } else if (retailPriceStr && (isNaN(retailPrice!) || retailPrice! < 0)) {
+      isValid = false
+      error = 'Precio minorista inválido'
     }
 
     products.push({
@@ -81,6 +106,9 @@ export function parseCSV(content: string): ParsedProduct[] {
       name,
       currentStock: isNaN(currentStock) ? 0 : currentStock,
       minStock: isNaN(minStock) ? 0 : minStock,
+      basePrice,
+      wholesalePrice,
+      retailPrice,
       isValid,
       error,
     })
@@ -115,15 +143,18 @@ function parseCSVLine(line: string): string[] {
 }
 
 /**
- * Genera contenido CSV desde una lista de productos
+ * Genera contenido CSV desde una lista de productos (incluye precios)
  */
 export function generateCSV(products: Array<{
   code: string
   name: string
   current_stock: number
   min_stock: number
+  base_price?: number | null
+  wholesale_price?: number | null
+  retail_price?: number | null
 }>): string {
-  const headers = ['code', 'name', 'current_stock', 'min_stock']
+  const headers = ['code', 'name', 'current_stock', 'min_stock', 'base_price', 'wholesale_price', 'retail_price']
   const lines = [headers.join(',')]
 
   for (const product of products) {
@@ -132,6 +163,9 @@ export function generateCSV(products: Array<{
       escapeCSVValue(product.name),
       product.current_stock.toString(),
       product.min_stock.toString(),
+      product.base_price?.toString() || '',
+      product.wholesale_price?.toString() || '',
+      product.retail_price?.toString() || '',
     ]
     lines.push(values.join(','))
   }
@@ -167,4 +201,3 @@ export function downloadCSV(content: string, filename: string): void {
   
   URL.revokeObjectURL(url)
 }
-

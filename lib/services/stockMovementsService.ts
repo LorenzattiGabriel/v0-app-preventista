@@ -23,8 +23,16 @@ interface BulkUpdateItem {
   productId: string
   productCode: string
   productName: string
+  // Stock
   currentStock: number
-  newStock: number
+  newStock: number | null
+  // Precios
+  currentBasePrice?: number | null
+  newBasePrice?: number | null
+  currentWholesalePrice?: number | null
+  newWholesalePrice?: number | null
+  currentRetailPrice?: number | null
+  newRetailPrice?: number | null
 }
 
 interface BulkUpdateResult {
@@ -32,11 +40,13 @@ interface BulkUpdateResult {
   totalProcessed: number
   totalUpdated: number
   totalSkipped: number
+  stockChanges: number
+  priceChanges: number
   errors: Array<{ code: string; error: string }>
   batchId: string
 }
 
-interface StockHistoryFilters {
+interface HistoryFilters {
   productId?: string
   movementType?: StockMovementType
   userId?: string
@@ -45,7 +55,7 @@ interface StockHistoryFilters {
   toDate?: string
 }
 
-interface PaginatedStockHistory {
+interface PaginatedHistory {
   movements: StockMovementWithUser[]
   total: number
   page: number
@@ -60,7 +70,7 @@ export class StockMovementsService {
   constructor(private supabase: SupabaseClient) {}
 
   /**
-   * Registra un movimiento de stock individual
+   * Registra un movimiento de stock/precio individual
    */
   async recordMovement(params: RecordMovementParams): Promise<StockMovement> {
     const quantityChanged = params.newStock - params.previousStock
@@ -135,7 +145,7 @@ export class StockMovementsService {
   }
 
   /**
-   * Actualización masiva de stock (para importación CSV)
+   * Actualización masiva de stock Y precios (para importación CSV)
    */
   async bulkUpdateStock(
     items: BulkUpdateItem[],
@@ -150,22 +160,50 @@ export class StockMovementsService {
       totalProcessed: items.length,
       totalUpdated: 0,
       totalSkipped: 0,
+      stockChanges: 0,
+      priceChanges: 0,
       errors: [],
       batchId,
     }
 
     for (const item of items) {
       try {
-        // Verificar si el stock cambió
-        if (item.currentStock === item.newStock) {
+        // Verificar qué campos cambiaron
+        const stockChanged = item.newStock !== null && item.currentStock !== item.newStock
+        const basePriceChanged = item.newBasePrice !== null && item.newBasePrice !== undefined && 
+                                  item.currentBasePrice !== item.newBasePrice
+        const wholesalePriceChanged = item.newWholesalePrice !== null && item.newWholesalePrice !== undefined && 
+                                       item.currentWholesalePrice !== item.newWholesalePrice
+        const retailPriceChanged = item.newRetailPrice !== null && item.newRetailPrice !== undefined && 
+                                    item.currentRetailPrice !== item.newRetailPrice
+
+        const anyChange = stockChanged || basePriceChanged || wholesalePriceChanged || retailPriceChanged
+
+        if (!anyChange) {
           result.totalSkipped++
           continue
+        }
+
+        // Preparar objeto de actualización
+        const updateData: Record<string, any> = {}
+        
+        if (stockChanged) {
+          updateData.current_stock = item.newStock
+        }
+        if (basePriceChanged) {
+          updateData.base_price = item.newBasePrice
+        }
+        if (wholesalePriceChanged) {
+          updateData.wholesale_price = item.newWholesalePrice
+        }
+        if (retailPriceChanged) {
+          updateData.retail_price = item.newRetailPrice
         }
 
         // Actualizar producto
         const { error: updateError } = await this.supabase
           .from("products")
-          .update({ current_stock: item.newStock })
+          .update(updateData)
           .eq("id", item.productId)
 
         if (updateError) {
@@ -173,24 +211,55 @@ export class StockMovementsService {
           continue
         }
 
-        // Registrar movimiento
-        try {
-          console.log(`[StockService] Registrando movimiento: ${item.productCode} | ${item.currentStock} → ${item.newStock}`)
-          await this.recordMovement({
-            productId: item.productId,
-            productCode: item.productCode,
-            productName: item.productName,
-            previousStock: item.currentStock,
-            newStock: item.newStock,
-            movementType: "csv_import",
-            createdBy: userId,
-            notes: notes || `Importación CSV - Lote ${batchId.slice(0, 8)}`,
-            batchId,
-          })
-          console.log(`[StockService] ✅ Movimiento registrado para ${item.productCode}`)
-        } catch (movementError) {
-          // Si falla el registro de movimiento, loguear pero continuar
-          console.error(`[StockService] ❌ Error registrando movimiento para ${item.productCode}:`, movementError)
+        // Registrar movimiento de stock
+        if (stockChanged) {
+          try {
+            console.log(`[StockService] Registrando cambio stock: ${item.productCode} | ${item.currentStock} → ${item.newStock}`)
+            await this.recordMovement({
+              productId: item.productId,
+              productCode: item.productCode,
+              productName: item.productName,
+              previousStock: item.currentStock,
+              newStock: item.newStock!,
+              movementType: "csv_import",
+              createdBy: userId,
+              notes: notes || `Importación CSV - Lote ${batchId.slice(0, 8)}`,
+              batchId,
+            })
+            result.stockChanges++
+            console.log(`[StockService] ✅ Stock registrado para ${item.productCode}`)
+          } catch (movementError) {
+            console.error(`[StockService] ❌ Error registrando stock para ${item.productCode}:`, movementError)
+          }
+        }
+
+        // Registrar movimientos de precio (usando el mismo sistema pero con notas descriptivas)
+        if (basePriceChanged || wholesalePriceChanged || retailPriceChanged) {
+          try {
+            const priceChanges: string[] = []
+            if (basePriceChanged) priceChanges.push(`Base: $${item.currentBasePrice} → $${item.newBasePrice}`)
+            if (wholesalePriceChanged) priceChanges.push(`Mayorista: $${item.currentWholesalePrice} → $${item.newWholesalePrice}`)
+            if (retailPriceChanged) priceChanges.push(`Minorista: $${item.currentRetailPrice} → $${item.newRetailPrice}`)
+            
+            console.log(`[StockService] Registrando cambio precio: ${item.productCode} | ${priceChanges.join(', ')}`)
+            
+            // Usamos stock 0→0 para indicar que es un cambio de precio (no de stock)
+            await this.recordMovement({
+              productId: item.productId,
+              productCode: item.productCode,
+              productName: item.productName,
+              previousStock: 0,
+              newStock: 0,
+              movementType: "manual_edit", // TODO: Agregar 'price_update' al enum
+              createdBy: userId,
+              notes: `💰 Actualización de precios: ${priceChanges.join(', ')}`,
+              batchId,
+            })
+            result.priceChanges++
+            console.log(`[StockService] ✅ Precio registrado para ${item.productCode}`)
+          } catch (movementError) {
+            console.error(`[StockService] ❌ Error registrando precio para ${item.productCode}:`, movementError)
+          }
         }
 
         result.totalUpdated++
@@ -211,11 +280,11 @@ export class StockMovementsService {
   /**
    * Obtiene historial de movimientos con filtros y paginación
    */
-  async getStockHistory(
-    filters: StockHistoryFilters = {},
+  async getHistory(
+    filters: HistoryFilters = {},
     page: number = 1,
     perPage: number = 20
-  ): Promise<PaginatedStockHistory> {
+  ): Promise<PaginatedHistory> {
     let query = this.supabase
       .from("stock_movements_with_user")
       .select("*", { count: "exact" })
@@ -310,8 +379,8 @@ export class StockMovementsService {
   /**
    * Exporta historial a formato CSV
    */
-  async exportHistoryToCSV(filters: StockHistoryFilters = {}): Promise<string> {
-    const { movements } = await this.getStockHistory(filters, 1, 10000) // Max 10k registros
+  async exportHistoryToCSV(filters: HistoryFilters = {}): Promise<string> {
+    const { movements } = await this.getHistory(filters, 1, 10000) // Max 10k registros
 
     const headers = [
       "Fecha",

@@ -30,6 +30,8 @@ import {
   Loader2,
   ArrowLeft,
   RefreshCw,
+  Package,
+  DollarSign,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -42,7 +44,17 @@ type ImportStatus = "idle" | "parsing" | "preview" | "importing" | "success" | "
 interface ProductMatch extends ParsedProduct {
   productId?: string
   productName?: string
+  // Stock
   previousStock?: number
+  stockChanged: boolean
+  // Precios
+  previousBasePrice?: number | null
+  previousWholesalePrice?: number | null
+  previousRetailPrice?: number | null
+  basePriceChanged: boolean
+  wholesalePriceChanged: boolean
+  retailPriceChanged: boolean
+  // General
   willUpdate: boolean
 }
 
@@ -58,6 +70,8 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     totalUpdated: number
     totalSkipped: number
     totalProcessed: number
+    stockChanges: number
+    priceChanges: number
     batchId: string
     errors: Array<{ code: string; error: string }>
   } | null>(null)
@@ -73,12 +87,16 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     ...invalidProducts,
   ]
 
+  // Contar cambios por tipo
+  const stockChangesCount = validProducts.filter(p => p.stockChanged).length
+  const priceChangesCount = validProducts.filter(p => p.basePriceChanged || p.wholesalePriceChanged || p.retailPriceChanged).length
+
   const handleDownloadTemplate = async () => {
     const supabase = createClient()
     
     const { data: products, error } = await supabase
       .from("products")
-      .select("code, name, current_stock, min_stock")
+      .select("code, name, current_stock, min_stock, base_price, wholesale_price, retail_price")
       .eq("is_active", true)
       .order("code")
 
@@ -88,7 +106,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     }
 
     const csv = generateCSV(products || [])
-    downloadCSV(csv, `stock_productos_${new Date().toISOString().split('T')[0]}.csv`)
+    downloadCSV(csv, `productos_${new Date().toISOString().split('T')[0]}.csv`)
   }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +127,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
       
       const { data: dbProducts, error: dbError } = await supabase
         .from("products")
-        .select("id, code, name, current_stock")
+        .select("id, code, name, current_stock, base_price, wholesale_price, retail_price")
         .in("code", codes)
 
       if (dbError) throw dbError
@@ -126,16 +144,33 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
             isValid: false,
             error: "Producto no encontrado en la base de datos",
             willUpdate: false,
+            stockChanged: false,
+            basePriceChanged: false,
+            wholesalePriceChanged: false,
+            retailPriceChanged: false,
           }
         }
 
-        const willUpdate = dbProduct.current_stock !== p.currentStock
+        // Detectar cambios
+        const stockChanged = p.currentStock !== dbProduct.current_stock
+        const basePriceChanged = p.basePrice !== null && p.basePrice !== dbProduct.base_price
+        const wholesalePriceChanged = p.wholesalePrice !== null && p.wholesalePrice !== dbProduct.wholesale_price
+        const retailPriceChanged = p.retailPrice !== null && p.retailPrice !== dbProduct.retail_price
+        
+        const willUpdate = stockChanged || basePriceChanged || wholesalePriceChanged || retailPriceChanged
 
         return {
           ...p,
           productId: dbProduct.id,
           productName: dbProduct.name,
           previousStock: dbProduct.current_stock,
+          previousBasePrice: dbProduct.base_price,
+          previousWholesalePrice: dbProduct.wholesale_price,
+          previousRetailPrice: dbProduct.retail_price,
+          stockChanged,
+          basePriceChanged,
+          wholesalePriceChanged,
+          retailPriceChanged,
           willUpdate,
           isValid: p.isValid,
         }
@@ -171,8 +206,16 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
         productId: p.productId!,
         productCode: p.code,
         productName: p.productName!,
-        currentStock: p.previousStock!,  // Stock actual en DB
-        newStock: p.currentStock,         // Nuevo stock del CSV
+        // Stock
+        currentStock: p.previousStock!,
+        newStock: p.stockChanged ? p.currentStock : null,
+        // Precios
+        currentBasePrice: p.previousBasePrice,
+        newBasePrice: p.basePriceChanged ? p.basePrice : null,
+        currentWholesalePrice: p.previousWholesalePrice,
+        newWholesalePrice: p.wholesalePriceChanged ? p.wholesalePrice : null,
+        currentRetailPrice: p.previousRetailPrice,
+        newRetailPrice: p.retailPriceChanged ? p.retailPrice : null,
       }))
 
       const result = await stockService.bulkUpdateStock(
@@ -198,6 +241,11 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     setImportResult(null)
   }
 
+  const formatPrice = (price: number | null | undefined) => {
+    if (price === null || price === undefined) return "-"
+    return `$${price.toLocaleString("es-AR")}`
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -208,8 +256,8 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Importar Stock (CSV)</h1>
-          <p className="text-muted-foreground">Actualiza el stock de múltiples productos desde un archivo CSV</p>
+          <h1 className="text-2xl font-bold">Actualización Masiva de Productos</h1>
+          <p className="text-muted-foreground">Actualiza stock y precios de múltiples productos desde un archivo CSV</p>
         </div>
       </div>
 
@@ -224,7 +272,14 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
         <CardContent className="space-y-4">
           <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
             <li>Descarga la plantilla CSV con los productos actuales</li>
-            <li>Modifica los valores de <code className="bg-muted px-1 rounded">current_stock</code> en el archivo</li>
+            <li>Modifica los valores que desees actualizar:
+              <ul className="list-disc list-inside ml-4 mt-1">
+                <li><code className="bg-muted px-1 rounded">current_stock</code> - Stock actual</li>
+                <li><code className="bg-muted px-1 rounded">base_price</code> - Precio base</li>
+                <li><code className="bg-muted px-1 rounded">wholesale_price</code> - Precio mayorista</li>
+                <li><code className="bg-muted px-1 rounded">retail_price</code> - Precio minorista</li>
+              </ul>
+            </li>
             <li>Sube el archivo modificado</li>
             <li>Revisa la vista previa de cambios</li>
             <li>Confirma la importación</li>
@@ -252,7 +307,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
         <Card>
           <CardHeader>
             <CardTitle>Subir Archivo CSV</CardTitle>
-            <CardDescription>Selecciona un archivo CSV con las columnas: code, name, current_stock, min_stock</CardDescription>
+            <CardDescription>Selecciona un archivo CSV con la plantilla descargada</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
@@ -283,7 +338,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
       {status === "preview" && (
         <>
           {/* Resumen */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
@@ -299,10 +354,21 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Sin Cambios</p>
-                    <p className="text-2xl font-bold text-muted-foreground">{unchangedProducts.length}</p>
+                    <p className="text-sm text-muted-foreground">Cambios Stock</p>
+                    <p className="text-2xl font-bold text-blue-600">{stockChangesCount}</p>
                   </div>
-                  <RefreshCw className="h-8 w-8 text-muted-foreground" />
+                  <Package className="h-8 w-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Cambios Precio</p>
+                    <p className="text-2xl font-bold text-purple-600">{priceChangesCount}</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-purple-600" />
                 </div>
               </CardContent>
             </Card>
@@ -324,25 +390,26 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
             <CardHeader>
               <CardTitle>Vista Previa de Cambios</CardTitle>
               <CardDescription>
-                Se actualizarán {validProducts.length} productos
+                Se actualizarán {validProducts.length} productos ({stockChangesCount} stock, {priceChangesCount} precios)
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border max-h-[400px] overflow-auto">
+              <div className="rounded-md border max-h-[500px] overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="text-right">Stock Actual</TableHead>
-                      <TableHead className="text-right">Nuevo Stock</TableHead>
-                      <TableHead className="text-right">Diferencia</TableHead>
-                      <TableHead>Estado</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Código</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Producto</TableHead>
+                      <TableHead className="sticky top-0 bg-background text-right">Stock</TableHead>
+                      <TableHead className="sticky top-0 bg-background text-right">Precio Base</TableHead>
+                      <TableHead className="sticky top-0 bg-background text-right">P. Mayorista</TableHead>
+                      <TableHead className="sticky top-0 bg-background text-right">P. Minorista</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Estado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedProducts.map((product, index) => {
-                      const diff = product.willUpdate 
+                      const stockDiff = product.stockChanged 
                         ? product.currentStock - (product.previousStock || 0)
                         : 0
                       
@@ -358,24 +425,62 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
                           }
                         >
                           <TableCell className="font-mono">{product.code}</TableCell>
-                          <TableCell>{product.productName || product.name || "-"}</TableCell>
+                          <TableCell className="max-w-[150px] truncate">{product.productName || product.name || "-"}</TableCell>
                           <TableCell className="text-right">
-                            {product.previousStock !== undefined ? product.previousStock : "-"}
+                            {product.stockChanged ? (
+                              <span className={stockDiff > 0 ? "text-green-600" : stockDiff < 0 ? "text-red-600" : ""}>
+                                {product.previousStock} → <strong>{product.currentStock}</strong>
+                                <span className="text-xs ml-1">({stockDiff > 0 ? `+${stockDiff}` : stockDiff})</span>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">{product.previousStock ?? product.currentStock}</span>
+                            )}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {product.currentStock}
+                          <TableCell className="text-right">
+                            {product.basePriceChanged ? (
+                              <span className="text-purple-600">
+                                {formatPrice(product.previousBasePrice)} → <strong>{formatPrice(product.basePrice)}</strong>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">{formatPrice(product.previousBasePrice ?? product.basePrice)}</span>
+                            )}
                           </TableCell>
-                          <TableCell className={`text-right font-medium ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : ""}`}>
-                            {product.willUpdate ? (diff > 0 ? `+${diff}` : diff) : "-"}
+                          <TableCell className="text-right">
+                            {product.wholesalePriceChanged ? (
+                              <span className="text-purple-600">
+                                {formatPrice(product.previousWholesalePrice)} → <strong>{formatPrice(product.wholesalePrice)}</strong>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">{formatPrice(product.previousWholesalePrice ?? product.wholesalePrice)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {product.retailPriceChanged ? (
+                              <span className="text-purple-600">
+                                {formatPrice(product.previousRetailPrice)} → <strong>{formatPrice(product.retailPrice)}</strong>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">{formatPrice(product.previousRetailPrice ?? product.retailPrice)}</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {!product.isValid ? (
                               <Badge variant="destructive">{product.error}</Badge>
                             ) : product.willUpdate ? (
-                              <Badge variant="default" className="bg-green-600">
-                                <Check className="h-3 w-3 mr-1" />
-                                Actualizar
-                              </Badge>
+                              <div className="flex flex-wrap gap-1">
+                                {product.stockChanged && (
+                                  <Badge variant="default" className="bg-blue-600">
+                                    <Package className="h-3 w-3 mr-1" />
+                                    Stock
+                                  </Badge>
+                                )}
+                                {(product.basePriceChanged || product.wholesalePriceChanged || product.retailPriceChanged) && (
+                                  <Badge variant="default" className="bg-purple-600">
+                                    <DollarSign className="h-3 w-3 mr-1" />
+                                    Precio
+                                  </Badge>
+                                )}
+                              </div>
                             ) : (
                               <Badge variant="secondary">Sin cambios</Badge>
                             )}
@@ -429,14 +534,18 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <p className="text-sm text-muted-foreground">Productos actualizados</p>
                 <p className="text-2xl font-bold text-green-600">{importResult.totalUpdated}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Sin cambios</p>
-                <p className="text-2xl font-bold text-muted-foreground">{importResult.totalSkipped}</p>
+                <p className="text-sm text-muted-foreground">Cambios de stock</p>
+                <p className="text-2xl font-bold text-blue-600">{importResult.stockChanges}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Cambios de precio</p>
+                <p className="text-2xl font-bold text-purple-600">{importResult.priceChanges}</p>
               </div>
               {importResult.errors.length > 0 && (
                 <div>
@@ -467,7 +576,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
               </Button>
               <Button asChild>
                 <Link href="/admin/products/stock-history">
-                  Ver Historial de Movimientos
+                  Ver Historial de Actualizaciones
                 </Link>
               </Button>
             </div>
@@ -477,4 +586,3 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     </div>
   )
 }
-
