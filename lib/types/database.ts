@@ -25,6 +25,17 @@ export type ShortageReason = "sin_stock" | "producto_danado" | "producto_discont
 
 export type RouteStatus = "PLANIFICADO" | "EN_CURSO" | "COMPLETADO" | "CANCELADO"
 
+// Stock Movements Types (Auditoría)
+export type StockMovementType = 
+  | "manual_edit"           // Edición manual individual
+  | "csv_import"            // Importación masiva por CSV
+  | "order_assembly"        // Descuento por armado de pedido
+  | "inventory_adjustment"  // Ajuste por inventario físico
+  | "purchase_receipt"      // Recepción de compra
+  | "return"                // Devolución de producto
+  | "damage"                // Baja por daño
+  | "expiration"            // Baja por vencimiento
+
 // Cuenta Corriente Types
 export type AccountMovementType =
   | "DEUDA_PEDIDO"
@@ -303,4 +314,27 @@ export interface RouteCashClosure {
   created_at: string
   is_locked: boolean
   notes?: string
+}
+
+// Stock Movements (Auditoría de inventario)
+export interface StockMovement {
+  id: string
+  product_id: string
+  product_code: string
+  product_name: string
+  previous_stock: number
+  new_stock: number
+  quantity_changed: number
+  movement_type: StockMovementType
+  created_by: string
+  created_at: string
+  notes?: string
+  batch_id?: string
+  reference_id?: string
+  reference_type?: string
+}
+
+export interface StockMovementWithUser extends StockMovement {
+  user_name: string
+  user_email: string
 }
