@@ -16,6 +16,7 @@ import { PAYMENT_METHODS } from "@/lib/types/database"
 import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
+import { ProductSelector } from "./product-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
 
@@ -617,42 +618,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           <CardDescription>Agregue productos al pedido</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Selector de producto - ancho completo */}
-          <div className="space-y-2">
-            <Label htmlFor="product">Producto</Label>
-            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar producto" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((product) => {
-                  const hasNoStock = product.current_stock === 0
-                  const hasLowStock = product.current_stock > 0 && product.current_stock <= product.min_stock
-                  
-                  return (
-                    <SelectItem 
-                      key={product.id} 
-                      value={product.id}
-                      className={hasNoStock ? "text-red-600" : hasLowStock ? "text-amber-600" : ""}
-                    >
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span>{product.name} {product.brand && `- ${product.brand}`}</span>
-                        <span className={`text-xs font-medium ml-2 ${
-                          hasNoStock 
-                            ? "text-red-600 bg-red-100 px-1.5 py-0.5 rounded" 
-                            : hasLowStock 
-                              ? "text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded" 
-                              : "text-muted-foreground"
-                        }`}>
-                          {hasNoStock ? "❌ Sin Stock" : hasLowStock ? `⚠️ Stock: ${product.current_stock}` : `Stock: ${product.current_stock}`}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Selector de producto con búsqueda */}
+          <ProductSelector
+            products={products}
+            selectedProduct={selectedProduct}
+            onSelect={(product) => setSelectedProductId(product?.id || "")}
+          />
           
           {/* 🆕 Warning de stock del producto seleccionado */}
           {selectedProduct && selectedProduct.current_stock === 0 && (
