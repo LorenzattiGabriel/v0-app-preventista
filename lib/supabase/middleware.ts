@@ -51,8 +51,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Allow access to auth routes
-  if (request.nextUrl.pathname.startsWith("/auth") || request.nextUrl.pathname === "/") {
+  // Allow access to auth routes and API routes
+  if (
+    request.nextUrl.pathname.startsWith("/auth") || 
+    request.nextUrl.pathname.startsWith("/api") ||
+    request.nextUrl.pathname === "/"
+  ) {
     return supabaseResponse
   }
 
