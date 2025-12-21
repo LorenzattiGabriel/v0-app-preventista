@@ -2,7 +2,6 @@
 -- TABLA: stock_movements (Auditoría de movimientos de stock)
 -- =====================================================
 -- Registra todos los cambios de stock para trazabilidad completa
-
 -- Crear enum para tipos de movimiento
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'stock_movement_type') THEN
