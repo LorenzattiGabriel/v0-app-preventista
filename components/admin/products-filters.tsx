@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
-import { useTransition } from "react"
+import { useTransition, useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,10 +18,29 @@ export function ProductsFilters({ categories }: ProductsFiltersProps) {
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
-  const search = searchParams.get("search") || ""
+  const searchParam = searchParams.get("search") || ""
   const category = searchParams.get("category") || "all"
   const isActive = searchParams.get("is_active") || "all"
   const lowStock = searchParams.get("low_stock") === "true"
+
+  // Estado local para el input de búsqueda (evita búsquedas en cada tecleo)
+  const [searchInput, setSearchInput] = useState(searchParam)
+
+  // Sincronizar estado local cuando cambia el URL
+  useEffect(() => {
+    setSearchInput(searchParam)
+  }, [searchParam])
+
+  // Debounce: esperar 500ms después de que el usuario deje de escribir
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== searchParam) {
+        updateFilters({ search: searchInput })
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const updateFilters = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -48,7 +67,7 @@ export function ProductsFilters({ categories }: ProductsFiltersProps) {
     })
   }
 
-  const hasFilters = search || category !== "all" || isActive !== "all" || lowStock
+  const hasFilters = searchInput || category !== "all" || isActive !== "all" || lowStock
 
   return (
     <Card>
@@ -56,13 +75,13 @@ export function ProductsFilters({ categories }: ProductsFiltersProps) {
         <div className="flex flex-col gap-4">
           {/* Search and Category */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {/* Search Input */}
+            {/* Search Input con debounce */}
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar por código, nombre, marca, proveedor o código de barras..."
-                value={search}
-                onChange={(e) => updateFilters({ search: e.target.value })}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9"
                 disabled={isPending}
               />
