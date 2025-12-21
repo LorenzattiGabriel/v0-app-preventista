@@ -4,7 +4,7 @@
  */
 
 import { rutasInteligentesClient, RutasInteligentesClient, RutasInteligentesError } from './rutasInteligentesClient'
-import type { Location } from '@/lib/types/rutas-inteligentes.types'
+import type { Location, RouteSegment } from '@/lib/types/rutas-inteligentes.types'
 
 /**
  * Punto de partida por defecto (Córdoba Capital)
@@ -188,6 +188,12 @@ export async function generateRouteFromOrders(
     console.log(`   ⏱️ Duración: ${result.routes[0].duration.text}`)
     console.log(`   🔢 Orden optimizado: ${result.optimizedOrder.length} puntos`)
     console.log(`   🔗 Google Maps URL: ${result.googleMapsUrl ? 'Sí' : 'No'}`)
+    
+    // 🆕 Log segmentación si aplica
+    if (result.isSegmented) {
+      console.log(`   🔀 Ruta segmentada: ${result.segments?.length || 0} tramos (${result.totalWaypoints || 0} waypoints totales)`)
+    }
+    
     if (result.costCalculation) {
       console.log(`   💰 Costo total: $${result.costCalculation.totalCost}`)
     }
@@ -216,6 +222,10 @@ export async function generateRouteFromOrders(
       googleMapsUrl: result.googleMapsUrl,
       costCalculation: result.costCalculation,
       vrptw: result.vrptw, // 🆕 Datos VRPTW v2.0
+      // 🆕 Datos de segmentación
+      isSegmented: result.isSegmented || false,
+      totalWaypoints: result.totalWaypoints,
+      segments: result.segments,
       stats: {
         ordersWithCoordinates,
         ordersWithoutCoordinates,

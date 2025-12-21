@@ -2,6 +2,8 @@
 
 import { MapPin, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import type { RouteSegment } from "@/lib/types/rutas-inteligentes.types"
 
 interface RouteMapViewProps {
   route: any
@@ -12,6 +14,10 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
   // Coordenadas del centro de distribución (Córdoba)
   const centerLat = -31.4190387
   const centerLng = -64.1884742
+
+  // 🆕 Verificar si la ruta está segmentada
+  const isSegmented = route.optimized_route?.isSegmented === true
+  const segments: RouteSegment[] = route.optimized_route?.segments || []
 
   // Obtener coordenadas reales de los clientes
   const locations = orders.map((routeOrder: any, index: number) => {
@@ -27,7 +33,8 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
   })
 
   // Usar el google_maps_url guardado o construir uno con las coordenadas reales
-  const googleMapsUrl = route.google_maps_url || buildGoogleMapsUrl(locations)
+  // 🆕 Si está segmentada, no hay URL única
+  const googleMapsUrl = isSegmented ? null : (route.google_maps_url || buildGoogleMapsUrl(locations))
 
   function buildGoogleMapsUrl(locs: typeof locations) {
     if (locs.length === 0) return ''
@@ -90,7 +97,50 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
       </div>
 
       {/* Botón para abrir en Google Maps */}
-      {googleMapsUrl && (
+      {isSegmented && segments.length > 0 ? (
+        /* 🆕 Ruta Segmentada: Múltiples botones */
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-400">
+              🔀 Ruta Segmentada
+            </Badge>
+            <span className="text-sm text-muted-foreground">
+              {segments.length} tramos ({route.optimized_route?.totalWaypoints || orders.length} puntos)
+            </span>
+          </div>
+          <div className="grid gap-2">
+            {segments.map((segment, index) => (
+              <Button 
+                key={segment.id} 
+                asChild 
+                variant="outline" 
+                className={`w-full justify-between ${
+                  index === 0 
+                    ? 'border-green-400 hover:bg-green-50 dark:hover:bg-green-950' 
+                    : index === segments.length - 1
+                      ? 'border-red-400 hover:bg-red-50 dark:hover:bg-red-950'
+                      : 'border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950'
+                }`}
+              >
+                <a
+                  href={segment.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between w-full"
+                >
+                  <span className="flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    {segment.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Puntos {segment.waypointRange.from}-{segment.waypointRange.to}
+                  </span>
+                </a>
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : googleMapsUrl ? (
         <Button asChild variant="outline" className="w-full">
           <a
             href={googleMapsUrl}
@@ -102,7 +152,7 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
             Abrir Ruta Completa en Google Maps
           </a>
         </Button>
-      )}
+      ) : null}
 
       {/* Estadísticas de la ruta */}
       <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">

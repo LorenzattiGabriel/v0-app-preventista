@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Profile } from "@/lib/types/database"
-import type { VRPTWResult } from "@/lib/types/rutas-inteligentes.types"
+import type { VRPTWResult, RouteSegment } from "@/lib/types/rutas-inteligentes.types"
 import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, AlertTriangle, Timer, Car, Package, Calendar, ArrowUpDown, Filter } from "lucide-react"
 import Link from "next/link"
 import { generateRouteFromOrders } from "@/lib/services/rutasInteligentesService"
@@ -67,10 +67,14 @@ interface GeneratedRoute {
   driverId?: string
   totalDistance: number
   estimatedDuration: number
-  googleMapsUrl?: string
+  googleMapsUrl?: string | null
   optimizedRouteData?: any
   costCalculation?: CostCalculation
   vrptw?: VRPTWResult  // 🆕 Datos VRPTW v2.0
+  // 🆕 Datos de segmentación (rutas con >25 waypoints)
+  isSegmented?: boolean
+  totalWaypoints?: number
+  segments?: RouteSegment[]
 }
 
 export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
@@ -252,7 +256,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
       // Get locality name
       const localityName = selectedLocality === "all" ? "Múltiples Localidades" : selectedLocality
 
-      const newRoute = {
+      const newRoute: GeneratedRoute = {
         zone: localityName, // Mantener "zone" por compatibilidad
         zoneId: "", // Ya no usamos zoneId
         orders: ordersToRoute,
@@ -261,7 +265,11 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
         googleMapsUrl: routeResponse.googleMapsUrl,
         optimizedRouteData: routeResponse.data,
         costCalculation: routeResponse.costCalculation,
-        vrptw: routeResponse.vrptw // 🆕 Datos VRPTW v2.0
+        vrptw: routeResponse.vrptw, // 🆕 Datos VRPTW v2.0
+        // 🆕 Datos de segmentación
+        isSegmented: routeResponse.isSegmented,
+        totalWaypoints: routeResponse.totalWaypoints,
+        segments: routeResponse.segments,
       }
       
       console.log('🎯 Estado de la ruta generada:', {
@@ -372,7 +380,11 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
           googleMapsDuration: generatedRoute.estimatedDuration,
           deliveryTime: deliveryTimeMinutes,
           totalDuration: Math.round(totalDurationMinutes)
-        }
+        },
+        // 🆕 Datos de segmentación (si aplica)
+        isSegmented: generatedRoute.isSegmented || false,
+        totalWaypoints: generatedRoute.totalWaypoints,
+        segments: generatedRoute.segments,
       }
 
       console.log('💾 Guardando ruta con datos completos:', {
@@ -772,7 +784,86 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Google Maps Embed + Link */}
-                  {generatedRoute.googleMapsUrl ? (
+                  {generatedRoute.isSegmented && generatedRoute.segments && generatedRoute.segments.length > 0 ? (
+                    /* 🆕 Ruta Segmentada: Múltiples tramos */
+                    <div className="space-y-4">
+                      {/* Banner informativo de segmentación */}
+                      <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 border-2 border-amber-400 dark:border-amber-600 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-500 text-white shrink-0">
+                            🔀
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-amber-900 dark:text-amber-100">
+                              Ruta Dividida en {generatedRoute.segments.length} Tramos
+                            </h4>
+                            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                              Esta ruta tiene {generatedRoute.totalWaypoints} puntos y supera el límite de Google Maps (25 waypoints).
+                              Se ha dividido automáticamente en tramos para facilitar la navegación.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tramos de la ruta */}
+                      <div className="grid gap-3">
+                        {generatedRoute.segments.map((segment, index) => (
+                          <div 
+                            key={segment.id}
+                            className={`p-4 rounded-lg border-2 transition-all hover:shadow-md ${
+                              index === 0 
+                                ? 'bg-green-50 dark:bg-green-950 border-green-400 dark:border-green-600' 
+                                : index === generatedRoute.segments!.length - 1
+                                  ? 'bg-red-50 dark:bg-red-950 border-red-400 dark:border-red-600'
+                                  : 'bg-blue-50 dark:bg-blue-950 border-blue-400 dark:border-blue-600'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`flex items-center justify-center w-10 h-10 rounded-full text-white font-bold ${
+                                  index === 0 ? 'bg-green-600' : index === generatedRoute.segments!.length - 1 ? 'bg-red-600' : 'bg-blue-600'
+                                }`}>
+                                  {segment.id}
+                                </div>
+                                <div>
+                                  <p className="font-semibold">{segment.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Puntos {segment.waypointRange.from} → {segment.waypointRange.to} 
+                                    <span className="ml-2 text-xs">({segment.waypointsCount} entregas)</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <a
+                                href={segment.googleMapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`px-4 py-2 text-white text-sm font-medium rounded-md transition-colors ${
+                                  index === 0 
+                                    ? 'bg-green-600 hover:bg-green-700' 
+                                    : index === generatedRoute.segments!.length - 1
+                                      ? 'bg-red-600 hover:bg-red-700'
+                                      : 'bg-blue-600 hover:bg-blue-700'
+                                }`}
+                              >
+                                🗺️ Navegar {segment.name}
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Instrucciones de uso */}
+                      <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                        <p className="font-medium mb-1">📌 Cómo usar los tramos:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                          <li>Abre el <strong>Tramo 1</strong> en Google Maps y navega hasta el último punto</li>
+                          <li>Cuando llegues al punto de conexión, vuelve a la app y abre el <strong>Tramo 2</strong></li>
+                          <li>Repite hasta completar todos los tramos</li>
+                        </ol>
+                      </div>
+                    </div>
+                  ) : generatedRoute.googleMapsUrl ? (
+                    /* Ruta simple: un solo link */
                     <div className="space-y-3">
                       {/* Mapa embebido */}
                       <div className="relative w-full h-64 rounded-lg overflow-hidden border-2 border-blue-300 dark:border-blue-700">

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp } from "lucide-react"
+import type { RouteSegment } from "@/lib/types/rutas-inteligentes.types"
 import Link from "next/link"
 import {
   Dialog,
@@ -72,12 +73,40 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   // 🆕 Transfer proof (comprobante de transferencia)
   const [transferProof, setTransferProof] = useState<File | null>(null)
   const [transferProofPreview, setTransferProofPreview] = useState<string | null>(null)
+  
+  // 🆕 Estado para expandir/colapsar segmentos de ruta
+  const [segmentsExpanded, setSegmentsExpanded] = useState(false)
+
+  // 🆕 Helper function para verificar si la ruta está segmentada
+  const isRouteSegmented = (): boolean => {
+    return route.optimized_route?.isSegmented === true && 
+           Array.isArray(route.optimized_route?.segments) && 
+           route.optimized_route.segments.length > 0
+  }
+
+  // 🆕 Helper function para obtener los segmentos de la ruta
+  const getRouteSegments = (): RouteSegment[] => {
+    if (isRouteSegmented()) {
+      return route.optimized_route.segments as RouteSegment[]
+    }
+    return []
+  }
 
   // Helper function to build Google Maps URL with depot as start and end point
   const buildGoogleMapsUrl = () => {
+    // 🆕 Si está segmentada, retornar null (se usan los segmentos)
+    if (isRouteSegmented()) {
+      return null
+    }
+    
     // Try to use optimized route URL from microservice first
     if (route.optimized_route?.googleMapsUrl) {
       return route.optimized_route.googleMapsUrl
+    }
+    
+    // Try to use google_maps_url from routes table
+    if (route.google_maps_url) {
+      return route.google_maps_url
     }
 
     // Fallback: Build URL manually
@@ -221,17 +250,30 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       }
 
       // Open Google Maps with route (depot -> customers -> depot)
-      // We rely on buildGoogleMapsUrl which handles:
-      // 1. Optimized route URL if available
-      // 2. Manual construction: Depot -> Customers -> Depot
-      const googleMapsUrl = buildGoogleMapsUrl()
-      
-      if (googleMapsUrl) {
-        console.log('✅ Opening Google Maps URL:', googleMapsUrl)
-        window.open(googleMapsUrl, '_blank')
+      // 🆕 Manejar rutas segmentadas
+      if (isRouteSegmented()) {
+        const segments = getRouteSegments()
+        if (segments.length > 0) {
+          console.log(`✅ Ruta segmentada: abriendo Tramo 1 de ${segments.length}`)
+          window.open(segments[0].googleMapsUrl, '_blank')
+          // Expandir el menú de segmentos para que el usuario vea los demás tramos
+          setSegmentsExpanded(true)
+        } else {
+          setError('Error: La ruta está segmentada pero no tiene tramos.')
+        }
       } else {
-        console.warn('⚠️ Could not generate Google Maps URL')
-        setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
+        // We rely on buildGoogleMapsUrl which handles:
+        // 1. Optimized route URL if available
+        // 2. Manual construction: Depot -> Customers -> Depot
+        const googleMapsUrl = buildGoogleMapsUrl()
+        
+        if (googleMapsUrl) {
+          console.log('✅ Opening Google Maps URL:', googleMapsUrl)
+          window.open(googleMapsUrl, '_blank')
+        } else {
+          console.warn('⚠️ Could not generate Google Maps URL')
+          setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
+        }
       }
 
 
@@ -945,21 +987,73 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
           {route.status === "EN_CURSO" && (
             <>
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  const googleMapsUrl = buildGoogleMapsUrl()
-                  if (googleMapsUrl) {
-                    window.open(googleMapsUrl, '_blank')
-                  } else {
-                    setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
-                  }
-                }}
-                size="lg"
-              >
-                <MapPin className="mr-2 h-4 w-4" />
-                Abrir en Google Maps
-              </Button>
+              {isRouteSegmented() ? (
+                /* 🆕 Ruta Segmentada: Menú desplegable de tramos */
+                <div className="relative">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setSegmentsExpanded(!segmentsExpanded)}
+                    size="lg"
+                    className="min-w-[200px]"
+                  >
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Navegar ({getRouteSegments().length} tramos)
+                    {segmentsExpanded ? (
+                      <ChevronUp className="ml-2 h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    )}
+                  </Button>
+                  
+                  {segmentsExpanded && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-background border rounded-lg shadow-lg z-50 p-2 space-y-1">
+                      {getRouteSegments().map((segment, index) => (
+                        <button
+                          key={segment.id}
+                          onClick={() => {
+                            window.open(segment.googleMapsUrl, '_blank')
+                            setSegmentsExpanded(false)
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-md transition-colors flex items-center justify-between ${
+                            index === 0 
+                              ? 'bg-green-50 hover:bg-green-100 dark:bg-green-950 dark:hover:bg-green-900 text-green-800 dark:text-green-200' 
+                              : index === getRouteSegments().length - 1
+                                ? 'bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900 text-red-800 dark:text-red-200'
+                                : 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-800 dark:text-blue-200'
+                          }`}
+                        >
+                          <div>
+                            <p className="font-medium text-sm">🗺️ {segment.name}</p>
+                            <p className="text-xs opacity-70">
+                              Puntos {segment.waypointRange.from}-{segment.waypointRange.to}
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold">
+                            {segment.waypointsCount}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Ruta Simple: Un solo botón */
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const googleMapsUrl = buildGoogleMapsUrl()
+                    if (googleMapsUrl) {
+                      window.open(googleMapsUrl, '_blank')
+                    } else {
+                      setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
+                    }
+                  }}
+                  size="lg"
+                >
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Abrir en Google Maps
+                </Button>
+              )}
               <Button 
                 onClick={handleShowRouteSummary} 
                 disabled={isLoading || !allOrdersManaged} 
@@ -985,9 +1079,19 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
               <Truck className="h-6 w-6" />
             </div>
             <div className="flex-1">
-              <p className="font-bold text-lg mb-1">Ruta en Curso</p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-bold text-lg">Ruta en Curso</p>
+                {isRouteSegmented() && (
+                  <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-400 dark:bg-amber-900 dark:text-amber-200">
+                    🔀 {getRouteSegments().length} Tramos
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground mb-3">
-                Gestiona tus entregas y marca cada pedido como entregado. Usa el botón "Abrir en Google Maps" para navegar entre direcciones.
+                {isRouteSegmented() 
+                  ? `Esta ruta tiene ${route.optimized_route?.totalWaypoints || totalOrders} puntos y está dividida en ${getRouteSegments().length} tramos. Usa el botón "Navegar" para abrir cada tramo en Google Maps.`
+                  : 'Gestiona tus entregas y marca cada pedido como entregado. Usa el botón "Abrir en Google Maps" para navegar entre direcciones.'
+                }
               </p>
               <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-2">

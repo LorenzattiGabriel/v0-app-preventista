@@ -2,7 +2,6 @@
  * Tipos para la integración con el microservicio de Rutas Inteligentes
  * Base URL: https://v0-micro-saa-s-snowy.vercel.app
  */
-
 export type TravelMode = 'DRIVING' | 'WALKING' | 'BICYCLING' | 'TRANSIT'
 export type AvoidType = 'tolls' | 'highways' | 'ferries' | 'indoor'
 export type LocationType = 'partida' | 'intermedio' | 'llegada'
@@ -161,6 +160,43 @@ export interface VRPTWResult {
 }
 
 /**
+ * 🆕 Segmento de ruta (para rutas con >25 waypoints)
+ * Google Maps tiene un límite de 25 waypoints por URL
+ */
+export interface RouteSegmentWaypoint {
+  /** Posición en la ruta global (basado en 1) */
+  index: number
+  /** Datos de la ubicación */
+  location: {
+    id: string
+    lat: number
+    lng: number
+    type: 'partida' | 'intermedio' | 'llegada'
+    address?: string
+  }
+}
+
+export interface RouteSegment {
+  /** ID del segmento (1, 2, 3...) */
+  id: number
+  /** Nombre del segmento (ej: "Tramo 1") */
+  name: string
+  /** URL de Google Maps para este segmento */
+  googleMapsUrl: string
+  /** Rango de waypoints en este segmento */
+  waypointRange: {
+    /** Primer punto (índice basado en 1) */
+    from: number
+    /** Último punto (índice basado en 1) */
+    to: number
+  }
+  /** Cantidad de waypoints en este segmento */
+  waypointsCount: number
+  /** Lista de waypoints en este segmento */
+  waypoints: RouteSegmentWaypoint[]
+}
+
+/**
  * Response exitosa del API
  */
 export interface RutaInteligenteSuccessResponse {
@@ -169,9 +205,16 @@ export interface RutaInteligenteSuccessResponse {
   data: {
     routes: RouteData[]
     optimizedOrder: Location[]
-    googleMapsUrl: string
+    /** URL de Google Maps (null si la ruta está segmentada) */
+    googleMapsUrl: string | null
     costCalculation?: CostCalculation
     vrptw?: VRPTWResult  // 🆕 VRPTW v2.0
+    /** 🆕 True si la ruta tiene >25 waypoints y está segmentada */
+    isSegmented?: boolean
+    /** 🆕 Total de waypoints en la ruta */
+    totalWaypoints?: number
+    /** 🆕 Array de segmentos (solo si isSegmented === true) */
+    segments?: RouteSegment[]
   }
   savedRouteId?: string
 }
