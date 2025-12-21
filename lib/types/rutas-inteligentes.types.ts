@@ -2,7 +2,6 @@
  * Tipos para la integración con el microservicio de Rutas Inteligentes
  * Base URL: https://v0-micro-saa-s-snowy.vercel.app
  */
-
 export type TravelMode = 'DRIVING' | 'WALKING' | 'BICYCLING' | 'TRANSIT'
 export type AvoidType = 'tolls' | 'highways' | 'ferries' | 'indoor'
 export type LocationType = 'partida' | 'intermedio' | 'llegada'
