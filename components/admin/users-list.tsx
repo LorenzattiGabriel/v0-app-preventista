@@ -24,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Users, MoreVertical, Pencil, UserX, UserCheck, Shield, Truck, Package, User } from "lucide-react"
+import { Users, MoreVertical, Pencil, UserX, UserCheck, Shield, Truck, Package, User, Trash2 } from "lucide-react"
 import {
   ROLE_LABELS,
   ROLE_COLORS,
@@ -56,7 +56,7 @@ export function UsersList({ users }: UsersListProps) {
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
     userId: string
-    action: "activate" | "deactivate"
+    action: "activate" | "deactivate" | "delete"
     userName: string
   }>({ open: false, userId: "", action: "deactivate", userName: "" })
 
@@ -101,6 +101,38 @@ export function UsersList({ users }: UsersListProps) {
     }
   }
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    setConfirmDialog({
+      open: true,
+      userId,
+      action: "delete",
+      userName,
+    })
+  }
+
+  const executeDelete = async (userId: string) => {
+    setLoadingId(userId)
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/delete`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al eliminar usuario")
+      }
+
+      toast.success(data.message)
+      router.refresh()
+    } catch (error: any) {
+      toast.error(error.message || "Error al eliminar el usuario")
+    } finally {
+      setLoadingId(null)
+      setConfirmDialog({ open: false, userId: "", action: "deactivate", userName: "" })
+    }
+  }
+
   if (!users || users.length === 0) {
     return (
       <div className="text-center py-12">
@@ -118,12 +150,13 @@ export function UsersList({ users }: UsersListProps) {
   return (
     <>
       <div className="space-y-3">
-        {users.map((user) => (
+        {users.map((u) => (
           <UserCard
-            key={user.id}
-            user={user}
-            isLoading={loadingId === user.id}
+            key={u.id}
+            user={u}
+            isLoading={loadingId === u.id}
             onToggleStatus={handleToggleStatus}
+            onDelete={handleDeleteUser}
           />
         ))}
       </div>
@@ -132,19 +165,36 @@ export function UsersList({ users }: UsersListProps) {
       <AlertDialog open={confirmDialog.open} onOpenChange={(open) => !open && setConfirmDialog(prev => ({ ...prev, open: false }))}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Desactivar usuario?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmDialog.action === "delete" ? "¿Eliminar usuario permanentemente?" : "¿Desactivar usuario?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Estás a punto de desactivar a <strong>{confirmDialog.userName}</strong>. 
-              El usuario no podrá iniciar sesión hasta que sea reactivado.
+              {confirmDialog.action === "delete" ? (
+                <>
+                  Estás a punto de eliminar permanentemente a <strong>{confirmDialog.userName}</strong>. 
+                  Esta acción no se puede deshacer y el usuario será eliminado de la base de datos.
+                </>
+              ) : (
+                <>
+                  Estás a punto de desactivar a <strong>{confirmDialog.userName}</strong>. 
+                  El usuario no podrá iniciar sesión hasta que sea reactivado.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => executeToggle(confirmDialog.userId, false)}
+              onClick={() => {
+                if (confirmDialog.action === "delete") {
+                  executeDelete(confirmDialog.userId)
+                } else {
+                  executeToggle(confirmDialog.userId, false)
+                }
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Desactivar
+              {confirmDialog.action === "delete" ? "Eliminar Permanentemente" : "Desactivar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -179,10 +229,12 @@ function UserCard({
   user,
   isLoading,
   onToggleStatus,
+  onDelete,
 }: {
   user: UserData
   isLoading: boolean
   onToggleStatus: (userId: string, currentStatus: boolean, userName: string) => void
+  onDelete: (userId: string, userName: string) => void
 }) {
   const router = useRouter()
 
@@ -281,6 +333,14 @@ function UserCard({
                 Activar
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => onDelete(user.id, user.full_name)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar Permanentemente
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
