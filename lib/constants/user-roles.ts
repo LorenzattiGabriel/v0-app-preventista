@@ -13,9 +13,17 @@ export const USER_ROLES = {
 
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES]
 
+/** Lista ordenada de roles para usar en selects */
+export const USER_ROLES_LIST: UserRole[] = [
+  'administrativo',
+  'preventista',
+  'encargado_armado',
+  'repartidor',
+]
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   preventista: 'Preventista',
-  encargado_armado: 'Encargado de Armado',
+  encargado_armado: 'Armador',
   repartidor: 'Repartidor',
   cliente: 'Cliente',
   administrativo: 'Administrativo',
