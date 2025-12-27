@@ -19,6 +19,12 @@ import {
   Wallet,
   ArrowDownRight,
   ArrowUpRight,
+  FileDown,
+  Paperclip,
+  Receipt,
+  CheckCircle,
+  Clock,
+  AlertCircle,
 } from "lucide-react"
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
 
@@ -62,13 +68,22 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     redirect("/admin/customers")
   }
 
-  // Get customer orders
+  // Get customer orders with payment details
   const { data: orders } = await supabase
     .from("orders")
-    .select("*")
+    .select(`
+      *,
+      order_payments (
+        id,
+        order_total,
+        total_paid,
+        balance_due,
+        last_payment_date
+      )
+    `)
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
-    .limit(10)
+    .limit(20)
 
   // Get customer ratings
   const { data: ratings } = await supabase
@@ -156,6 +171,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     PAGO_EFECTIVO: "Pago efectivo",
     PAGO_TRANSFERENCIA: "Pago transferencia",
     PAGO_TARJETA: "Pago tarjeta",
+    PAGO_CHEQUE: "Pago cheque",
     AJUSTE_CREDITO: "Ajuste a favor",
     AJUSTE_DEBITO: "Ajuste en contra",
     NOTA_CREDITO: "Nota de crédito",
@@ -294,16 +310,16 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                 </CardContent>
               </Card>
 
-              {/* Recent Orders */}
+              {/* Historial de Pedidos y Pagos */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="flex items-center gap-2">
-                        <Package className="h-5 w-5" />
-                        Pedidos Recientes
+                        <Receipt className="h-5 w-5" />
+                        Historial de Pedidos y Pagos
                       </CardTitle>
-                      <CardDescription>Últimos 10 pedidos del cliente</CardDescription>
+                      <CardDescription>Últimos 20 pedidos con estado de pago</CardDescription>
                     </div>
                     <Button asChild variant="outline" size="sm">
                       <Link href={`/admin/orders?customer=${customer.id}`}>Ver Todos</Link>
@@ -313,25 +329,78 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                 <CardContent>
                   {orders && orders.length > 0 ? (
                     <div className="space-y-3">
-                      {orders.map((order: any) => (
-                        <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold">{order.order_number}</span>
-                              <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
-                                {orderStatusLabels[order.status as keyof typeof orderStatusLabels]}
-                              </Badge>
+                      {orders.map((order: any) => {
+                        const payment = order.order_payments?.[0]
+                        const isPaid = payment ? payment.balance_due <= 0 : order.payment_status === "PAGADO"
+                        const isPartialPaid = payment ? payment.total_paid > 0 && payment.balance_due > 0 : order.payment_status === "PAGO_PARCIAL"
+                        const balanceDue = payment?.balance_due || 0
+                        const totalPaid = payment?.total_paid || 0
+                        
+                        return (
+                          <div key={order.id} className="p-3 border rounded-lg space-y-2">
+                            {/* Header: Número de pedido y estado */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{order.order_number}</span>
+                                <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
+                                  {orderStatusLabels[order.status as keyof typeof orderStatusLabels]}
+                                </Badge>
+                              </div>
+                              <Button asChild variant="outline" size="sm">
+                                <Link href={`/admin/orders/${order.id}`}>Ver</Link>
+                              </Button>
                             </div>
+                            
+                            {/* Info del pedido */}
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span>{new Date(order.order_date).toLocaleDateString("es-AR")}</span>
-                              <span className="font-medium">Total: ${parseFloat(order.total).toFixed(2)}</span>
+                              {order.payment_method && (
+                                <span>• {order.payment_method}</span>
+                              )}
+                            </div>
+                            
+                            {/* Estado de pago */}
+                            <div className="flex items-center justify-between pt-2 border-t">
+                              <div className="flex items-center gap-2">
+                                {isPaid ? (
+                                  <div className="flex items-center gap-1 text-green-600">
+                                    <CheckCircle className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Pagado</span>
+                                  </div>
+                                ) : isPartialPaid ? (
+                                  <div className="flex items-center gap-1 text-amber-600">
+                                    <Clock className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Pago Parcial</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-red-600">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Pendiente</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="text-right text-sm">
+                                <div className="flex items-center gap-4">
+                                  <span className="text-muted-foreground">
+                                    Total: <span className="font-medium text-foreground">${parseFloat(order.total).toFixed(2)}</span>
+                                  </span>
+                                  {totalPaid > 0 && (
+                                    <span className="text-green-600">
+                                      Pagado: ${totalPaid.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {balanceDue > 0 && (
+                                    <span className="text-red-600 font-medium">
+                                      Debe: ${balanceDue.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <Button asChild variant="outline" size="sm">
-                            <Link href={`/admin/orders/${order.id}`}>Ver</Link>
-                          </Button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <p className="text-center text-muted-foreground py-8">No hay pedidos registrados</p>
@@ -367,25 +436,48 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                                 }
                               </div>
                               <div>
-                                <p className="text-sm font-medium">
-                                  {movementTypeLabels[movement.movement_type as keyof typeof movementTypeLabels]}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium">
+                                    {movementTypeLabels[movement.movement_type as keyof typeof movementTypeLabels] || movement.movement_type}
+                                  </p>
+                                  {movement.proof_url && (
+                                    <Paperclip className="h-3 w-3 text-muted-foreground" />
+                                  )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">{movement.description}</p>
                                 {movement.orders?.order_number && (
                                   <p className="text-xs text-muted-foreground">Pedido: {movement.orders.order_number}</p>
                                 )}
+                                {movement.notes && (
+                                  <p className="text-xs text-muted-foreground italic">"{movement.notes}"</p>
+                                )}
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className={`font-bold ${isDebit ? "text-red-600" : "text-green-600"}`}>
-                                {isDebit ? "+" : "-"}${(movement.debit_amount || movement.credit_amount).toFixed(2)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Saldo: ${movement.balance_after.toFixed(2)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(movement.created_at).toLocaleDateString("es-AR")}
-                              </p>
+                            <div className="flex items-center gap-3">
+                              {/* Botón de descarga de comprobante */}
+                              {movement.proof_url && (
+                                <a
+                                  href={movement.proof_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors"
+                                  title="Descargar comprobante"
+                                >
+                                  <FileDown className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Comprobante</span>
+                                </a>
+                              )}
+                              <div className="text-right">
+                                <p className={`font-bold ${isDebit ? "text-red-600" : "text-green-600"}`}>
+                                  {isDebit ? "+" : "-"}${(movement.debit_amount || movement.credit_amount).toFixed(2)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Saldo: ${movement.balance_after.toFixed(2)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(movement.created_at).toLocaleDateString("es-AR")}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         )

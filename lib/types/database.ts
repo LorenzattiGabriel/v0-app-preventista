@@ -42,6 +42,7 @@ export type AccountMovementType =
   | "PAGO_EFECTIVO"
   | "PAGO_TRANSFERENCIA"
   | "PAGO_TARJETA"
+  | "PAGO_CHEQUE"
   | "AJUSTE_CREDITO"
   | "AJUSTE_DEBITO"
   | "NOTA_CREDITO"

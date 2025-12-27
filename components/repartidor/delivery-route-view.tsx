@@ -651,25 +651,31 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       if (routeOrderError) throw routeOrderError
 
-      // 🆕 Actualizar estado de pago del pedido y generar deuda si hay faltante
+      // 🆕 Registrar pago en cuenta corriente del cliente
+      // La deuda ya fue creada cuando el armador confirmó el pedido
+      // Aquí solo registramos el PAGO para reducir esa deuda
       const orderTotal = selectedOrder.total || 0
-      const debtAmount = orderTotal - collectedAmountNum
+      const debtAmount = orderTotal - collectedAmountNum // Deuda restante después del cobro
 
-      // Intentar usar el sistema de cuenta corriente si las tablas existen
       try {
         const accountService = createAccountMovementsService(supabase)
         
-        // Actualizar el estado de pago del pedido (sin afectar cuenta corriente para cobros al momento)
-        await accountService.updateOrderPayment({
-          orderId: selectedOrder.id,
-          amountPaid: collectedAmountNum,
-        })
-
-        // Solo generar deuda en cuenta corriente si hay faltante
-        // El cobro al momento NO es un "pago de deuda", es dinero recibido directamente
-        if (debtAmount > 0) {
-          await accountService.generateDebt(selectedOrder.id, debtAmount, route.id, userId)
+        // Si cobró algo, registrar el pago para reducir la deuda existente
+        if (wasCollected && collectedAmountNum > 0) {
+          await accountService.recordDebtPayment({
+            orderId: selectedOrder.id,
+            amount: collectedAmountNum,
+            paymentMethod: paymentMethod,
+            routeId: route.id,
+            createdBy: userId,
+            notes: `Cobrado en entrega por ${repartidorName || 'Repartidor'}`,
+          })
+          console.log(`✅ Pago registrado: $${collectedAmountNum} para pedido ${selectedOrder.order_number}`)
         }
+        
+        // Si NO cobró nada, la deuda completa queda pendiente (ya fue creada por el armador)
+        // No necesitamos hacer nada más aquí
+        
       } catch (accountError) {
         // Si las tablas de cuenta corriente no existen, continuar sin error
         // Esto permite usar el sistema sin la migración de cuenta corriente
@@ -1114,6 +1120,65 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         </div>
       )}
 
+      {/* 🆕 Info banner for COMPLETED route */}
+      {route.status === "COMPLETADO" && (
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border-2 border-green-400 dark:border-green-600 rounded-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-600 text-white shrink-0">
+              <CheckCircle className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-lg text-green-800 dark:text-green-200">Ruta Completada</p>
+              <p className="text-sm text-green-700 dark:text-green-300 mb-3">
+                Esta ruta fue finalizada el {route.actual_end_time 
+                  ? new Date(route.actual_end_time).toLocaleDateString("es-AR", { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }) 
+                  : 'fecha no registrada'}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
+                  <span className="text-green-600 dark:text-green-400 text-xs block">Entregados</span>
+                  <span className="font-bold text-lg">{deliveredOrders}</span>
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
+                  <span className="text-red-600 dark:text-red-400 text-xs block">No Entregados</span>
+                  <span className="font-bold text-lg">{notDeliveredOrders.length}</span>
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
+                  <span className="text-blue-600 dark:text-blue-400 text-xs block">Recaudado</span>
+                  <span className="font-bold text-lg">
+                    ${(route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
+                  <span className="text-muted-foreground text-xs block">Total Pedidos</span>
+                  <span className="font-bold text-lg">{totalOrders}</span>
+                </div>
+              </div>
+              {route.actual_start_time && route.actual_end_time && (
+                <p className="text-xs text-green-600 dark:text-green-400 mt-3">
+                  ⏱️ Duración real: {(() => {
+                    const start = new Date(route.actual_start_time)
+                    const end = new Date(route.actual_end_time)
+                    const diffMs = end.getTime() - start.getTime()
+                    const diffMins = Math.round(diffMs / 60000)
+                    const hours = Math.floor(diffMins / 60)
+                    const mins = diffMins % 60
+                    return hours > 0 ? `${hours}h ${mins}min` : `${mins} minutos`
+                  })()}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info message for future routes */}
       {route.status === "PLANIFICADO" && isFutureRoute && (
         <div className="bg-blue-50 dark:bg-blue-950 border-2 border-blue-400 dark:border-blue-600 rounded-lg p-4">
@@ -1220,10 +1285,12 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             </div>
           </div>
 
-          {route.status === "EN_CURSO" && (
+          {(route.status === "EN_CURSO" || route.status === "COMPLETADO") && (
             <div className="mt-6 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="font-medium">Progreso de entregas</span>
+                <span className="font-medium">
+                  {route.status === "COMPLETADO" ? "Resultado Final" : "Progreso de entregas"}
+                </span>
                 <span className="text-muted-foreground">
                   {Math.round(((deliveredOrders + notDeliveredOrders.length) / totalOrders) * 100)}%
                 </span>
@@ -1259,7 +1326,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                  </div>
                  <span>{totalOrders} Total</span>
               </div>
-              {pendingOrders.length > 0 && (
+              {route.status === "EN_CURSO" && pendingOrders.length > 0 && (
                 <p className="text-sm text-muted-foreground mt-2">
                   ⏳ Quedan <strong className="text-foreground">{pendingOrders.length}</strong> pedido{pendingOrders.length !== 1 ? 's' : ''} por gestionar
                 </p>
@@ -1402,13 +1469,24 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                           <CheckCircle className="mr-1 h-4 w-4" />
                           Completado
                         </Badge>
-                      <div className="mt-2">
-                        <ReceiptActionsMenu 
-                          order={order}
-                          className="w-full"
-                          repartidorName={repartidorName}
-                        />
-                      </div>
+                        {/* 🆕 Mostrar método de pago */}
+                        {order.payment_method && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            Pagó: {order.payment_method}
+                          </p>
+                        )}
+                        {order.received_by_name && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            Recibió: {order.received_by_name}
+                          </p>
+                        )}
+                        <div className="mt-2">
+                          <ReceiptActionsMenu 
+                            order={order}
+                            className="w-full"
+                            repartidorName={repartidorName}
+                          />
+                        </div>
                       </div>
                     )}
                     <Button variant="outline" size="sm" asChild>

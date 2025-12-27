@@ -65,6 +65,7 @@ export class AccountMovementsService {
 
   /**
    * Crea un movimiento en la cuenta corriente del cliente
+   * Actualiza automáticamente el current_balance del cliente
    */
   async createMovement(params: CreateMovementParams): Promise<CustomerAccountMovement> {
     const { customerId, movementType, description, amount, orderId, routeId, createdBy, notes, proofUrl } = params
@@ -97,6 +98,13 @@ export class AccountMovementsService {
       .single()
 
     if (error) throw error
+    
+    // 🆕 Actualizar el saldo del cliente
+    await this.supabase
+      .from("customers")
+      .update({ current_balance: balanceAfter })
+      .eq("id", customerId)
+
     return data
   }
 
@@ -156,8 +164,10 @@ export class AccountMovementsService {
     }
 
     // Registrar movimiento de pago en cuenta corriente
-    const movementType = paymentMethod === "efectivo" ? "PAGO_EFECTIVO" 
-      : paymentMethod === "transferencia" ? "PAGO_TRANSFERENCIA" 
+    const paymentMethodLower = paymentMethod.toLowerCase()
+    const movementType = paymentMethodLower === "efectivo" ? "PAGO_EFECTIVO" 
+      : paymentMethodLower === "transferencia" ? "PAGO_TRANSFERENCIA" 
+      : paymentMethodLower === "cheque" ? "PAGO_CHEQUE"
       : "PAGO_TARJETA"
 
     await this.createMovement({
@@ -247,6 +257,61 @@ export class AccountMovementsService {
   }
 
   /**
+   * 🆕 Genera la deuda del pedido cuando el armador lo confirma
+   * Se llama cuando el pedido pasa de EN_ARMADO a PENDIENTE_ENTREGA
+   */
+  async recordOrderAssembled(orderId: string, orderTotal: number, createdBy: string): Promise<void> {
+    if (orderTotal <= 0) return
+
+    const { data: order, error } = await this.supabase
+      .from("orders")
+      .select("customer_id, order_number, total")
+      .eq("id", orderId)
+      .single()
+
+    if (error || !order) throw error || new Error("Pedido no encontrado")
+
+    // Usar el total del pedido (ya ajustado por faltantes)
+    const amount = orderTotal || order.total
+
+    // Crear movimiento de deuda
+    await this.createMovement({
+      customerId: order.customer_id,
+      movementType: "DEUDA_PEDIDO",
+      description: `Pedido armado ${order.order_number}`,
+      amount,
+      orderId,
+    })
+
+    // Crear o actualizar order_payments
+    const { data: existingPayment } = await this.supabase
+      .from("order_payments")
+      .select("id")
+      .eq("order_id", orderId)
+      .maybeSingle()
+
+    if (existingPayment) {
+      await this.supabase
+        .from("order_payments")
+        .update({
+          order_total: amount,
+          balance_due: amount,
+        })
+        .eq("order_id", orderId)
+    } else {
+      await this.supabase
+        .from("order_payments")
+        .insert({
+          order_id: orderId,
+          order_total: amount,
+          total_paid: 0,
+          balance_due: amount,
+        })
+    }
+    // El saldo del cliente ya se actualiza en createMovement()
+  }
+
+  /**
    * Obtiene historial de movimientos de un cliente
    */
   async getCustomerMovements(customerId: string, limit = 50): Promise<CustomerAccountMovement[]> {
@@ -288,13 +353,13 @@ export class AccountMovementsService {
 
     // Desglose por método de pago
     const cashCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "efectivo")
+      .filter(o => o.wasCollected && o.paymentMethod === "Efectivo")
       .reduce((sum, o) => sum + o.collectedAmount, 0)
     const transferCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "transferencia")
+      .filter(o => o.wasCollected && o.paymentMethod === "Transferencia")
       .reduce((sum, o) => sum + o.collectedAmount, 0)
     const cardCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "tarjeta")
+      .filter(o => o.wasCollected && (o.paymentMethod === "Tarjeta de Débito" || o.paymentMethod === "Tarjeta de Crédito"))
       .reduce((sum, o) => sum + o.collectedAmount, 0)
 
     const { data, error } = await this.supabase

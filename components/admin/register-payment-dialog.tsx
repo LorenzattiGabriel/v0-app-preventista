@@ -52,7 +52,7 @@ export function RegisterPaymentDialog({
   // Form state
   const [selectedOrder, setSelectedOrder] = useState<string>("")
   const [amount, setAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "transferencia" | "tarjeta">("transferencia")
+  const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "transferencia" | "tarjeta" | "cheque">("transferencia")
   const [notes, setNotes] = useState("")
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreview, setProofPreview] = useState<string | null>(null)
@@ -280,6 +280,7 @@ export function RegisterPaymentDialog({
                   <SelectItem value="transferencia">🏦 Transferencia</SelectItem>
                   <SelectItem value="efectivo">💵 Efectivo</SelectItem>
                   <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
+                  <SelectItem value="cheque">📝 Cheque</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -362,7 +363,7 @@ export function RegisterPaymentDialog({
                 <ul className="text-sm text-blue-700 dark:text-blue-300 mt-2 space-y-1">
                   <li>• Pedido: {selectedOrderData?.order_number}</li>
                   <li>• Monto: ${parseFloat(amount).toFixed(2)}</li>
-                  <li>• Método: {paymentMethod === "transferencia" ? "Transferencia" : paymentMethod === "efectivo" ? "Efectivo" : "Tarjeta"}</li>
+                  <li>• Método: {paymentMethod === "transferencia" ? "Transferencia" : paymentMethod === "efectivo" ? "Efectivo" : paymentMethod === "cheque" ? "Cheque" : "Tarjeta"}</li>
                   <li>• Nueva deuda del pedido: ${Math.max(0, (selectedOrderData?.balance_due || 0) - parseFloat(amount)).toFixed(2)}</li>
                 </ul>
               </div>

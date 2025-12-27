@@ -11,9 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { Profile } from "@/lib/types/database"
 import type { VRPTWResult, RouteSegment } from "@/lib/types/rutas-inteligentes.types"
-import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, AlertTriangle, Timer, Car, Package, Calendar, ArrowUpDown, Filter } from "lucide-react"
+import { ArrowLeft, MapPin, Truck, Loader2, DollarSign, Route, Clock, TrendingUp, AlertCircle, AlertTriangle, Timer, Car, Package, Calendar, ArrowUpDown, Filter, Check, ChevronsUpDown, X, ShoppingCart } from "lucide-react"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { generateRouteFromOrders } from "@/lib/services/rutasInteligentesService"
 import { RutasInteligentesError } from "@/lib/services/rutasInteligentesClient"
@@ -98,8 +101,17 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   const [startTime, setStartTime] = useState("08:00")
   const [avgDeliveryTime, setAvgDeliveryTime] = useState(10)
   
+  // Locality search state
+  const [localitySearchOpen, setLocalitySearchOpen] = useState(false)
+  const [localitySearchValue, setLocalitySearchValue] = useState("")
+  
   // Lista de localidades únicas de los pedidos
   const availableLocalities = getUniqueLocalities(pendingOrders)
+  
+  // Filtered localities based on search
+  const filteredLocalities = availableLocalities.filter(loc => 
+    loc.toLowerCase().includes(localitySearchValue.toLowerCase())
+  )
   
   // Cost parameters
   const [vehicleType, setVehicleType] = useState<VehicleType>("commercial")
@@ -164,6 +176,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
 
   // Update available orders when locality or date changes
   // Using clean filtering functions for better maintainability
+  // NOTE: We do NOT reset selectedOrderIds when locality changes to allow multi-locality selection
   useEffect(() => {
     const filtered = getAvailableOrdersForRoute(pendingOrders, {
       deliveryDate,
@@ -180,8 +193,20 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     })
 
     setAvailableOrders(filtered)
-    setSelectedOrderIds([])
+    // Do NOT reset selectedOrderIds here - we want to keep selections across locality changes
   }, [selectedLocality, deliveryDate, pendingOrders])
+  
+  // Reset selections only when date changes (different delivery day = fresh start)
+  useEffect(() => {
+    setSelectedOrderIds([])
+  }, [deliveryDate])
+  
+  // Get all selected orders from pendingOrders (regardless of current locality filter)
+  const selectedOrders = pendingOrders.filter(o => selectedOrderIds.includes(o.id))
+  
+  // Get unique localities from selected orders
+  const selectedLocalitiesSet = new Set(selectedOrders.map(o => o.customers?.locality).filter(Boolean))
+  const hasMultipleLocalities = selectedLocalitiesSet.size > 1
 
   const handleOrderToggle = (orderId: string) => {
     setSelectedOrderIds((prev) =>
@@ -190,10 +215,18 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   }
 
   const handleSelectAllOrders = () => {
-    if (selectedOrderIds.length === availableOrders.length) {
-      setSelectedOrderIds([])
+    const currentVisibleIds = availableOrders.map((o) => o.id)
+    const allVisibleSelected = currentVisibleIds.every(id => selectedOrderIds.includes(id))
+    
+    if (allVisibleSelected) {
+      // Deselect all visible orders (but keep orders from other localities)
+      setSelectedOrderIds(prev => prev.filter(id => !currentVisibleIds.includes(id)))
     } else {
-      setSelectedOrderIds(availableOrders.map((o) => o.id))
+      // Add all visible orders to selection (keeping existing selections)
+      setSelectedOrderIds(prev => {
+        const newIds = currentVisibleIds.filter(id => !prev.includes(id))
+        return [...prev, ...newIds]
+      })
     }
   }
 
@@ -212,8 +245,8 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     try {
       console.log('🚀 Generando ruta inteligente...')
 
-      // Get selected orders
-      const ordersToRoute = availableOrders.filter((o) => selectedOrderIds.includes(o.id))
+      // Get selected orders from ALL pending orders (not just filtered ones)
+      const ordersToRoute = pendingOrders.filter((o) => selectedOrderIds.includes(o.id))
 
       console.log(`📦 ${ordersToRoute.length} pedidos seleccionados`)
 
@@ -253,8 +286,11 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
         estimatedDuration: routeResponse.estimatedDuration
       })
 
-      // Get locality name
-      const localityName = selectedLocality === "all" ? "Múltiples Localidades" : selectedLocality
+      // Get locality name based on selected orders
+      const orderLocalities = new Set(ordersToRoute.map(o => o.customers?.locality).filter(Boolean))
+      const localityName = orderLocalities.size > 1 
+        ? `${orderLocalities.size} Localidades` 
+        : Array.from(orderLocalities)[0] || "Sin Localidad"
 
       const newRoute: GeneratedRoute = {
         zone: localityName, // Mantener "zone" por compatibilidad
@@ -557,22 +593,79 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                 </div>
               </div>
 
-              {/* Locality */}
+              {/* Locality - Searchable Combobox */}
               <div className="space-y-2">
-                <Label htmlFor="locality">Localidad</Label>
-                <Select value={selectedLocality} onValueChange={setSelectedLocality}>
-                  <SelectTrigger id="locality">
-                    <SelectValue placeholder="Selecciona una localidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">🌐 Todas las localidades</SelectItem>
-                    {availableLocalities.map((locality) => (
-                      <SelectItem key={locality} value={locality}>
-                        📍 {locality}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Localidad</Label>
+                <Popover open={localitySearchOpen} onOpenChange={setLocalitySearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={localitySearchOpen}
+                      className="w-full justify-between"
+                    >
+                      {selectedLocality === "all" ? (
+                        <span className="flex items-center gap-2">
+                          🌐 Todas las localidades
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          📍 {selectedLocality}
+                        </span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Buscar localidad..." 
+                        value={localitySearchValue}
+                        onValueChange={setLocalitySearchValue}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No se encontró la localidad</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="all"
+                            onSelect={() => {
+                              setSelectedLocality("all")
+                              setLocalitySearchOpen(false)
+                              setLocalitySearchValue("")
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedLocality === "all" ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            🌐 Todas las localidades
+                          </CommandItem>
+                          {filteredLocalities.map((locality) => (
+                            <CommandItem
+                              key={locality}
+                              value={locality}
+                              onSelect={() => {
+                                setSelectedLocality(locality)
+                                setLocalitySearchOpen(false)
+                                setLocalitySearchValue("")
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedLocality === locality ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              📍 {locality}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {availableLocalities.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     No hay localidades disponibles en los pedidos pendientes
@@ -580,15 +673,88 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                 )}
               </div>
 
+              {/* 🆕 Selected Orders Summary - Always visible when there are selections */}
+              {selectedOrderIds.length > 0 && (
+                <div className="space-y-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border-2 border-green-400 dark:border-green-600 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="h-5 w-5 text-green-600" />
+                      <span className="font-semibold text-green-800 dark:text-green-200">
+                        Pedidos Seleccionados ({selectedOrderIds.length})
+                      </span>
+                      {hasMultipleLocalities && (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs">
+                          {selectedLocalitiesSet.size} localidades
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedOrderIds([])}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Limpiar
+                    </Button>
+                  </div>
+                  
+                  {/* List of selected orders - scrollable */}
+                  <div className="max-h-[200px] overflow-y-auto space-y-2">
+                    {selectedOrders.map((order) => (
+                      <div 
+                        key={order.id}
+                        className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-md border"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="shrink-0 text-xs">
+                            #{order.order_number}
+                          </Badge>
+                          <span className="text-sm font-medium truncate">
+                            {order.customers?.commercial_name || order.customers?.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            ({order.customers?.locality})
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOrderToggle(order.id)}
+                          className="h-6 w-6 p-0 shrink-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Total amount of selected orders */}
+                  <div className="flex items-center justify-between pt-2 border-t border-green-300 dark:border-green-700">
+                    <span className="text-sm text-green-700 dark:text-green-300">Total a entregar:</span>
+                    <span className="text-lg font-bold text-green-800 dark:text-green-200">
+                      ${selectedOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0).toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Orders Dashboard */}
               {availableOrders.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <Label className="text-base font-semibold">Pedidos Disponibles</Label>
+                      <Label className="text-base font-semibold">
+                        Pedidos Disponibles 
+                        {selectedLocality !== "all" && (
+                          <span className="text-muted-foreground font-normal"> - {selectedLocality}</span>
+                        )}
+                      </Label>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {selectedOrderIds.length} de {availableOrders.length} pedidos seleccionados
+                        {availableOrders.filter(o => selectedOrderIds.includes(o.id)).length} de {availableOrders.length} seleccionados en esta vista
                         {selectedLocality === "all" && " (todas las localidades)"}
                       </p>
                     </div>
@@ -598,7 +764,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                       size="sm"
                       onClick={handleSelectAllOrders}
                     >
-                      {selectedOrderIds.length === availableOrders.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                      {availableOrders.every(o => selectedOrderIds.includes(o.id)) ? "Deseleccionar todos" : "Seleccionar todos"}
                     </Button>
                     </div>
 

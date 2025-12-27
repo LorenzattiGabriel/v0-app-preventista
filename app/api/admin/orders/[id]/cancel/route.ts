@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createStockService } from "@/lib/services/stockService"
+import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = await params
@@ -61,6 +62,60 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       console.log(`[Order ${orderId}] Was not assembled, no stock to restore`)
     }
 
+    // 🆕 Si el pedido fue armado, reversar la deuda PENDIENTE en cuenta corriente
+    if (wasAssembled) {
+      try {
+        // Obtener el total del pedido y el estado de pago
+        const { data: orderDetails } = await supabase
+          .from("orders")
+          .select("total, customer_id, order_number")
+          .eq("id", orderId)
+          .single()
+
+        if (orderDetails) {
+          // Obtener el balance pendiente del pedido (no el total)
+          const { data: paymentRecord } = await supabase
+            .from("order_payments")
+            .select("balance_due, total_paid")
+            .eq("order_id", orderId)
+            .maybeSingle()
+
+          // El monto a reversar es el balance pendiente, no el total
+          const balanceToReverse = paymentRecord?.balance_due ?? orderDetails.total
+
+          if (balanceToReverse > 0) {
+            const accountService = createAccountMovementsService(supabase)
+            
+            // Crear movimiento de crédito (NOTA_CREDITO) para reversar solo la deuda pendiente
+            await accountService.createMovement({
+              customerId: orderDetails.customer_id,
+              movementType: "NOTA_CREDITO",
+              description: `Cancelación pedido ${orderDetails.order_number}`,
+              amount: balanceToReverse,
+              orderId,
+              createdBy: user.id,
+            })
+
+            console.log(`[Order ${orderId}] Debt reversed: $${balanceToReverse} (of total $${orderDetails.total})`)
+          }
+
+          // Actualizar order_payments a cancelado (no eliminar para mantener historial)
+          if (paymentRecord) {
+            await supabase
+              .from("order_payments")
+              .update({ 
+                balance_due: 0,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("order_id", orderId)
+          }
+        }
+      } catch (debtError) {
+        console.error("Error reversing debt:", debtError)
+        // Continue with cancellation even if debt reversal fails
+      }
+    }
+
     // Update order status to CANCELADO
     const { error: updateError } = await supabase
       .from("orders")
@@ -81,7 +136,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       previous_status: order.status,
       new_status: "CANCELADO",
       changed_by: user.id,
-      change_reason: wasAssembled ? "Pedido cancelado - Stock devuelto" : "Pedido cancelado",
+      change_reason: wasAssembled ? "Pedido cancelado - Stock y deuda revertidos" : "Pedido cancelado",
     })
 
     return NextResponse.json({

@@ -12,8 +12,10 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ShortageReason } from "@/lib/types/database"
-import { ArrowLeft, AlertTriangle, CheckCircle, Package } from "lucide-react"
+import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download } from "lucide-react"
 import Link from "next/link"
+import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
+import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +55,26 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [assembledOrder, setAssembledOrder] = useState<any>(null)
+
+  // 🆕 Enviar comprobante de armado por WhatsApp (solo mensaje)
+  const handleSendWhatsAppAssembly = () => {
+    const phone = order.customers?.phone?.replace(/\D/g, '') || ''
+    const customerName = order.customers?.commercial_name || order.customers?.name || 'Cliente'
+    const message = `Hola ${customerName}, le informamos que su pedido #${order.order_number} ha sido armado y está listo para ser despachado. ¡Gracias por su compra!`
+    
+    const url = phone 
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`
+    
+    window.open(url, '_blank')
+  }
+
+  // 🆕 Descargar PDF
+  const handleDownloadPDF = () => {
+    downloadAssemblyReceipt(order)
+  }
 
   // Initialize assembly items from order items
   const [assemblyItems, setAssemblyItems] = useState<AssemblyItem[]>(
@@ -267,14 +289,30 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
         change_reason: hasShortages ? "Armado completado con faltantes" : "Armado completado",
       })
 
-      router.push("/armado/dashboard")
-      router.refresh()
+      // 🆕 Generar deuda en cuenta corriente del cliente
+      try {
+        const accountService = createAccountMovementsService(supabase)
+        await accountService.recordOrderAssembled(order.id, newTotal, userId)
+        console.log(`✅ Deuda registrada para pedido ${order.order_number}: $${newTotal}`)
+      } catch (debtError) {
+        console.error("Error al registrar deuda en cuenta corriente:", debtError)
+        // No fallar toda la operación si falla el registro de deuda
+      }
+
+      // 🆕 Mostrar diálogo de éxito con opción de compartir
+      setAssembledOrder({
+        ...order,
+        total: newTotal,
+        hasShortages,
+      })
+      setShowConfirmDialog(false)
+      setShowSuccessDialog(true)
     } catch (err) {
       console.error("[v0] Error confirming assembly:", err)
       setError(err instanceof Error ? err.message : "Error al confirmar el armado")
+      setShowConfirmDialog(false)
     } finally {
       setIsLoading(false)
-      setShowConfirmDialog(false)
     }
   }
 
@@ -548,6 +586,71 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmAssembly}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 🆕 Diálogo de éxito con opción de compartir */}
+      <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4">
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <AlertDialogTitle className="text-center">¡Pedido Armado!</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              <span className="block mb-2">
+                El pedido <strong>#{order.order_number}</strong> ha sido armado correctamente.
+              </span>
+              {assembledOrder?.hasShortages && (
+                <span className="block text-amber-600 dark:text-amber-400 text-sm">
+                  ⚠️ El pedido tiene productos faltantes
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center text-muted-foreground">
+              ¿Desea notificar al cliente?
+            </p>
+            
+            <div className="flex flex-col gap-2">
+              {/* Descargar PDF */}
+              <Button
+                onClick={handleDownloadPDF}
+                className="w-full"
+                variant="default"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Descargar Comprobante PDF
+              </Button>
+              
+              {/* WhatsApp con mensaje */}
+              <Button
+                onClick={handleSendWhatsAppAssembly}
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Enviar Mensaje WhatsApp
+                {order.customers?.phone && (
+                  <span className="ml-2 text-xs opacity-75">({order.customers.phone})</span>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogAction 
+              onClick={() => {
+                setShowSuccessDialog(false)
+                router.push("/armado/dashboard")
+                router.refresh()
+              }}
+              className="w-full sm:w-auto"
+            >
+              Volver al Dashboard
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
