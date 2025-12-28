@@ -228,9 +228,11 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   items.forEach((item: any) => {
     const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 35)
     const quantityRequested = item.quantity_requested || 0
-    const quantityAssembled = item.quantity_assembled || item.quantity_requested || 0
+    const quantityAssembled = item.quantity_assembled ?? item.quantity_requested ?? 0
     const price = (item.unit_price * quantityAssembled).toFixed(2)
-    const hasShortage = item.is_shortage || quantityAssembled < quantityRequested
+    // Solo marcar como faltante si is_shortage es true o si hay cantidad armada definida que es menor
+    const hasShortage = item.is_shortage === true || 
+      (item.quantity_assembled !== null && item.quantity_assembled !== undefined && item.quantity_assembled < quantityRequested)
     
     if (yPos > 270) {
       doc.addPage()
@@ -265,7 +267,16 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   yPos += 10
 
   // --- Status ---
-  const hasShortages = items.some((item: any) => item.is_shortage || (item.quantity_assembled < item.quantity_requested))
+  // Verificar faltantes correctamente: solo hay faltante si is_shortage es true 
+  // o si quantity_assembled existe y es menor que quantity_requested
+  const hasShortages = items.some((item: any) => {
+    if (item.is_shortage === true) return true
+    // Solo comparar si quantity_assembled tiene un valor definido
+    if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
+      return item.quantity_assembled < item.quantity_requested
+    }
+    return false
+  })
   
   doc.setFontSize(10)
   if (hasShortages) {
