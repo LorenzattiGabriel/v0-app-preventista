@@ -146,7 +146,7 @@ export function DraftsList({ orders, searchParams, localities }: { orders: any, 
     };
     return (
       <Select onValueChange={handleSortChange} defaultValue={value}>
-        <SelectTrigger className="w-[200px]">
+        <SelectTrigger className="w-full sm:w-[200px]">
           <SelectValue placeholder="Ordenar por..." />
         </SelectTrigger>
         <SelectContent>

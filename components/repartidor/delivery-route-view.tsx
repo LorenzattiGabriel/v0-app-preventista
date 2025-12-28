@@ -1231,8 +1231,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div className="col-span-2 sm:col-span-1">
               <span className="font-medium">Progreso:</span>
               <p className="text-2xl font-bold text-primary">
                 {deliveredOrders} / {totalOrders}
@@ -1247,13 +1247,13 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             )}
             {route.estimated_duration && (
               <div>
-                <span className="font-medium">Duración estimada:</span>
+                <span className="font-medium">Duración:</span>
                 <p className="text-muted-foreground">
                   {Math.floor(route.estimated_duration / 60)}h {route.estimated_duration % 60}min
                 </p>
               </div>
             )}
-            <div className="col-span-3 pt-2 border-t mt-2">
+            <div className="col-span-2 sm:col-span-3 pt-2 border-t mt-2">
                <span className="font-medium">Estado Financiero:</span>
                <div className="flex items-center gap-2 mt-1">
                  {(() => {

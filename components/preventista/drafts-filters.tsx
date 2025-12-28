@@ -180,7 +180,7 @@ export function DraftsFilters({
             {priorities.size > 0 && <Badge>{priorities.size}</Badge>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0" align="start">
+        <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[200px] max-w-[200px] p-0" align="start">
           <Command>
             <CommandInput placeholder="Filtrar prioridad..." />
             <CommandList>
@@ -265,7 +265,7 @@ export function DraftsFilters({
                       : "Seleccionar localidades"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0" align="start">
+                <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[300px] p-0" align="start">
                   <Command>
                     <CommandInput placeholder="Buscar localidad..." />
                     <CommandList>
