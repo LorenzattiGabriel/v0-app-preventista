@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Save, AlertTriangle, Shield, Truck, Package, User } from "lucide-react"
+import { Loader2, Save, AlertTriangle, Shield, Truck, Package, User, Key, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import { ROLE_LABELS, USER_ROLES_LIST, type UserRole } from "@/lib/constants/user-roles"
 
@@ -42,6 +42,57 @@ export function UserEditForm({ user, isSelf }: UserEditFormProps) {
   const [role, setRole] = useState<string>(user.role)
   const [isActive, setIsActive] = useState(user.is_active)
   const [error, setError] = useState<string | null>(null)
+  
+  // Password change state
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  const handleChangePassword = async () => {
+    setPasswordError(null)
+
+    if (!newPassword) {
+      setPasswordError("Ingresa la nueva contraseña")
+      return
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError("La contraseña debe tener al menos 6 caracteres")
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Las contraseñas no coinciden")
+      return
+    }
+
+    setIsChangingPassword(true)
+
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al cambiar contraseña")
+      }
+
+      toast.success("Contraseña actualizada correctamente")
+      setNewPassword("")
+      setConfirmPassword("")
+    } catch (err: any) {
+      setPasswordError(err.message || "Error al cambiar contraseña")
+      toast.error(err.message || "Error al cambiar contraseña")
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -222,6 +273,98 @@ export function UserEditForm({ user, isSelf }: UserEditFormProps) {
               </AlertDescription>
             </Alert>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Password Change Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5" />
+            Cambiar Contraseña
+          </CardTitle>
+          <CardDescription>
+            Establece una nueva contraseña para este usuario
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {passwordError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{passwordError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">Nueva Contraseña</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
+              <Input
+                id="confirmPassword"
+                type={showPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repite la contraseña"
+              />
+            </div>
+          </div>
+
+          {newPassword && newPassword.length < 6 && (
+            <p className="text-sm text-amber-600">
+              La contraseña debe tener al menos 6 caracteres
+            </p>
+          )}
+
+          {newPassword && confirmPassword && newPassword !== confirmPassword && (
+            <p className="text-sm text-destructive">
+              Las contraseñas no coinciden
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleChangePassword}
+            disabled={isChangingPassword || !newPassword || newPassword !== confirmPassword || newPassword.length < 6}
+          >
+            {isChangingPassword ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Cambiando...
+              </>
+            ) : (
+              <>
+                <Key className="mr-2 h-4 w-4" />
+                Cambiar Contraseña
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
