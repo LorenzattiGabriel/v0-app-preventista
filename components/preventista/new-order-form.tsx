@@ -650,10 +650,10 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
           )}
 
-          {/* Campos numéricos en grilla responsive */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="quantity" className="text-xs sm:text-sm">
+          {/* Campos numéricos - layout vertical en móvil, horizontal en desktop */}
+          <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="quantity" className="text-sm font-medium">
                 Cantidad {selectedProduct?.unit_of_measure && `(${selectedProduct.unit_of_measure})`}
               </Label>
               <Input
@@ -671,7 +671,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                     setQuantity(value)
                   }
                 }}
-                className="text-center"
+                className="text-center h-12 text-lg"
               />
               {selectedProduct?.allows_decimal_quantity && (
                 <p className="text-xs text-muted-foreground">
@@ -680,8 +680,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="unitPrice" className="text-xs sm:text-sm">Precio</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="unitPrice" className="text-sm font-medium">Precio Unit.</Label>
               <Input
                 id="unitPrice"
                 type="number"
@@ -695,11 +695,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 }
                 value={customPrice || ""}
                 onChange={(e) => setCustomPrice(e.target.value ? Number.parseFloat(e.target.value) : null)}
+                className="h-12 text-lg"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="itemDiscount" className="text-xs sm:text-sm">Descuento</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="itemDiscount" className="text-sm font-medium">Descuento ($)</Label>
               <Input
                 id="itemDiscount"
                 type="number"
@@ -707,55 +708,97 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 min="0"
                 value={itemDiscount}
                 onChange={(e) => setItemDiscount(Number.parseFloat(e.target.value) || 0)}
+                className="h-12 text-lg"
               />
             </div>
           </div>
 
-          {/* Botón agregar - ancho completo en móvil */}
+          {/* Botón agregar - ancho completo y más grande en móvil */}
           <Button 
             onClick={handleAddProduct} 
             disabled={!selectedProductId || quantity <= 0} 
-            className="w-full"
+            className="w-full h-12 text-base font-semibold"
+            size="lg"
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-5 w-5" />
             Agregar Producto
           </Button>
 
+          {/* Lista de productos agregados - vista card en móvil */}
           {orderItems.length > 0 && (
-            <div className="border rounded-md overflow-x-auto -mx-4 md:mx-0">
-              <table className="w-full min-w-[600px]">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="text-left p-2 text-xs md:text-sm font-medium">Producto</th>
-                    <th className="text-right p-2 text-xs md:text-sm font-medium">Cant.</th>
-                    <th className="text-right p-2 text-xs md:text-sm font-medium">Precio</th>
-                    <th className="text-right p-2 text-xs md:text-sm font-medium">Desc.</th>
-                    <th className="text-right p-2 text-xs md:text-sm font-medium">Subtotal</th>
-                    <th className="w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderItems.map((item, index) => (
-                    <tr key={index} className="border-t">
-                      <td className="p-2 text-sm">{item.productName}</td>
-                      <td className="p-2 text-sm text-right">
-                        {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
-                        {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && (
-                          <span className="text-xs text-muted-foreground ml-1">{item.unitOfMeasure}</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-sm text-right">${item.unitPrice.toFixed(2)}</td>
-                      <td className="p-2 text-sm text-right">${item.discount.toFixed(2)}</td>
-                      <td className="p-2 text-sm text-right font-medium">${item.subtotal.toFixed(2)}</td>
-                      <td className="p-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleRemoveProduct(index)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+            <div className="space-y-3 pt-4 border-t">
+              <p className="text-sm font-medium text-muted-foreground">
+                {orderItems.length} {orderItems.length === 1 ? 'producto agregado' : 'productos agregados'}
+              </p>
+              
+              {/* Vista móvil - Cards */}
+              <div className="sm:hidden space-y-2">
+                {orderItems.map((item, index) => (
+                  <div key={index} className="border rounded-lg p-3 bg-muted/30">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.productName}</p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                          <span>
+                            Cant: {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
+                            {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && ` ${item.unitOfMeasure}`}
+                          </span>
+                          <span>Precio: ${item.unitPrice.toFixed(2)}</span>
+                          {item.discount > 0 && <span>Desc: -${item.discount.toFixed(2)}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">${item.subtotal.toFixed(2)}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveProduct(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </td>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Vista desktop - Tabla */}
+              <div className="hidden sm:block border rounded-md overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-2 text-sm font-medium">Producto</th>
+                      <th className="text-right p-2 text-sm font-medium">Cant.</th>
+                      <th className="text-right p-2 text-sm font-medium">Precio</th>
+                      <th className="text-right p-2 text-sm font-medium">Desc.</th>
+                      <th className="text-right p-2 text-sm font-medium">Subtotal</th>
+                      <th className="w-12"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {orderItems.map((item, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="p-2 text-sm">{item.productName}</td>
+                        <td className="p-2 text-sm text-right">
+                          {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
+                          {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && (
+                            <span className="text-xs text-muted-foreground ml-1">{item.unitOfMeasure}</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-sm text-right">${item.unitPrice.toFixed(2)}</td>
+                        <td className="p-2 text-sm text-right">${item.discount.toFixed(2)}</td>
+                        <td className="p-2 text-sm text-right font-medium">${item.subtotal.toFixed(2)}</td>
+                        <td className="p-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveProduct(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -834,12 +877,23 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         </CardContent>
       </Card>
 
-      <div className="flex gap-4 justify-end">
-        <Button variant="outline" onClick={() => handleSaveOrder(true)} disabled={isLoading}>
+      {/* Botones de acción - stack vertical en móvil */}
+      <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+        <Button 
+          variant="outline" 
+          onClick={() => handleSaveOrder(true)} 
+          disabled={isLoading}
+          className="h-12 sm:h-10"
+        >
           <Save className="mr-2 h-4 w-4" />
-          {isLoading ? "Guardando Borrador..." : "Guardar Borrador"}
+          {isLoading ? "Guardando..." : "Guardar Borrador"}
         </Button>
-        <Button onClick={() => handleSaveOrder(false)} disabled={isLoading} size="lg">
+        <Button 
+          onClick={() => handleSaveOrder(false)} 
+          disabled={isLoading} 
+          size="lg"
+          className="h-12 sm:h-10 font-semibold"
+        >
           {isLoading ? "Creando..." : "Confirmar Pedido"}
         </Button>
       </div>
