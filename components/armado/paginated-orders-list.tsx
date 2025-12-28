@@ -4,7 +4,9 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, FileText, MessageCircle } from "lucide-react"
+import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
+import { toast } from "sonner"
 
 interface PaginatedOrdersListProps {
   orders: any[]
@@ -94,10 +96,41 @@ export function PaginatedOrdersList({
 function OrderCard({ order, userId, variant }: { order: any; userId: string; variant: string }) {
   if (variant === "finished") {
     const isIncomplete = order.has_shortages === true
+    
+    const handleDownloadReceipt = async () => {
+      try {
+        // Fetch complete order data with items
+        const response = await fetch(`/api/orders/${order.id}`)
+        if (!response.ok) throw new Error("No se pudo obtener el pedido")
+        const fullOrder = await response.json()
+        downloadAssemblyReceipt(fullOrder)
+        toast.success("Comprobante descargado")
+      } catch (error) {
+        toast.error("Error al descargar comprobante")
+      }
+    }
+
+    const handleSendWhatsApp = () => {
+      const phone = order.customers?.phone?.replace(/\D/g, "") || ""
+      if (!phone) {
+        toast.error("El cliente no tiene teléfono registrado")
+        return
+      }
+      
+      const message = `Hola ${order.customers?.commercial_name}! 👋\n\n` +
+        `Su pedido #${order.order_number} ha sido armado y está listo para ser despachado.\n\n` +
+        `📦 Total: $${order.total?.toFixed(2) || "0.00"}\n` +
+        (isIncomplete ? `⚠️ Nota: Hubo algunos productos faltantes.\n` : "") +
+        `\nGracias por su compra! 🙏`
+      
+      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+      window.open(whatsappUrl, "_blank")
+    }
+
     return (
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-4 border rounded-lg bg-white">
+      <div className="flex flex-col gap-4 p-4 border rounded-lg bg-white">
         <div className="flex-1 space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{order.order_number}</span>
             <Badge variant="secondary">Completado</Badge>
             {isIncomplete && <Badge variant="destructive">Faltantes</Badge>}
@@ -114,9 +147,23 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
           <p className="text-xs text-green-600 font-medium">Finalizado hoy</p>
         </div>
 
-        <Button asChild variant="outline">
-          <Link href={`/armado/orders/${order.id}/detalle`}>Ver detalle</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownloadReceipt}>
+            <FileText className="mr-1 h-4 w-4" />
+            Comprobante
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={handleSendWhatsApp}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <MessageCircle className="mr-1 h-4 w-4" />
+            WhatsApp
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/armado/orders/${order.id}/detalle`}>Ver detalle</Link>
+          </Button>
+        </div>
       </div>
     )
   }
