@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://ojghwcbliucsntrbqvaw.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2h3Y2JsaXVjc250cmJxdmF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyNDAzMzMsImV4cCI6MjA3NjgxNjMzM30.R3PaVfS24LQW4j8J8XmlwOBPFCWo5XQQnQxON_rL9KE'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ojghwcbliucsntrbqvaw.supabase.co'
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2h3Y2JsaXVjc250cmJxdmF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyNDAzMzMsImV4cCI6MjA3NjgxNjMzM30.R3PaVfS24LQW4j8J8XmlwOBPFCWo5XQQnQxON_rL9KE'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -10,7 +10,7 @@ console.log('🔍 Verificando usuarios en la base de datos...\n')
 
 const { data: users, error } = await supabase
   .from('profiles')
-  .select('email, pwd, role, full_name')
+  .select('email, role, full_name, is_active')
   .order('role', { ascending: true })
 
 if (error) {
@@ -30,46 +30,46 @@ const roles = {
 
 users.forEach(user => {
   const roleIcon = roles[user.role] || user.role
-  console.log(`${roleIcon.padEnd(20)} ${user.email.padEnd(40)} pwd: "${user.pwd}"`)
+  const status = user.is_active ? '✅' : '❌'
+  console.log(`${status} ${roleIcon.padEnd(18)} ${user.email.padEnd(40)} ${user.full_name}`)
 })
 
 console.log('\n' + '='.repeat(80))
-console.log('\n🧪 Probando login con admin@distribuidora.com / admin123...\n')
+console.log('\n🧪 Probando login con Supabase Auth (admin@distribuidora.com)...\n')
 
-// Test login
+// Test login using Supabase Auth (proper way)
 const testEmail = 'admin@distribuidora.com'
 const testPassword = 'admin123'
 
-const { data: testUser, error: testError } = await supabase
-  .from('profiles')
-  .select('*')
-  .eq('email', testEmail)
-  .eq('pwd', testPassword)
-  .eq('is_active', true)
-  .single()
+const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  email: testEmail,
+  password: testPassword
+})
 
-if (testError || !testUser) {
+if (authError) {
   console.log('❌ Login FALLÓ')
-  console.log('   Error:', testError?.message || 'Usuario no encontrado')
+  console.log('   Error:', authError.message)
+} else {
+  console.log('✅ Login EXITOSO con Supabase Auth')
+  console.log(`   Usuario: ${authData.user.email}`)
+  console.log(`   User ID: ${authData.user.id}`)
   
-  // Try without password check
-  const { data: userCheck } = await supabase
+  // Get profile
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('email, pwd')
-    .eq('email', testEmail)
+    .select('full_name, role')
+    .eq('id', authData.user.id)
     .single()
   
-  if (userCheck) {
-    console.log(`\n   Usuario encontrado: ${userCheck.email}`)
-    console.log(`   Password en BD: "${userCheck.pwd}"`)
-    console.log(`   Password probado: "${testPassword}"`)
-    console.log(`   ¿Coinciden? ${userCheck.pwd === testPassword ? '✅ SÍ' : '❌ NO'}`)
+  if (profile) {
+    console.log(`   Nombre: ${profile.full_name}`)
+    console.log(`   Rol: ${profile.role}`)
   }
-} else {
-  console.log('✅ Login EXITOSO')
-  console.log(`   Usuario: ${testUser.full_name}`)
-  console.log(`   Rol: ${testUser.role}`)
+  
+  // Sign out
+  await supabase.auth.signOut()
 }
 
 console.log('\n' + '='.repeat(80))
-
+console.log('\n✅ La autenticación ahora usa Supabase Auth (contraseñas hasheadas con bcrypt)')
+console.log('   Las contraseñas NO se guardan en texto plano en la tabla profiles.\n')

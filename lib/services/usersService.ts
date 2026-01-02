@@ -102,9 +102,11 @@ export class UsersService {
   }
 
   /**
-   * Create new user (without password - use API route for that)
+   * Create new user profile (use API route for full user creation with auth)
+   * Note: This only creates the profile, not the auth user.
+   * For full user creation with password, use /api/admin/users/create
    */
-  async createUser(userData: Omit<CreateUserData, 'password'> & { pwd: string }) {
+  async createUserProfile(userData: Omit<CreateUserData, 'password'>) {
     const { data, error } = await this.supabase
       .from('profiles')
       .insert({
@@ -112,7 +114,6 @@ export class UsersService {
         full_name: userData.full_name,
         role: userData.role,
         phone: userData.phone || null,
-        pwd: userData.pwd,
         is_active: userData.is_active ?? true,
       })
       .select()
@@ -138,21 +139,6 @@ export class UsersService {
 
     if (error) throw error
     return data
-  }
-
-  /**
-   * Change user password (password should already be hashed)
-   */
-  async changePassword(id: string, hashedPassword: string) {
-    const { error } = await this.supabase
-      .from('profiles')
-      .update({
-        pwd: hashedPassword,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-
-    if (error) throw error
   }
 
   /**
