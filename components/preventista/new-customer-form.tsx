@@ -64,6 +64,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null)
   const placesService = useRef<google.maps.places.PlacesService | null>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
 
   // Cerrar sugerencias al hacer clic fuera
   useEffect(() => {
@@ -76,6 +77,13 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Scroll al error cuando aparezca
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [error])
 
   // Inicializar servicios de Google Places cuando esté disponible
   useEffect(() => {
@@ -248,6 +256,22 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
     setIsLoading(true)
     setError(null)
 
+    // Validación de campos requeridos
+    const missingFields: string[] = []
+    if (!commercialName.trim()) missingFields.push("Nombre Comercial")
+    if (!contactName.trim()) missingFields.push("Nombre de Contacto")
+    if (!phone.trim()) missingFields.push("Teléfono")
+    if (!street.trim()) missingFields.push("Calle")
+    if (!streetNumber.trim()) missingFields.push("Número")
+    if (!locality.trim()) missingFields.push("Localidad")
+    if (!province.trim()) missingFields.push("Provincia")
+
+    if (missingFields.length > 0) {
+      setError(`Campos requeridos faltantes: ${missingFields.join(", ")}`)
+      setIsLoading(false)
+      return
+    }
+
     try {
       let lat = latitude
       let lng = longitude
@@ -330,7 +354,10 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         time_restriction_notes: hasTimeRestriction ? timeRestrictionNotes : null,
       }).select().single()
 
-      if (customerError) throw customerError
+      if (customerError) {
+        console.error("[v0] Customer insert error:", customerError)
+        throw new Error(customerError.message || "Error al insertar cliente")
+      }
 
       // Guardar el ID del cliente recién creado para seleccionarlo automáticamente
       if (newCustomer) {
@@ -340,9 +367,41 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
       // Redirect back to the previous page, or a default if not specified
       router.push(previousPath || "/preventista/dashboard")
       router.refresh()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[v0] Error creating customer:", err)
-      setError(err instanceof Error ? err.message : "Error al crear el cliente")
+      let errorMessage = err instanceof Error ? err.message : 
+        (typeof err === 'object' && err !== null && 'message' in err) ? String((err as {message: unknown}).message) : 
+        "Error al crear el cliente"
+      
+      // Traducir errores comunes de BD
+      if (errorMessage.includes("duplicate key")) {
+        if (errorMessage.includes("code")) {
+          errorMessage = "Ya existe un cliente con ese código. Intenta nuevamente."
+        } else if (errorMessage.includes("tax_id")) {
+          errorMessage = "Ya existe un cliente con ese CUIT/CUIL."
+        } else {
+          errorMessage = "Ya existe un cliente con esos datos."
+        }
+      } else if (errorMessage.includes("violates not-null constraint")) {
+        const match = errorMessage.match(/column "(\w+)"/)
+        const field = match ? match[1] : "desconocido"
+        const fieldNames: Record<string, string> = {
+          commercial_name: "Nombre Comercial",
+          contact_name: "Nombre de Contacto", 
+          phone: "Teléfono",
+          street: "Calle",
+          street_number: "Número",
+          locality: "Localidad",
+          province: "Provincia"
+        }
+        errorMessage = `El campo "${fieldNames[field] || field}" es requerido.`
+      } else if (errorMessage.includes("permission denied") || errorMessage.includes("RLS")) {
+        errorMessage = "No tienes permisos para crear clientes. Verifica tu sesión."
+      } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("network")) {
+        errorMessage = "Error de conexión. Verifica tu conexión a internet."
+      }
+      
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -371,7 +430,15 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
       </div>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+        <div ref={errorRef} className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">
+          <div className="flex items-start gap-2">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <p className="font-semibold">Error al guardar</p>
+              <p className="text-sm mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
       )}
 
       <Card>

@@ -21,3 +21,5 @@ ON customers(priority);
 -- 4. Comentario para documentación
 COMMENT ON COLUMN customers.priority IS 'Prioridad del cliente: baja, normal o alta';
 
+
+

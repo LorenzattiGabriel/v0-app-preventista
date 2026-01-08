@@ -45,3 +45,5 @@ SELECT 'profiles (preservados)', COUNT(*) FROM profiles
 UNION ALL
 SELECT 'zones (preservados)', COUNT(*) FROM zones;
 
+
+

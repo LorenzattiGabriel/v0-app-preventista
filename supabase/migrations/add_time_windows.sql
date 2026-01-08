@@ -94,3 +94,5 @@ COMMENT ON COLUMN orders.delivery_window_end IS 'Hora de fin de la ventana de en
 
 
 
+
+

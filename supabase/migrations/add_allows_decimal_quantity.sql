@@ -13,3 +13,5 @@ ADD COLUMN IF NOT EXISTS unit_of_measure VARCHAR(20) DEFAULT 'unidad';
 
 COMMENT ON COLUMN products.unit_of_measure IS 'Unidad de medida del producto (unidad, kg, litro, metro, etc.)';
 
+
+

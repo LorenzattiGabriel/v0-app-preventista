@@ -7,3 +7,5 @@ ADD COLUMN IF NOT EXISTS proof_url TEXT;
 -- Comentario de documentación
 COMMENT ON COLUMN customer_account_movements.proof_url IS 'URL del comprobante de pago adjunto (opcional)';
 
+
+
