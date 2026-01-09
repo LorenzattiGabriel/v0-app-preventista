@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { ArrowLeft, Package } from 'lucide-react'
+import { ArrowLeft, Package, AlertTriangle } from 'lucide-react'
+import { createDelayedOrdersService } from '@/lib/services/delayedOrdersService'
 import { OrdersFilters } from '@/components/admin/orders-filters'
 import { OrdersList } from '@/components/admin/orders-list'
 import { OrdersPagination } from '@/components/admin/orders-pagination'
@@ -60,6 +61,10 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
   // Fetch statistics
   const statusCounts = await ordersService.getOrderStats()
 
+  // Fetch delayed orders count
+  const delayedService = createDelayedOrdersService(supabase)
+  const delayedCount = await delayedService.getDelayedOrdersCount()
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-background">
@@ -81,16 +86,27 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
 
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto space-y-6">
-          {/* Back Button */}
-          <Button variant="outline" asChild>
-            <Link href="/admin/dashboard">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver al Dashboard
-            </Link>
-          </Button>
+          {/* Back Button & Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <Button variant="outline" asChild>
+              <Link href="/admin/dashboard">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Volver al Dashboard
+              </Link>
+            </Button>
+            
+            {delayedCount > 0 && (
+              <Button variant="destructive" asChild>
+                <Link href="/admin/orders/delayed">
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Pedidos Retrasados ({delayedCount})
+                </Link>
+              </Button>
+            )}
+          </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <StatsCard
               title="Total Pedidos"
               value={totalCount}
@@ -107,6 +123,21 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
               title="Entregados"
               value={statusCounts?.ENTREGADO || 0}
             />
+            <Link href="/admin/orders/delayed">
+              <Card className={delayedCount > 0 ? "border-red-300 bg-red-50 hover:bg-red-100 transition-colors cursor-pointer" : ""}>
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm font-medium flex items-center gap-1 ${delayedCount > 0 ? "text-red-700" : ""}`}>
+                    <AlertTriangle className="h-4 w-4" />
+                    Retrasados
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${delayedCount > 0 ? "text-red-700" : ""}`}>
+                    {delayedCount}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           {/* Orders List with Filters */}

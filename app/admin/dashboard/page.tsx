@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle } from "lucide-react"
+import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
 import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
@@ -65,6 +66,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     .select("*", { count: "exact", head: true })
     .eq("role", "repartidor")
     .eq("is_active", true)
+
+  // Get delayed orders count
+  const delayedService = createDelayedOrdersService(supabase)
+  const delayedOrdersCount = await delayedService.getDelayedOrdersCount()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -189,6 +194,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/orders?status=PENDIENTE_ENTREGA">Pedidos Pendientes</Link>
                 </Button>
+                {delayedOrdersCount > 0 && (
+                  <Button asChild variant="destructive" className="w-full">
+                    <Link href="/admin/orders/delayed">
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Pedidos Retrasados ({delayedOrdersCount})
+                    </Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
 

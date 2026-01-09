@@ -25,6 +25,12 @@ export type ShortageReason = "sin_stock" | "producto_danado" | "producto_discont
 
 export type RouteStatus = "PLANIFICADO" | "EN_CURSO" | "COMPLETADO" | "CANCELADO"
 
+// Tipos para historial de cambios de pedidos
+export type OrderChangeType = "STATUS_CHANGE" | "DELIVERY_DATE_CHANGE" | "PRIORITY_CHANGE" | "CANCELLATION"
+
+// Severidad de retraso de pedidos
+export type DelaySeverity = "minor" | "warning" | "critical"
+
 // Stock Movements Types (Auditoría)
 export type StockMovementType = 
   | "manual_edit"           // Edición manual individual
@@ -198,6 +204,44 @@ export interface Order {
   delivery_window_end?: string // Hora fin (HH:MM)
   time_restriction_notes?: string // Notas sobre la restricción
   updated_at: string
+  // Campos para tracking de reprogramaciones
+  original_delivery_date?: string
+  reschedule_count?: number
+}
+
+// Pedido retrasado con información adicional
+export interface DelayedOrder extends Order {
+  days_delayed: number
+  delay_severity: DelaySeverity
+  customer_name: string
+  customer_contact?: string
+  customer_locality?: string
+  customer_phone?: string
+  customer_latitude?: number | null
+  customer_longitude?: number | null
+}
+
+// Historial de cambios de fecha de entrega
+export interface OrderDateChange {
+  id: string
+  order_id: string
+  change_type: OrderChangeType
+  previous_delivery_date?: string
+  new_delivery_date?: string
+  previous_status?: OrderStatus
+  new_status: OrderStatus
+  change_reason?: string
+  changed_by?: string
+  changed_by_name?: string
+  created_at: string
+}
+
+// Request para reprogramar pedido
+export interface RescheduleOrderRequest {
+  order_id: string
+  new_delivery_date: string
+  reason: string
+  increase_priority?: boolean
 }
 
 export interface OrderItem {
