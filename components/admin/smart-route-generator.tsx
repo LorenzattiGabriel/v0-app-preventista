@@ -573,12 +573,32 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="startTime">Hora Inicio</Label>
-                  <Input
-                    id="startTime"
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                  />
+                  <Select value={startTime} onValueChange={setStartTime}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar hora" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="05:00">05:00</SelectItem>
+                      <SelectItem value="05:30">05:30</SelectItem>
+                      <SelectItem value="06:00">06:00</SelectItem>
+                      <SelectItem value="06:30">06:30</SelectItem>
+                      <SelectItem value="07:00">07:00</SelectItem>
+                      <SelectItem value="07:30">07:30</SelectItem>
+                      <SelectItem value="08:00">08:00</SelectItem>
+                      <SelectItem value="08:30">08:30</SelectItem>
+                      <SelectItem value="09:00">09:00</SelectItem>
+                      <SelectItem value="09:30">09:30</SelectItem>
+                      <SelectItem value="10:00">10:00</SelectItem>
+                      <SelectItem value="10:30">10:30</SelectItem>
+                      <SelectItem value="11:00">11:00</SelectItem>
+                      <SelectItem value="11:30">11:30</SelectItem>
+                      <SelectItem value="12:00">12:00</SelectItem>
+                      <SelectItem value="12:30">12:30</SelectItem>
+                      <SelectItem value="13:00">13:00</SelectItem>
+                      <SelectItem value="13:30">13:30</SelectItem>
+                      <SelectItem value="14:00">14:00</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="avgTime">Tiempo Promedio por Entrega (min)</Label>
