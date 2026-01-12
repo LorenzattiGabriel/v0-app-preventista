@@ -199,6 +199,30 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   // Reset selections only when date changes (different delivery day = fresh start)
   useEffect(() => {
     setSelectedOrderIds([])
+    
+    // Si es hoy, ajustar la hora de inicio a una hora válida
+    const today = new Date().toISOString().split("T")[0]
+    if (deliveryDate === today) {
+      const now = new Date()
+      const minMinutes = now.getHours() * 60 + now.getMinutes() + 30
+      const [currentHour, currentMin] = startTime.split(":").map(Number)
+      const currentTimeMinutes = currentHour * 60 + currentMin
+      
+      if (currentTimeMinutes < minMinutes) {
+        // Encontrar la próxima hora válida (redondeada a 30 min)
+        const nextValidHour = Math.floor(minMinutes / 60)
+        const nextValidMin = minMinutes % 60 >= 30 ? 30 : 0
+        const adjustedHour = minMinutes % 60 >= 30 ? nextValidHour : nextValidHour
+        const adjustedMin = minMinutes % 60 >= 30 ? 30 : (minMinutes % 60 > 0 ? 30 : 0)
+        const finalHour = minMinutes % 60 > 30 ? nextValidHour + 1 : nextValidHour
+        const finalMin = minMinutes % 60 > 30 ? 0 : (minMinutes % 60 > 0 ? 30 : 0)
+        
+        const newTime = `${String(finalHour).padStart(2, '0')}:${String(finalMin).padStart(2, '0')}`
+        if (finalHour <= 18) {
+          setStartTime(newTime)
+        }
+      }
+    }
   }, [deliveryDate])
   
   // Get all selected orders from pendingOrders (regardless of current locality filter)
@@ -236,6 +260,26 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     if (!validation.isValid) {
       setError(validation.error || "Error de validación")
       return
+    }
+
+    // Validar que si la fecha es hoy, la hora de inicio sea posterior a la hora actual
+    const today = new Date().toISOString().split("T")[0]
+    if (deliveryDate === today) {
+      const now = new Date()
+      const currentHour = now.getHours()
+      const currentMinute = now.getMinutes()
+      const [selectedHour, selectedMinute] = startTime.split(":").map(Number)
+      
+      // Comparar hora seleccionada con hora actual + 30 min de margen
+      const currentTimeInMinutes = currentHour * 60 + currentMinute + 30 // 30 min de margen
+      const selectedTimeInMinutes = selectedHour * 60 + selectedMinute
+      
+      if (selectedTimeInMinutes < currentTimeInMinutes) {
+        const minHour = Math.floor(currentTimeInMinutes / 60)
+        const minMin = currentTimeInMinutes % 60
+        setError(`Para rutas de hoy, la hora de inicio debe ser posterior a las ${String(minHour).padStart(2, '0')}:${String(minMin).padStart(2, '0')} (hora actual + 30 min)`)
+        return
+      }
     }
 
     setIsGenerating(true)
@@ -578,27 +622,51 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                       <SelectValue placeholder="Seleccionar hora" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="05:00">05:00</SelectItem>
-                      <SelectItem value="05:30">05:30</SelectItem>
-                      <SelectItem value="06:00">06:00</SelectItem>
-                      <SelectItem value="06:30">06:30</SelectItem>
-                      <SelectItem value="07:00">07:00</SelectItem>
-                      <SelectItem value="07:30">07:30</SelectItem>
-                      <SelectItem value="08:00">08:00</SelectItem>
-                      <SelectItem value="08:30">08:30</SelectItem>
-                      <SelectItem value="09:00">09:00</SelectItem>
-                      <SelectItem value="09:30">09:30</SelectItem>
-                      <SelectItem value="10:00">10:00</SelectItem>
-                      <SelectItem value="10:30">10:30</SelectItem>
-                      <SelectItem value="11:00">11:00</SelectItem>
-                      <SelectItem value="11:30">11:30</SelectItem>
-                      <SelectItem value="12:00">12:00</SelectItem>
-                      <SelectItem value="12:30">12:30</SelectItem>
-                      <SelectItem value="13:00">13:00</SelectItem>
-                      <SelectItem value="13:30">13:30</SelectItem>
-                      <SelectItem value="14:00">14:00</SelectItem>
+                      {(() => {
+                        const allTimes = [
+                          "05:00", "05:30", "06:00", "06:30", "07:00", "07:30",
+                          "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
+                          "11:00", "11:30", "12:00", "12:30", "13:00", "13:30",
+                          "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+                          "17:00", "17:30", "18:00"
+                        ]
+                        const today = new Date().toISOString().split("T")[0]
+                        const isToday = deliveryDate === today
+                        
+                        if (!isToday) {
+                          return allTimes.map(time => (
+                            <SelectItem key={time} value={time}>{time}</SelectItem>
+                          ))
+                        }
+                        
+                        // Para hoy, filtrar horas pasadas + 30 min margen
+                        const now = new Date()
+                        const minMinutes = now.getHours() * 60 + now.getMinutes() + 30
+                        
+                        return allTimes.map(time => {
+                          const [h, m] = time.split(":").map(Number)
+                          const timeMinutes = h * 60 + m
+                          const isPast = timeMinutes < minMinutes
+                          
+                          return (
+                            <SelectItem 
+                              key={time} 
+                              value={time}
+                              disabled={isPast}
+                              className={isPast ? "text-muted-foreground line-through" : ""}
+                            >
+                              {time} {isPast ? "(pasada)" : ""}
+                            </SelectItem>
+                          )
+                        })
+                      })()}
                     </SelectContent>
                   </Select>
+                  {deliveryDate === new Date().toISOString().split("T")[0] && (
+                    <p className="text-xs text-orange-600">
+                      ⚠️ Ruta para hoy: solo horas futuras disponibles
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="avgTime">Tiempo Promedio por Entrega (min)</Label>
