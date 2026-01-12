@@ -101,17 +101,17 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
       }`}
       onClick={handleCardClick}
     >
-      <div className="absolute top-3 left-3 z-10">
+      <div className="absolute top-4 left-3 z-10">
         <Checkbox
           id={`order-${order.id}`}
           checked={isSelected}
           onCheckedChange={() => onToggle(order.id)}
           onClick={(e) => e.stopPropagation()}
-          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+          className="h-5 w-5 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
         />
       </div>
 
-      <CardContent className="p-3 pl-9 space-y-3">
+      <CardContent className="p-3 pl-10 space-y-3">
         {/* Header: Name & Date Badge */}
         <div className="flex justify-between items-start gap-2">
           <div className="min-w-0 flex-1">
