@@ -13,11 +13,8 @@ import type {
 } from '@/lib/types/rutas-inteligentes.types'
 
 // Base URL del microservicio
-// En desarrollo, usamos el proxy local para evitar CORS
-// En producción, llamamos directamente al microservicio
-const BASE_URL = process.env.NODE_ENV === 'development' 
-  ? '/api/proxy-rutas' // Proxy local para evitar CORS en desarrollo
-  : process.env.NEXT_PUBLIC_RUTAS_INTELIGENTES_API_URL || 'http://localhost:3000'
+// Usamos siempre el proxy para evitar CORS y centralizar la configuración
+const BASE_URL = '/api/proxy-rutas'
 
 /**
  * Error personalizado para el API
@@ -86,9 +83,12 @@ export class RutasInteligentesClient {
       // Leer respuesta como texto primero para mejor manejo de errores
       const responseText = await response.text()
       
+      console.log('📥 Response status:', response.status, 'length:', responseText.length)
+      
       if (!responseText) {
         throw new RutasInteligentesError(
-          'El microservicio no devolvió ninguna respuesta',
+          `El microservicio no devolvió ninguna respuesta (HTTP ${response.status}). ` +
+          `Verifica que el servidor de desarrollo esté corriendo.`,
           response.status
         )
       }
