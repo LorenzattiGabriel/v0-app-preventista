@@ -3,3 +3,4 @@ ALTER TYPE account_movement_type ADD VALUE IF NOT EXISTS 'PAGO_CHEQUE';
 
 
 
+

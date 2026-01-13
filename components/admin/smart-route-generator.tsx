@@ -479,6 +479,10 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
       })
 
       // Create route
+      // Formatear tiempos a formato TIME de PostgreSQL (HH:mm:ss)
+      const formattedStartTime = `${startTime}:00`
+      const formattedEndTime = `${endTime}:00`
+      
       const { data: createdRoute, error: routeError } = await supabase
         .from("routes")
         .insert({
@@ -486,8 +490,8 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
           driver_id: selectedDriver,
           zone_id: null, // Ya no usamos zone_id, filtramos por localidad
           scheduled_date: deliveryDate,
-          scheduled_start_time: startTime,
-          scheduled_end_time: endTime,
+          scheduled_start_time: formattedStartTime,
+          scheduled_end_time: formattedEndTime,
           total_distance: generatedRoute.totalDistance,
           estimated_duration: Math.round(totalDurationMinutes), // ✅ Redondeado a entero
           google_maps_url: generatedRoute.googleMapsUrl, // ✅ Guardado en columna dedicada
