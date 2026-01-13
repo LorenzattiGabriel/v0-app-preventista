@@ -26,6 +26,22 @@ export interface CostParams {
 }
 
 /**
+ * Normaliza formato de tiempo a HH:mm (sin segundos)
+ * Acepta: "08:00", "08:00:00", "8:00"
+ */
+function normalizeTime(time: string): string {
+  if (!time) return time
+  // Tomar solo HH:mm (primeros 5 caracteres si tiene segundos)
+  const parts = time.split(':')
+  if (parts.length >= 2) {
+    const hh = parts[0].padStart(2, '0')
+    const mm = parts[1].padStart(2, '0')
+    return `${hh}:${mm}`
+  }
+  return time
+}
+
+/**
  * 🆕 Parámetros VRPTW para el microservicio
  */
 export interface VRPTWParams {
@@ -115,12 +131,13 @@ export async function generateRouteFromOrders(
       // Agregar restricción horaria si existe
       if (order.has_time_restriction && order.delivery_window_start && order.delivery_window_end) {
         location.isTimeRestricted = true
+        // Normalizar tiempos a formato HH:mm
         location.timeWindow = {
-          start: order.delivery_window_start,
-          end: order.delivery_window_end,
+          start: normalizeTime(order.delivery_window_start),
+          end: normalizeTime(order.delivery_window_end),
         }
         ordersWithTimeRestriction++
-        console.log(`🕐 Pedido ${order.order_number} - Restricción horaria: ${order.delivery_window_start} - ${order.delivery_window_end}`)
+        console.log(`🕐 Pedido ${order.order_number} - Restricción horaria: ${location.timeWindow.start} - ${location.timeWindow.end}`)
       }
 
       locations.push(location)
@@ -162,8 +179,9 @@ export async function generateRouteFromOrders(
 
     // 🆕 Agregar parámetros VRPTW si están disponibles
     if (vrptwParams?.routeStartTime) {
-      request.routeStartTime = vrptwParams.routeStartTime
-      console.log(`   🕐 Hora inicio de ruta: ${vrptwParams.routeStartTime}`)
+      // Normalizar a formato HH:mm
+      request.routeStartTime = normalizeTime(vrptwParams.routeStartTime)
+      console.log(`   🕐 Hora inicio de ruta: ${request.routeStartTime}`)
     }
     if (vrptwParams?.serviceTimeMinutes) {
       request.serviceTimeMinutes = vrptwParams.serviceTimeMinutes

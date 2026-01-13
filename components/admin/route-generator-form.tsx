@@ -248,6 +248,10 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
         const routeCode = routeCodeData as string
 
         // 🆕 Create route with REAL data from microservice
+        // Formatear tiempos a formato TIME de PostgreSQL (HH:mm:ss)
+        const formattedStartTime = startTime.includes(':') && startTime.split(':').length === 2 ? `${startTime}:00` : startTime
+        const formattedEndTime = endTime.includes(':') && endTime.split(':').length === 2 ? `${endTime}:00` : endTime
+        
         const { data: createdRoute, error: routeError } = await supabase
           .from("routes")
           .insert({
@@ -255,8 +259,8 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
             driver_id: driverId,
             zone_id: route.zoneId !== "sin_zona" ? route.zoneId : null,
             scheduled_date: deliveryDate,
-            scheduled_start_time: startTime,
-            scheduled_end_time: endTime,
+            scheduled_start_time: formattedStartTime,
+            scheduled_end_time: formattedEndTime,
             total_distance: route.totalDistance, // ✅ REAL del microservicio
             estimated_duration: route.estimatedDuration, // ✅ REAL del microservicio
             optimized_route: route.optimizedRouteData || null, // ✅ Guardar toda la data de la ruta
