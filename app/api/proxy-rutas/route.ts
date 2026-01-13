@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     const apiUrl = process.env.NEXT_PUBLIC_RUTAS_INTELIGENTES_API_URL || 
-                   'https://v0-micro-saa-s-git-develop-talenthubais-projects.vercel.app'
+                   'https://v0-micro-saa-s-snowy.vercel.app'
     
     console.log('🔄 Proxy: Reenviando petición a:', `${apiUrl}/api/rutas-inteligentes`)
     console.log('📦 Payload:', JSON.stringify(body).substring(0, 200) + '...')

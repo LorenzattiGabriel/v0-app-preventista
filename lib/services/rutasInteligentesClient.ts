@@ -83,7 +83,26 @@ export class RutasInteligentesClient {
 
       clearTimeout(timeoutId)
 
-      const data: RutaInteligenteResponse = await response.json()
+      // Leer respuesta como texto primero para mejor manejo de errores
+      const responseText = await response.text()
+      
+      if (!responseText) {
+        throw new RutasInteligentesError(
+          'El microservicio no devolvió ninguna respuesta',
+          response.status
+        )
+      }
+
+      let data: RutaInteligenteResponse
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('❌ Respuesta no es JSON válido:', responseText.substring(0, 200))
+        throw new RutasInteligentesError(
+          `Respuesta inválida del microservicio (status: ${response.status})`,
+          response.status
+        )
+      }
 
       console.log('📥 Respuesta del microservicio:', {
         success: data.success,
