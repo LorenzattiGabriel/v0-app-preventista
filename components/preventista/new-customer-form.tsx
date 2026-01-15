@@ -61,9 +61,12 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [addressSearchValue, setAddressSearchValue] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([])
-  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null)
-  const placesService = useRef<google.maps.places.PlacesService | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [predictions, setPredictions] = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const autocompleteService = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const placesService = useRef<any>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
   const errorRef = useRef<HTMLDivElement>(null)
 
@@ -129,7 +132,8 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   }
 
   // Manejar selección de lugar
-  const handleSelectPlace = (prediction: google.maps.places.AutocompletePrediction) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSelectPlace = (prediction: any) => {
     setAddressSearchValue(prediction.description)
     setShowSuggestions(false)
     setPredictions([])

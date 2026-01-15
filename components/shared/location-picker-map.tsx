@@ -20,8 +20,10 @@ export function LocationPickerMap({
 }: LocationPickerMapProps) {
   const isGoogleMapsLoaded = useGoogleMapsScript()
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<google.maps.Map | null>(null)
-  const markerRef = useRef<google.maps.Marker | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapInstanceRef = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markerRef = useRef<any>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [initialPosition, setInitialPosition] = useState<{ lat: number; lng: number } | null>(null)
 
