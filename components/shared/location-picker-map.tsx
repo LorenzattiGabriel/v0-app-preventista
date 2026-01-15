@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useGoogleMapsScript } from "@/lib/hooks/useGoogleMapsScript"
 import { Button } from "@/components/ui/button"
-import { MapPin, RotateCcw, ZoomIn, ZoomOut } from "lucide-react"
+import { MapPin, RotateCcw, ZoomIn, ZoomOut, Hand } from "lucide-react"
 
 interface LocationPickerMapProps {
   latitude: number | null
   longitude: number | null
   onLocationChange: (lat: number, lng: number) => void
-  height?: string
   defaultZoom?: number
 }
 
@@ -17,7 +16,6 @@ export function LocationPickerMap({
   latitude,
   longitude,
   onLocationChange,
-  height = "300px",
   defaultZoom = 17,
 }: LocationPickerMapProps) {
   const isGoogleMapsLoaded = useGoogleMapsScript()
@@ -45,6 +43,7 @@ export function LocationPickerMap({
       streetViewControl: false,
       fullscreenControl: false,
       zoomControl: false, // We'll add custom controls
+      gestureHandling: "greedy", // Better touch handling on mobile
       styles: [
         {
           featureType: "poi",
@@ -56,7 +55,7 @@ export function LocationPickerMap({
 
     mapInstanceRef.current = map
 
-    // Create draggable marker
+    // Create draggable marker with touch-friendly size
     const marker = new google.maps.Marker({
       position: currentCenter,
       map,
@@ -64,7 +63,7 @@ export function LocationPickerMap({
       animation: google.maps.Animation.DROP,
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
+        scale: 14, // Larger for touch
         fillColor: "#ef4444",
         fillOpacity: 1,
         strokeColor: "#ffffff",
@@ -92,7 +91,7 @@ export function LocationPickerMap({
       }
     })
 
-    // Click on map to move marker
+    // Click/tap on map to move marker
     map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (e.latLng) {
         marker.setPosition(e.latLng)
@@ -159,10 +158,7 @@ export function LocationPickerMap({
 
   if (!isGoogleMapsLoaded) {
     return (
-      <div 
-        className="flex items-center justify-center bg-muted rounded-lg border-2 border-dashed"
-        style={{ height }}
-      >
+      <div className="flex items-center justify-center bg-muted rounded-lg border-2 border-dashed h-[200px] sm:h-[280px]">
         <div className="text-center text-muted-foreground">
           <MapPin className="h-8 w-8 mx-auto mb-2 animate-pulse" />
           <p className="text-sm">Cargando mapa...</p>
@@ -176,14 +172,17 @@ export function LocationPickerMap({
   return (
     <div className="space-y-2">
       <div className="relative rounded-lg overflow-hidden border">
-        {/* Map container */}
-        <div ref={mapRef} style={{ height, width: "100%" }} />
+        {/* Map container - responsive height */}
+        <div 
+          ref={mapRef} 
+          className="w-full h-[200px] sm:h-[280px]"
+        />
 
         {/* Overlay when dragging */}
         {isDragging && (
           <div className="absolute inset-0 pointer-events-none bg-blue-500/10 border-4 border-blue-500 rounded-lg">
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-              Arrastrando...
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+              Arrastrando pin...
             </div>
           </div>
         )}
@@ -192,74 +191,78 @@ export function LocationPickerMap({
         {!hasCoordinates && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80">
             <div className="text-center p-4">
-              <MapPin className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
+              <MapPin className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-2 text-muted-foreground" />
               <p className="text-sm font-medium">Sin ubicación</p>
-              <p className="text-xs text-muted-foreground">
-                Busca una dirección o usa tu ubicación para ver el mapa
+              <p className="text-xs text-muted-foreground px-4">
+                Busca una dirección o usa tu ubicación
               </p>
             </div>
           </div>
         )}
 
-        {/* Map controls */}
+        {/* Map controls - touch-friendly sizes */}
         {hasCoordinates && (
-          <div className="absolute top-2 right-2 flex flex-col gap-1">
+          <div className="absolute top-2 right-2 flex flex-col gap-1.5">
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="h-8 w-8 bg-background shadow-md"
+              className="h-10 w-10 sm:h-9 sm:w-9 bg-background shadow-md active:scale-95 transition-transform"
               onClick={handleZoomIn}
-              title="Acercar"
+              aria-label="Acercar"
             >
-              <ZoomIn className="h-4 w-4" />
+              <ZoomIn className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="h-8 w-8 bg-background shadow-md"
+              className="h-10 w-10 sm:h-9 sm:w-9 bg-background shadow-md active:scale-95 transition-transform"
               onClick={handleZoomOut}
-              title="Alejar"
+              aria-label="Alejar"
             >
-              <ZoomOut className="h-4 w-4" />
+              <ZoomOut className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="h-8 w-8 bg-background shadow-md"
+              className="h-10 w-10 sm:h-9 sm:w-9 bg-background shadow-md active:scale-95 transition-transform"
               onClick={handleCenterOnMarker}
-              title="Centrar en marcador"
+              aria-label="Centrar en marcador"
             >
-              <MapPin className="h-4 w-4" />
+              <MapPin className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
             {initialPosition && (
               <Button
                 type="button"
                 variant="secondary"
                 size="icon"
-                className="h-8 w-8 bg-background shadow-md"
+                className="h-10 w-10 sm:h-9 sm:w-9 bg-background shadow-md active:scale-95 transition-transform"
                 onClick={handleReset}
-                title="Restaurar posición"
+                aria-label="Restaurar posición"
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-5 w-5 sm:h-4 sm:w-4" />
               </Button>
             )}
           </div>
         )}
       </div>
 
-      {/* Instructions */}
+      {/* Instructions - responsive text */}
       {hasCoordinates && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-          <MapPin className="h-4 w-4 text-red-500 flex-shrink-0" />
-          <span>
-            <strong>Ajusta la ubicación exacta:</strong> Arrastra el pin rojo o haz clic en el mapa para mover la ubicación
+        <div className="flex items-start sm:items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+          <Hand className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5 sm:mt-0" />
+          <span className="leading-tight">
+            <span className="sm:hidden">
+              <strong>Toca</strong> el mapa o <strong>arrastra</strong> el pin para ajustar
+            </span>
+            <span className="hidden sm:inline">
+              <strong>Ajusta la ubicación:</strong> Arrastra el pin rojo o haz clic en el mapa
+            </span>
           </span>
         </div>
       )}
     </div>
   )
 }
-

@@ -600,7 +600,6 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
               setLatitude(lat)
               setLongitude(lng)
             }}
-            height="250px"
           />
           
           {/* Coordenadas actuales */}

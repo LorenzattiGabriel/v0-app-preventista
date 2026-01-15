@@ -601,7 +601,6 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
               setLatitude(lat)
               setLongitude(lng)
             }}
-            height="250px"
           />
           
           {/* Coordenadas actuales */}
