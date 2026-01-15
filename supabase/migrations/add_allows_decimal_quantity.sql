@@ -16,3 +16,4 @@ COMMENT ON COLUMN products.unit_of_measure IS 'Unidad de medida del producto (un
 
 
 
+

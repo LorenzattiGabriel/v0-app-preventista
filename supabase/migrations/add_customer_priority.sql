@@ -24,3 +24,4 @@ COMMENT ON COLUMN customers.priority IS 'Prioridad del cliente: baja, normal o a
 
 
 
+

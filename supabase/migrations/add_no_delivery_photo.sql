@@ -10,3 +10,4 @@ COMMENT ON COLUMN orders.no_delivery_photo_url IS 'URL de la foto de comprobante
 
 
 
+

@@ -89,3 +89,4 @@ END $$;
 SELECT 'VERIFICACIÓN - Pedidos TEST restantes:' as info;
 SELECT COUNT(*) as pedidos_test FROM orders WHERE order_number LIKE 'TEST-%';
 
+

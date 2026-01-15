@@ -10,3 +10,4 @@ COMMENT ON COLUMN customer_account_movements.proof_url IS 'URL del comprobante d
 
 
 
+

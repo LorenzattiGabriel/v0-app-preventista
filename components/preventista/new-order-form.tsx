@@ -659,23 +659,30 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               <Input
                 id="quantity"
                 type="number"
-                min={selectedProduct?.allows_decimal_quantity ? "0.1" : "1"}
-                step={selectedProduct?.allows_decimal_quantity ? "0.1" : "1"}
+                min={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
+                step={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
                 value={quantity}
                 onChange={(e) => {
-                  const value = Number.parseFloat(e.target.value) || 1
+                  const rawValue = e.target.value
+                  // Permitir campo vacío temporalmente mientras el usuario escribe
+                  if (rawValue === '' || rawValue === '0' || rawValue === '0.') {
+                    setQuantity(0)
+                    return
+                  }
+                  const value = Number.parseFloat(rawValue)
                   // Si no permite decimales, redondear a entero
                   if (selectedProduct && !selectedProduct.allows_decimal_quantity) {
-                    setQuantity(Math.round(value))
+                    setQuantity(Math.round(value) || 1)
                   } else {
-                    setQuantity(value)
+                    // Permitir valores desde 0.01 para decimales
+                    setQuantity(value >= 0 ? value : 0)
                   }
                 }}
                 className="text-center h-12 text-lg"
               />
               {selectedProduct?.allows_decimal_quantity && (
                 <p className="text-xs text-muted-foreground">
-                  Acepta decimales (ej: 1.5 {selectedProduct.unit_of_measure || 'unidades'})
+                  Acepta decimales (ej: 0.5 {selectedProduct.unit_of_measure || 'unidad'})
                 </p>
               )}
             </div>
