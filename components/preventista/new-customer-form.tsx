@@ -15,6 +15,7 @@ import type { Zone, CustomerType, IvaCondition, CustomerPriority } from "@/lib/t
 import { ArrowLeft, MapPin, Loader2 } from "lucide-react"
 import { useNavigationHistory } from "@/contexts/navigation-history-context"
 import { useGoogleMapsScript } from "@/lib/hooks/useGoogleMapsScript"
+import { LocationPickerMap } from "@/components/shared/location-picker-map"
 
 interface NewCustomerFormProps {
   zones: Zone[]
@@ -591,7 +592,18 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
             </p>
           </div>
 
-          {/* Coordenadas (solo lectura) */}
+          {/* Mapa con pin arrastrable para ajustar ubicación */}
+          <LocationPickerMap
+            latitude={latitude}
+            longitude={longitude}
+            onLocationChange={(lat, lng) => {
+              setLatitude(lat)
+              setLongitude(lng)
+            }}
+            height="250px"
+          />
+          
+          {/* Coordenadas actuales */}
           {(latitude !== null && longitude !== null) && (
             <div className="bg-muted p-3 rounded-md text-sm">
               <p className="text-muted-foreground">

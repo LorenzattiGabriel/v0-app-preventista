@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch"
 import type { Zone, CustomerType, IvaCondition, CustomerPriority, Customer } from "@/lib/types/database"
 import { ArrowLeft, MapPin, Loader2, Save, CheckCircle } from "lucide-react"
 import { useGoogleMapsScript } from "@/lib/hooks/useGoogleMapsScript"
+import { LocationPickerMap } from "@/components/shared/location-picker-map"
 
 interface EditCustomerFormProps {
   customer: Customer
@@ -592,7 +593,18 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
             </p>
           </div>
 
-          {/* Coordinates display */}
+          {/* Mapa con pin arrastrable para ajustar ubicación */}
+          <LocationPickerMap
+            latitude={latitude}
+            longitude={longitude}
+            onLocationChange={(lat, lng) => {
+              setLatitude(lat)
+              setLongitude(lng)
+            }}
+            height="250px"
+          />
+          
+          {/* Coordenadas actuales */}
           {(latitude !== null && longitude !== null) && (
             <div className="bg-muted p-3 rounded-md text-sm">
               <p className="text-muted-foreground">
