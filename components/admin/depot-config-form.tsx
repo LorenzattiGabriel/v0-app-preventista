@@ -235,13 +235,13 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
             id="radiusMeters"
             type="number"
             value={formData.radiusMeters}
-            onChange={(e) => setFormData({ ...formData, radiusMeters: parseInt(e.target.value) })}
+            onChange={(e) => setFormData({ ...formData, radiusMeters: parseInt(e.target.value) || 200 })}
             min={50}
-            max={500}
+            max={2000}
             required
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Los repartidores deben estar dentro de este radio para iniciar/finalizar rutas
+            Los repartidores deben estar dentro de este radio para iniciar/finalizar rutas (50m - 2km)
           </p>
         </div>
       </div>
