@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import Link from "next/link"
-import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2, Plus, Wallet, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Users, Search, MapPin, Phone, Mail, Building2, Plus, Wallet, AlertTriangle, Pencil } from "lucide-react"
 
 export default async function AdminCustomersPage({
   searchParams,
@@ -335,9 +335,17 @@ export default async function AdminCustomersPage({
                           )}
                         </div>
 
-                        <Button asChild variant="outline">
-                          <Link href={`/admin/customers/${customer.id}`}>Ver Detalles</Link>
-                        </Button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/admin/customers/${customer.id}/edit`}>
+                              <Pencil className="h-4 w-4 mr-1" />
+                              Editar
+                            </Link>
+                          </Button>
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/admin/customers/${customer.id}`}>Ver Detalles</Link>
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

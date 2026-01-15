@@ -25,6 +25,7 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  Pencil,
 } from "lucide-react"
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
 
@@ -212,12 +213,20 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto max-w-7xl space-y-6">
           <div className="flex items-center justify-between">
-            <Button variant="outline" asChild>
-              <Link href="/admin/customers">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Volver a Clientes
-              </Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" asChild>
+                <Link href="/admin/customers">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Volver a Clientes
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href={`/admin/customers/${id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar Cliente
+                </Link>
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
