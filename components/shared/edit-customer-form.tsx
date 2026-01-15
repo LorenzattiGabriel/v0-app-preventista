@@ -49,7 +49,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
   const [creditDays, setCreditDays] = useState(customer.credit_days || 0)
   const [creditLimit, setCreditLimit] = useState(customer.credit_limit || 0)
   const [generalDiscount, setGeneralDiscount] = useState(customer.general_discount || 0)
-  const [zoneId, setZoneId] = useState(customer.zone_id || "")
+  const [zoneId, setZoneId] = useState(customer.zone_id || "__none__")
   const [observations, setObservations] = useState(customer.observations || "")
   const [latitude, setLatitude] = useState<number | null>(customer.latitude || null)
   const [longitude, setLongitude] = useState<number | null>(customer.longitude || null)
@@ -331,7 +331,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
           credit_days: creditDays,
           credit_limit: creditLimit,
           general_discount: generalDiscount,
-          zone_id: zoneId || null,
+          zone_id: zoneId === "__none__" ? null : zoneId,
           observations: observations || null,
           is_active: isActive,
           // Time Windows (VRPTW)
@@ -671,7 +671,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
                   <SelectValue placeholder="Seleccionar zona" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin zona</SelectItem>
+                  <SelectItem value="__none__">Sin zona</SelectItem>
                   {zones.map((zone) => (
                     <SelectItem key={zone.id} value={zone.id}>
                       {zone.name}
