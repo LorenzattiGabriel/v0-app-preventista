@@ -963,28 +963,30 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const isFutureRoute = route.scheduled_date > today
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" asChild>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header con botones - responsivo */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Button variant="outline" size="sm" asChild className="w-fit">
           <Link href="/repartidor/dashboard">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Volver
           </Link>
         </Button>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           {route.status === "PLANIFICADO" && (
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-stretch sm:items-end gap-2">
               <Button 
                 onClick={handleStartRoute} 
                 disabled={isLoading || !isScheduledForTodayOrPast || hasActiveRoute} 
-                size="lg"
+                size="default"
+                className="w-full sm:w-auto"
               >
                 <Play className="mr-2 h-4 w-4" />
                 Iniciar Ruta
               </Button>
               {hasActiveRoute && (
-                <p className="text-xs text-destructive font-medium">
+                <p className="text-xs text-destructive font-medium text-center sm:text-right">
                   Completa tu ruta activa primero
                 </p>
               )}
@@ -992,27 +994,27 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           )}
 
           {route.status === "EN_CURSO" && (
-            <>
+            <div className="flex flex-col sm:flex-row gap-2">
               {isRouteSegmented() ? (
                 /* 🆕 Ruta Segmentada: Menú desplegable de tramos */
                 <div className="relative">
                   <Button 
                     variant="outline"
                     onClick={() => setSegmentsExpanded(!segmentsExpanded)}
-                    size="lg"
-                    className="min-w-[200px]"
+                    size="default"
+                    className="w-full sm:w-auto sm:min-w-[180px]"
                   >
                     <MapPin className="mr-2 h-4 w-4" />
-                    Navegar ({getRouteSegments().length} tramos)
+                    <span className="truncate">Navegar ({getRouteSegments().length} tramos)</span>
                     {segmentsExpanded ? (
-                      <ChevronUp className="ml-2 h-4 w-4" />
+                      <ChevronUp className="ml-2 h-4 w-4 shrink-0" />
                     ) : (
-                      <ChevronDown className="ml-2 h-4 w-4" />
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0" />
                     )}
                   </Button>
                   
                   {segmentsExpanded && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-background border rounded-lg shadow-lg z-50 p-2 space-y-1">
+                    <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-2 w-full sm:w-64 bg-background border rounded-lg shadow-lg z-50 p-2 space-y-1">
                       {getRouteSegments().map((segment, index) => (
                         <button
                           key={segment.id}
@@ -1054,21 +1056,23 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                       setError('No se pudo abrir Google Maps. Verifica que los clientes tengan coordenadas.')
                     }
                   }}
-                  size="lg"
+                  size="default"
+                  className="w-full sm:w-auto"
                 >
                   <MapPin className="mr-2 h-4 w-4" />
-                  Abrir en Google Maps
+                  <span className="sm:inline">Google Maps</span>
                 </Button>
               )}
               <Button 
                 onClick={handleShowRouteSummary} 
                 disabled={isLoading || !allOrdersManaged} 
-                size="lg"
+                size="default"
+                className="w-full sm:w-auto"
               >
                 <Flag className="mr-2 h-4 w-4" />
                 Finalizar Ruta
               </Button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -1346,153 +1350,151 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             {sortedOrders.map((order: any, index: number) => (
               <div
                 key={order.id}
-                className={`border rounded-lg p-4 ${order.status === "ENTREGADO" ? "bg-muted/50" : order.no_delivery_reason ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900" : ""}`}
+                className={`border rounded-lg p-3 sm:p-4 ${order.status === "ENTREGADO" ? "bg-muted/50" : order.no_delivery_reason ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900" : ""}`}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex gap-4 flex-1">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm shrink-0 ${order.no_delivery_reason ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-100" : "bg-primary text-primary-foreground"}`}>
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{order.order_number}</span>
-                        {order.status === "ENTREGADO" && (
-                          <Badge variant="default">
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Entregado
-                          </Badge>
-                        )}
-                        {console.log("order status:",order.status)}
-
-                        {order.no_delivery_reason && (
-                          <Badge variant="destructive">
-                            No Entregado
-                          </Badge>
-                        )}
-                        {order.priority === "urgente" && <Badge variant="destructive">Urgente</Badge>}
-                      </div>
-
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-start gap-2">
-                          <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{order.customers.commercial_name}</p>
-                            <p className="text-muted-foreground">
-                              {order.customers.street} {order.customers.street_number}
-                              {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
-                            </p>
-                            <p className="text-muted-foreground">
-                              {order.customers.locality}, {order.customers.province}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Package className="h-4 w-4" />
-                          <span> {order.order_items.length} productos | </span>
-
-                            {/* Financial Status for Order */}
-                            <span className="flex items-center gap-2 text-sm">                              
-                              <span>
-                                {"Recaudado: "} 
-                                {(() => {
-                                  const collected = order.was_collected ? order.collected_amount || 0 : 0
-                                  const total = order.total || 0
-                                  const debt = total - collected
-                                  
-                                  return (
-                                    <>
-                                      <span className={collected >= total ? "text-green-600 dark:text-green-400 font-medium" : "text-muted-foreground"}>
-                                        ${collected.toFixed(2)}
-                                      </span>
-                                      <span className="text-muted-foreground"> / ${total.toFixed(2)}</span>
-                                      {debt > 0 && order.status === "ENTREGADO" && (
-                                        <span className="ml-2 text-red-600 dark:text-red-400 text-xs font-medium bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded">
-                                          Deuda: ${debt.toFixed(2)}
-                                        </span>
-                                      )}
-                                    </>
-                                  )
-                                })()}
-                              </span>
-                            </span>
-                            
-                            
-                          
-                        </div>
-
-                        
-
-                        {order.customers.phone && <p className="text-muted-foreground">Tel: {order.customers.phone}</p>}
-                      </div>
-
-                      {order.observations && (
-                        <div className="bg-muted p-2 rounded text-sm">
-                          <span className="font-medium">Observaciones:</span> {order.observations}
-                        </div>
+                {/* Header con número y badges */}
+                <div className="flex items-start gap-3 mb-3">
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm shrink-0 ${order.no_delivery_reason ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-100" : "bg-primary text-primary-foreground"}`}>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-sm sm:text-base">{order.order_number}</span>
+                      {order.status === "ENTREGADO" && (
+                        <Badge variant="default" className="text-xs">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Entregado
+                        </Badge>
                       )}
-                      
                       {order.no_delivery_reason && (
-                        <div className="text-sm text-red-600 dark:text-red-400 mt-2 bg-red-50 dark:bg-red-950/30 p-2 rounded">
-                            <p className="font-medium">Motivo: {order.no_delivery_reason}</p>
-                            {order.no_delivery_notes && <p className="text-xs mt-1">Nota: {order.no_delivery_notes}</p>}
-                        </div>
+                        <Badge variant="destructive" className="text-xs">
+                          No Entregado
+                        </Badge>
                       )}
+                      {order.priority === "urgente" && <Badge variant="destructive" className="text-xs">Urgente</Badge>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contenido principal */}
+                <div className="space-y-2 ml-0 sm:ml-11">
+                  {/* Info del cliente */}
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm sm:text-base truncate">{order.customers.commercial_name}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        {order.customers.street} {order.customers.street_number}
+                        {order.customers.floor_apt && `, ${order.customers.floor_apt}`}
+                      </p>
+                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        {order.customers.locality}, {order.customers.province}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    {order.status !== "ENTREGADO" && route.status === "EN_CURSO" && !order.no_delivery_reason && (
-                      <>
-                        <Button onClick={() => handleOpenDeliveryDialog(order)} size="sm">
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Marcar Entregado
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            // Abrir Google Maps con dirección del cliente
-                            const address = `${order.customers.street} ${order.customers.street_number}, ${order.customers.locality}, ${order.customers.province}, Argentina`
-                            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-                            window.open(mapsUrl, '_blank')
-                          }}
-                        >
-                          <MapPin className="mr-2 h-4 w-4" />
-                          Navegar
-                        </Button>
-                      </>
-                    )}
-                    {order.status === "ENTREGADO" && (
-                      <div className="flex flex-col gap-2">
-                        <Badge variant="default" className="justify-center py-2">
-                          <CheckCircle className="mr-1 h-4 w-4" />
+                  {/* Info de productos y dinero */}
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="text-xs sm:text-sm text-muted-foreground">
+                      <span>{order.order_items.length} productos</span>
+                      <span className="mx-1">|</span>
+                      <span>
+                        Recaudado:{" "}
+                        {(() => {
+                          const collected = order.was_collected ? order.collected_amount || 0 : 0
+                          const total = order.total || 0
+                          const debt = total - collected
+                          
+                          return (
+                            <>
+                              <span className={collected >= total ? "text-green-600 dark:text-green-400 font-medium" : ""}>
+                                ${collected.toFixed(2)}
+                              </span>
+                              <span> / ${total.toFixed(2)}</span>
+                            </>
+                          )
+                        })()}
+                      </span>
+                      {(() => {
+                        const collected = order.was_collected ? order.collected_amount || 0 : 0
+                        const total = order.total || 0
+                        const debt = total - collected
+                        
+                        return debt > 0 && order.status === "ENTREGADO" ? (
+                          <span className="block mt-1 text-red-600 dark:text-red-400 text-xs font-medium bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded inline-block">
+                            Deuda: ${debt.toFixed(2)}
+                          </span>
+                        ) : null
+                      })()}
+                    </div>
+                  </div>
+
+                  {order.customers.phone && (
+                    <p className="text-xs sm:text-sm text-muted-foreground ml-6">Tel: {order.customers.phone}</p>
+                  )}
+
+                  {order.observations && (
+                    <div className="bg-muted p-2 rounded text-xs sm:text-sm">
+                      <span className="font-medium">Obs:</span> {order.observations}
+                    </div>
+                  )}
+                  
+                  {order.no_delivery_reason && (
+                    <div className="text-xs sm:text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-2 rounded">
+                      <p className="font-medium">Motivo: {order.no_delivery_reason}</p>
+                      {order.no_delivery_notes && <p className="text-xs mt-1">Nota: {order.no_delivery_notes}</p>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Botones de acción - siempre debajo en móvil */}
+                <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
+                  {order.status !== "ENTREGADO" && route.status === "EN_CURSO" && !order.no_delivery_reason && (
+                    <>
+                      <Button onClick={() => handleOpenDeliveryDialog(order)} size="sm" className="w-full sm:w-auto">
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Marcar Entregado
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          const address = `${order.customers.street} ${order.customers.street_number}, ${order.customers.locality}, ${order.customers.province}, Argentina`
+                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+                          window.open(mapsUrl, '_blank')
+                        }}
+                      >
+                        <MapPin className="mr-2 h-4 w-4" />
+                        Navegar
+                      </Button>
+                    </>
+                  )}
+                  {order.status === "ENTREGADO" && (
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="default" className="py-1">
+                          <CheckCircle className="mr-1 h-3 w-3" />
                           Completado
                         </Badge>
-                        {/* 🆕 Mostrar método de pago */}
                         {order.payment_method && (
-                          <p className="text-xs text-center text-muted-foreground">
-                            Pagó: {order.payment_method}
-                          </p>
+                          <span>Pagó: {order.payment_method}</span>
                         )}
                         {order.received_by_name && (
-                          <p className="text-xs text-center text-muted-foreground">
-                            Recibió: {order.received_by_name}
-                          </p>
+                          <span>• {order.received_by_name}</span>
                         )}
-                        <div className="mt-2">
-                          <ReceiptActionsMenu 
-                            order={order}
-                            className="w-full"
-                            repartidorName={repartidorName}
-                          />
-                        </div>
                       </div>
-                    )}
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/repartidor/orders/${order.route_order_id}`}>Ver Detalle</Link>
-                    </Button>
-                  </div>
+                      <ReceiptActionsMenu 
+                        order={order}
+                        className="w-full sm:w-auto"
+                        repartidorName={repartidorName}
+                      />
+                    </div>
+                  )}
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
+                    <Link href={`/repartidor/orders/${order.route_order_id}`}>Ver Detalle</Link>
+                  </Button>
                 </div>
               </div>
             ))}
