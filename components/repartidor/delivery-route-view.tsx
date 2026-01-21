@@ -726,36 +726,40 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     // Solo contar totales de pedidos ENTREGADOS
     const totalExpected = delivered.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
     
-    // Desglose por método de pago (ahora desde orders, no route_orders)
-    const collectedByMethod = route.route_orders
-      .filter((ro: any) => ro.orders?.was_collected_on_delivery && ro.orders?.status === "ENTREGADO")
-      .reduce((acc: any, ro: any) => {
-        const order = ro.orders
-        const method = order.payment_method || "efectivo"
-        acc[method] = (acc[method] || 0) + (order.amount_paid || 0)
-        return acc
-      }, { efectivo: 0, transferencia: 0, tarjeta: 0 })
-    
-    const totalCollected = collectedByMethod.efectivo + collectedByMethod.transferencia + collectedByMethod.tarjeta
-
-    // Detalle de pedidos entregados con cobros y deudas (datos desde orders)
+    // Detalle de pedidos entregados con cobros y deudas
+    // Usamos los datos combinados de orders y route_orders para mayor robustez
     const deliveredOrders = route.route_orders
       .filter((ro: any) => ro.orders?.status === "ENTREGADO")
       .map((ro: any) => {
         const order = ro.orders
         const orderTotal = order.total || 0
-        const collectedAmount = order.was_collected_on_delivery ? (order.amount_paid || 0) : 0
+        // Priorizar datos de orders.was_collected_on_delivery, pero también chequear route_orders por compatibilidad
+        const wasCollected = order.was_collected_on_delivery || ro.was_collected || false
+        const collectedAmount = wasCollected ? (order.amount_paid || ro.collected_amount || 0) : 0
         const debtAmount = orderTotal - collectedAmount
+        const paymentMethod = order.payment_method || ro.payment_method || "Efectivo"
         return {
           orderNumber: order.order_number,
           customer: order.customers?.commercial_name || order.customers?.name,
           orderTotal,
           collectedAmount,
           debtAmount,
-          paymentMethod: order.payment_method || "efectivo",
-          wasCollected: order.was_collected_on_delivery,
+          paymentMethod,
+          wasCollected,
         }
       })
+    
+    // Calcular total cobrado sumando directamente de deliveredOrders
+    const totalCollected = deliveredOrders.reduce((sum: number, o: any) => sum + (o.collectedAmount || 0), 0)
+    
+    // Desglose por método de pago - normalizar nombres de métodos
+    const paymentBreakdown: Record<string, number> = {}
+    deliveredOrders.forEach((o: any) => {
+      if (o.wasCollected && o.collectedAmount > 0) {
+        const method = o.paymentMethod || "Efectivo"
+        paymentBreakdown[method] = (paymentBreakdown[method] || 0) + o.collectedAmount
+      }
+    })
     
     const summary = {
       totalOrders: orders.length,
@@ -764,10 +768,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       totalExpected,
       totalCollected,
       difference: totalExpected - totalCollected,
-      // Desglose por método
-      cashCollected: collectedByMethod.efectivo,
-      transferCollected: collectedByMethod.transferencia,
-      cardCollected: collectedByMethod.tarjeta,
+      // Desglose por método (usando el breakdown calculado)
+      cashCollected: paymentBreakdown["Efectivo"] || paymentBreakdown["efectivo"] || 0,
+      transferCollected: paymentBreakdown["Transferencia"] || paymentBreakdown["transferencia"] || 0,
+      cardCollected: paymentBreakdown["Tarjeta"] || paymentBreakdown["tarjeta"] || 0,
       // Detalle de pedidos entregados
       deliveredOrders,
       notDeliveredOrders: notDelivered.map((o: any) => ({
@@ -776,13 +780,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         reason: o.no_delivery_reason,
         notes: o.no_delivery_notes,
       })),
-      paymentBreakdown: route.route_orders
-        .filter((ro: any) => ro.was_collected)
-        .reduce((acc: any, ro: any) => {
-          const method = ro.payment_method || "Efectivo";
-          acc[method] = (acc[method] || 0) + (ro.collected_amount || 0);
-          return acc;
-        }, {}),
+      paymentBreakdown,
     }
     
     setRouteSummary(summary)
