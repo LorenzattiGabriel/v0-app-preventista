@@ -29,6 +29,14 @@ import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/types/database"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
+import { 
+  calculateRouteSummary, 
+  calculateRouteCollectedTotal,
+  calculateRouteExpectedTotal,
+  calculateDeliveredExpectedTotal,
+  calculateRouteDebt,
+  type RouteOrderData 
+} from "@/lib/services/routeCalculations"
 
 
 interface DeliveryRouteViewProps {
@@ -717,72 +725,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   }
 
   // 🆕 MEDIUM-3: Show route summary before completing
+  // Uses centralized calculation service for consistency
   const handleShowRouteSummary = () => {
-    // Calculate summary statistics
-    const orders = route.route_orders.map((ro: any) => ro.orders)
-    const delivered = orders.filter((o: any) => o.status === "ENTREGADO")
-    const notDelivered = orders.filter((o: any) => o.status !== "ENTREGADO" && o.no_delivery_reason)
-    
-    // Solo contar totales de pedidos ENTREGADOS
-    const totalExpected = delivered.reduce((sum: number, o: any) => sum + (o.total || 0), 0)
-    
-    // Detalle de pedidos entregados con cobros y deudas
-    // Usamos los datos combinados de orders y route_orders para mayor robustez
-    const deliveredOrders = route.route_orders
-      .filter((ro: any) => ro.orders?.status === "ENTREGADO")
-      .map((ro: any) => {
-        const order = ro.orders
-        const orderTotal = order.total || 0
-        // Priorizar datos de orders.was_collected_on_delivery, pero también chequear route_orders por compatibilidad
-        const wasCollected = order.was_collected_on_delivery || ro.was_collected || false
-        const collectedAmount = wasCollected ? (order.amount_paid || ro.collected_amount || 0) : 0
-        const debtAmount = orderTotal - collectedAmount
-        const paymentMethod = order.payment_method || ro.payment_method || "Efectivo"
-        return {
-          orderNumber: order.order_number,
-          customer: order.customers?.commercial_name || order.customers?.name,
-          orderTotal,
-          collectedAmount,
-          debtAmount,
-          paymentMethod,
-          wasCollected,
-        }
-      })
-    
-    // Calcular total cobrado sumando directamente de deliveredOrders
-    const totalCollected = deliveredOrders.reduce((sum: number, o: any) => sum + (o.collectedAmount || 0), 0)
-    
-    // Desglose por método de pago - normalizar nombres de métodos
-    const paymentBreakdown: Record<string, number> = {}
-    deliveredOrders.forEach((o: any) => {
-      if (o.wasCollected && o.collectedAmount > 0) {
-        const method = o.paymentMethod || "Efectivo"
-        paymentBreakdown[method] = (paymentBreakdown[method] || 0) + o.collectedAmount
-      }
-    })
-    
-    const summary = {
-      totalOrders: orders.length,
-      deliveredCount: delivered.length,
-      notDeliveredCount: notDelivered.length,
-      totalExpected,
-      totalCollected,
-      difference: totalExpected - totalCollected,
-      // Desglose por método (usando el breakdown calculado)
-      cashCollected: paymentBreakdown["Efectivo"] || paymentBreakdown["efectivo"] || 0,
-      transferCollected: paymentBreakdown["Transferencia"] || paymentBreakdown["transferencia"] || 0,
-      cardCollected: paymentBreakdown["Tarjeta"] || paymentBreakdown["tarjeta"] || 0,
-      // Detalle de pedidos entregados
-      deliveredOrders,
-      notDeliveredOrders: notDelivered.map((o: any) => ({
-        orderNumber: o.order_number,
-        customer: o.customers?.commercial_name || o.customers?.name,
-        reason: o.no_delivery_reason,
-        notes: o.no_delivery_notes,
-      })),
-      paymentBreakdown,
-    }
-    
+    const summary = calculateRouteSummary(route.route_orders as RouteOrderData[])
     setRouteSummary(summary)
     setShowSummaryDialog(true)
   }
@@ -937,14 +882,17 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     }
   }
 
+  // Map route_orders to include order data with normalized payment fields
+  // Uses orders.was_collected_on_delivery and orders.amount_paid as source of truth
   const sortedOrders = route.route_orders
     .map((ro: any) => ({
       ...ro.orders,
       delivery_order: ro.delivery_order,
       route_order_id: ro.id,
-      collected_amount: ro.collected_amount,
-      was_collected: ro.was_collected,
-      payment_method: ro.payment_method || ro.orders.payment_method,
+      // Use orders fields as source of truth (normalized)
+      collected_amount: ro.orders.amount_paid || 0,
+      was_collected: ro.orders.was_collected_on_delivery || false,
+      payment_method: ro.orders.payment_method,
     }))
     .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
 
@@ -1155,7 +1103,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
                   <span className="text-blue-600 dark:text-blue-400 text-xs block">Recaudado</span>
                   <span className="font-bold text-lg">
-                    ${(route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0).toFixed(2)}
+                    ${calculateRouteCollectedTotal(route.route_orders as RouteOrderData[]).toFixed(2)}
                   </span>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-2 rounded-md">
@@ -1259,10 +1207,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                <span className="font-medium">Estado Financiero:</span>
                <div className="flex items-center gap-2 mt-1">
                  {(() => {
-                    const collected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.was_collected ? ro.collected_amount || 0 : 0), 0) || 0
-                    const totalExpected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.orders?.total || 0), 0) || 0
-                    const totalDeliveredExpected = route.route_orders?.reduce((sum: number, ro: any) => sum + (ro.orders?.status === 'ENTREGADO' ? ro.orders?.total || 0 : 0), 0) || 0
-                    const debt = totalDeliveredExpected - collected
+                    const routeOrdersData = route.route_orders as RouteOrderData[]
+                    const collected = calculateRouteCollectedTotal(routeOrdersData)
+                    const totalExpected = calculateRouteExpectedTotal(routeOrdersData)
+                    const debt = calculateRouteDebt(routeOrdersData)
                     
                     return (
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
