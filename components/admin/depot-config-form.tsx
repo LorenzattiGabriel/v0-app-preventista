@@ -31,6 +31,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
     province: depot?.province || "",
     postalCode: depot?.postal_code || "",
     radiusMeters: depot?.radius_meters || 200,
+    presencialOrderRadiusMeters: depot?.presencial_order_radius_meters || 600,
   })
 
   const [coordinates, setCoordinates] = useState<{
@@ -117,6 +118,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
           radius_meters: formData.radiusMeters,
+          presencial_order_radius_meters: formData.presencialOrderRadiusMeters,
           is_active: true,
           created_by: userId,
         })
@@ -230,7 +232,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
         </div>
 
         <div className="md:col-span-2">
-          <Label htmlFor="radiusMeters">Radio de Tolerancia (metros)</Label>
+          <Label htmlFor="radiusMeters">Radio de Tolerancia - Repartidores (metros)</Label>
           <Input
             id="radiusMeters"
             type="number"
@@ -242,6 +244,22 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
           />
           <p className="text-xs text-muted-foreground mt-1">
             Los repartidores deben estar dentro de este radio para iniciar/finalizar rutas (50m - 2km)
+          </p>
+        </div>
+
+        <div className="md:col-span-2">
+          <Label htmlFor="presencialOrderRadiusMeters">Radio de Pedidos Presenciales - Preventistas (metros)</Label>
+          <Input
+            id="presencialOrderRadiusMeters"
+            type="number"
+            value={formData.presencialOrderRadiusMeters}
+            onChange={(e) => setFormData({ ...formData, presencialOrderRadiusMeters: parseInt(e.target.value) || 600 })}
+            min={50}
+            max={5000}
+            required
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Distancia máxima que puede estar un preventista del cliente para crear un pedido presencial (50m - 5km)
           </p>
         </div>
       </div>

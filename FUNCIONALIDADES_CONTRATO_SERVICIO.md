@@ -347,7 +347,7 @@ Sistema web integral para la gestión completa del ciclo de ventas, armado y dis
 **Funcionalidad destacada:**
 - Geolocalización en tiempo real del vendedor
 - Cálculo de distancia al cliente
-- **Validación de radio máximo: 600 metros**
+- **Validación de radio máximo: configurable por admin (default: 600 metros)**
 - Mensajes de error si está fuera de rango
 - Opción de cambiar tipo de pedido si no valida
 
@@ -1049,7 +1049,7 @@ Si SÍ se cobró:
 - Validaciones configurables
 
 **Validaciones GPS:**
-- **Pedidos presenciales:** Vendedor a <600m del cliente
+- **Pedidos presenciales:** Vendedor a distancia configurable del cliente (default: 600m)
 - **Inicio de ruta:** Repartidor en depósito (<2km)
 - **Fin de ruta:** Repartidor de vuelta en depósito
 

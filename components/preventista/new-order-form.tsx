@@ -20,8 +20,9 @@ import { ProductSelector } from "./product-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
 
-// Constante para el radio máximo de validación presencial (en metros)
-const MAX_PRESENCIAL_DISTANCE_METERS = 600
+// Valor por defecto para el radio máximo de validación presencial (en metros)
+// Este valor se sobrescribe con la configuración del depot si está disponible
+const DEFAULT_PRESENCIAL_DISTANCE_METERS = 600
 
 /**
  * Calcula la distancia entre dos coordenadas usando la fórmula de Haversine
@@ -105,12 +106,34 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [locationError, setLocationError] = useState<string | null>(null)
   const [distanceToCustomer, setDistanceToCustomer] = useState<number | null>(null)
   const [isWithinRange, setIsWithinRange] = useState<boolean | null>(null)
+  
+  // 🆕 Configuración dinámica del radio de pedidos presenciales (desde depot_configuration)
+  const [maxPresencialDistance, setMaxPresencialDistance] = useState(DEFAULT_PRESENCIAL_DISTANCE_METERS)
 
   // Add product form state
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
+
+  // 🆕 Cargar configuración del depot al montar el componente
+  useEffect(() => {
+    const fetchDepotConfig = async () => {
+      try {
+        const response = await fetch("/api/depot-config")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.presencial_order_radius_meters) {
+            setMaxPresencialDistance(data.presencial_order_radius_meters)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching depot config:", error)
+        // Mantener el valor por defecto si hay error
+      }
+    }
+    fetchDepotConfig()
+  }, [])
 
   // 🆕 Obtener ubicación cuando el tipo es "presencial" y hay cliente seleccionado
   useEffect(() => {
@@ -157,12 +180,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         )
 
         setDistanceToCustomer(Math.round(distance))
-        setIsWithinRange(distance <= MAX_PRESENCIAL_DISTANCE_METERS)
+        setIsWithinRange(distance <= maxPresencialDistance)
         setIsGettingLocation(false)
 
-        if (distance > MAX_PRESENCIAL_DISTANCE_METERS) {
+        if (distance > maxPresencialDistance) {
           setLocationError(
-            `Estás a ${Math.round(distance)}m del cliente. Para un pedido presencial debes estar dentro de ${MAX_PRESENCIAL_DISTANCE_METERS}m.`
+            `Estás a ${Math.round(distance)}m del cliente. Para un pedido presencial debes estar dentro de ${maxPresencialDistance}m.`
           )
         }
       },
@@ -267,7 +290,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
       if (isWithinRange === false) {
         setError(
-          `No estás dentro del rango permitido (${MAX_PRESENCIAL_DISTANCE_METERS}m) del cliente. ` +
+          `No estás dentro del rango permitido (${maxPresencialDistance}m) del cliente. ` +
           `Distancia actual: ${distanceToCustomer}m. Cambia el tipo de pedido o acércate al cliente.`
         )
         return
@@ -528,7 +551,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
                       <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      <span>Estás a <strong>{distanceToCustomer}m</strong> del cliente. Para un pedido presencial debes estar dentro de {MAX_PRESENCIAL_DISTANCE_METERS}m.</span>
+                      <span>Estás a <strong>{distanceToCustomer}m</strong> del cliente. Para un pedido presencial debes estar dentro de {maxPresencialDistance}m.</span>
                     </div>
                     <div className="flex gap-2 items-center">
                       <Button 
@@ -553,7 +576,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
                       <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      <span>{locationError || `Estás a ${distanceToCustomer}m del cliente. Para un pedido presencial debes estar dentro de ${MAX_PRESENCIAL_DISTANCE_METERS}m.`}</span>
+                      <span>{locationError || `Estás a ${distanceToCustomer}m del cliente. Para un pedido presencial debes estar dentro de ${maxPresencialDistance}m.`}</span>
                     </div>
                     <div className="flex gap-2 items-center">
                       <Button 

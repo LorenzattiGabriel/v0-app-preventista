@@ -111,8 +111,12 @@ export default async function DepotConfigPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium">Radio de tolerancia:</span>
+                  <span className="font-medium">Radio repartidores:</span>
                   <p className="text-muted-foreground">{depot.radius_meters} metros</p>
+                </div>
+                <div>
+                  <span className="font-medium">Radio pedidos presenciales:</span>
+                  <p className="text-muted-foreground">{depot.presencial_order_radius_meters || 600} metros</p>
                 </div>
               </div>
             </CardContent>
