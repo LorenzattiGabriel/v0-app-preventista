@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Customer, Product, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
 import { PAYMENT_METHODS } from "@/lib/types/database"
-import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle, Info, Ban } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
 import { ProductSelector } from "./product-selector"
@@ -21,7 +21,7 @@ import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
 
 // Constante para el radio máximo de validación presencial (en metros)
-const MAX_PRESENCIAL_DISTANCE_METERS = 200
+const MAX_PRESENCIAL_DISTANCE_METERS = 600
 
 /**
  * Calcula la distancia entre dos coordenadas usando la fórmula de Haversine
@@ -511,44 +511,63 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
             {/* 🆕 Validación de ubicación para pedidos presenciales */}
             {orderType === "presencial" && selectedCustomer && (
-              <div className="mt-3 p-3 rounded-lg border bg-muted/30">
+              <div className="mt-3 p-3 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30">
                 <div className="flex items-center gap-2 mb-2">
-                  <MapPin className="h-4 w-4" />
-                  <span className="font-medium text-sm">Validación de Ubicación</span>
+                  <MapPin className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <span className="font-medium text-sm text-red-800 dark:text-red-200">Validación de Ubicación</span>
                 </div>
 
                 {isGettingLocation && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Obteniendo tu ubicación...
                   </div>
                 )}
 
-                {!isGettingLocation && isWithinRange === true && (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    ✓ Estás a {distanceToCustomer}m del cliente (dentro del rango de {MAX_PRESENCIAL_DISTANCE_METERS}m)
-                  </div>
-                )}
-
-                {!isGettingLocation && isWithinRange === false && (
+                {!isGettingLocation && distanceToCustomer !== null && isWithinRange === true && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      {locationError || `Estás a ${distanceToCustomer}m del cliente (máximo permitido: ${MAX_PRESENCIAL_DISTANCE_METERS}m)`}
+                    <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>Estás a <strong>{distanceToCustomer}m</strong> del cliente. Para un pedido presencial debes estar dentro de {MAX_PRESENCIAL_DISTANCE_METERS}m.</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <Button 
                         type="button" 
                         variant="outline" 
                         size="sm"
                         onClick={validatePresencialLocation}
                         disabled={isGettingLocation}
+                        className="border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
                       >
                         <MapPin className="mr-1 h-3 w-3" />
                         Reintentar
                       </Button>
-                      <p className="text-xs text-muted-foreground self-center">
+                      <p className="text-xs text-red-600/80 dark:text-red-400/80">
+                        O cambia a otro tipo de pedido
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!isGettingLocation && isWithinRange === false && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>{locationError || `Estás a ${distanceToCustomer}m del cliente. Para un pedido presencial debes estar dentro de ${MAX_PRESENCIAL_DISTANCE_METERS}m.`}</span>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={validatePresencialLocation}
+                        disabled={isGettingLocation}
+                        className="border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
+                      >
+                        <MapPin className="mr-1 h-3 w-3" />
+                        Reintentar
+                      </Button>
+                      <p className="text-xs text-red-600/80 dark:text-red-400/80">
                         O cambia a otro tipo de pedido
                       </p>
                     </div>
@@ -561,6 +580,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                     variant="outline" 
                     size="sm"
                     onClick={validatePresencialLocation}
+                    className="border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
                   >
                     <MapPin className="mr-1 h-3 w-3" />
                     Validar mi ubicación
@@ -650,6 +670,31 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
           )}
 
+          {/* 🆕 Información sobre cantidades decimales */}
+          {selectedProduct && selectedProduct.allows_decimal_quantity && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
+                <Info className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Este producto permite cantidades decimales</p>
+                  <p className="text-sm">Puedes ingresar cantidades con decimales (ej: 0.5, 1.75, 2.3 {selectedProduct.unit_of_measure || 'unidades'}).</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedProduct && !selectedProduct.allows_decimal_quantity && (
+            <div className="p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-start gap-2 text-gray-700 dark:text-gray-300">
+                <Ban className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Este producto no permite decimales</p>
+                  <p className="text-sm">Solo se pueden cargar cantidades enteras (1, 2, 3...). Solo un administrador puede cambiar esta configuración.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Campos numéricos - layout vertical en móvil, horizontal en desktop */}
           <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
             <div className="space-y-1.5">
@@ -680,11 +725,6 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 }}
                 className="text-center h-12 text-lg"
               />
-              {selectedProduct?.allows_decimal_quantity && (
-                <p className="text-xs text-muted-foreground">
-                  Acepta decimales (ej: 0.5 {selectedProduct.unit_of_measure || 'unidad'})
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
