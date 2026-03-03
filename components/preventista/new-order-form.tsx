@@ -90,24 +90,24 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
-  const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed") // 🆕 Tipo de descuento
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method
+  const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed") // Tipo de descuento
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // Payment method
   const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
 
-  // 🆕 Time Windows (VRPTW) - Restricciones horarias
+  // Time Windows (VRPTW) - Restricciones horarias
   const [hasTimeRestriction, setHasTimeRestriction] = useState(false)
   const [deliveryWindowStart, setDeliveryWindowStart] = useState("08:00")
   const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("18:00")
   const [timeRestrictionNotes, setTimeRestrictionNotes] = useState("")
 
-  // 🆕 Geolocalización para validación de pedidos presenciales
+  // Geolocalización para validación de pedidos presenciales
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [distanceToCustomer, setDistanceToCustomer] = useState<number | null>(null)
   const [isWithinRange, setIsWithinRange] = useState<boolean | null>(null)
-  
-  // 🆕 Configuración dinámica del radio de pedidos presenciales (desde depot_configuration)
+
+  // Configuración dinámica del radio de pedidos presenciales (desde depot_configuration)
   const [maxPresencialDistance, setMaxPresencialDistance] = useState(DEFAULT_PRESENCIAL_DISTANCE_METERS)
 
   // Add product form state
@@ -116,7 +116,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
 
-  // 🆕 Cargar configuración del depot al montar el componente
+  // Cargar configuración del depot al montar el componente
   useEffect(() => {
     const fetchDepotConfig = async () => {
       try {
@@ -135,7 +135,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     fetchDepotConfig()
   }, [])
 
-  // 🆕 Obtener ubicación cuando el tipo es "presencial" y hay cliente seleccionado
+  // Obtener ubicación cuando el tipo es "presencial" y hay cliente seleccionado
   useEffect(() => {
     if (orderType === "presencial" && selectedCustomer) {
       validatePresencialLocation()
@@ -147,7 +147,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     }
   }, [orderType, selectedCustomer])
 
-  // 🆕 Función para validar la ubicación presencial
+  // Función para validar la ubicación presencial
   const validatePresencialLocation = () => {
     if (!selectedCustomer?.latitude || !selectedCustomer?.longitude) {
       setLocationError("El cliente no tiene coordenadas registradas. No se puede validar la ubicación presencial.")
@@ -226,7 +226,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     if (customer.general_discount > 0) {
       setGeneralDiscount(customer.general_discount)
     }
-    // 🆕 Apply customer's time restriction if exists
+    // Apply customer's time restriction if exists
     setHasTimeRestriction(customer.has_time_restriction || false)
     setDeliveryWindowStart(customer.delivery_window_start || "08:00")
     setDeliveryWindowEnd(customer.delivery_window_end || "18:00")
@@ -239,9 +239,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     const product = products.find((p) => p.id === selectedProductId)
     if (!product) return
 
-    // 🆕 Validar cantidad según tipo de producto
-    const finalQuantity = product.allows_decimal_quantity 
-      ? quantity 
+    // Validar cantidad según tipo de producto
+    const finalQuantity = product.allows_decimal_quantity
+      ? quantity
       : Math.round(quantity) // Forzar entero si no permite decimales
 
     if (finalQuantity <= 0) return
@@ -281,7 +281,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   }
 
   const handleSaveOrder = async (isDraft: boolean) => {
-    // 🆕 Validar ubicación para pedidos presenciales (no aplica a borradores)
+    // Validar ubicación para pedidos presenciales (no aplica a borradores)
     if (!isDraft && orderType === "presencial") {
       if (!selectedCustomer?.latitude || !selectedCustomer?.longitude) {
         setError("El cliente no tiene coordenadas. No se puede crear un pedido presencial.")
@@ -323,7 +323,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       userId,
       isDraft,
       orderId,
-      // 🆕 Time Windows (VRPTW)
+      // Time Windows (VRPTW)
       hasTimeRestriction,
       deliveryWindowStart,
       deliveryWindowEnd,
@@ -338,7 +338,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   }
 
   const { subtotal, total, discountAmount } = calculateTotals(orderItems, generalDiscount, discountType)
-  const selectedProduct = products.find((p) => p.id === selectedProductId)
+  const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null
 
   return (
     <div className="space-y-6">
@@ -389,7 +389,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 </div>
               </div>
 
-              {/* 🆕 Restricción Horaria (Time Window) */}
+              {/* Restricción Horaria (Time Window) */}
               <div className={`p-4 rounded-md border-2 ${hasTimeRestriction ? 'border-orange-300 bg-orange-50 dark:bg-orange-950/30' : 'border-muted bg-muted/30'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="flex items-center gap-2 font-semibold">
@@ -532,46 +532,38 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               </div>
             </RadioGroup>
 
-            {/* 🆕 Validación de ubicación para pedidos presenciales */}
+            {/* Validación de ubicación para pedidos presenciales */}
             {orderType === "presencial" && selectedCustomer && (
-              <div className="mt-3 p-3 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30">
+              <div className={`mt-3 p-3 rounded-lg border ${
+                isWithinRange === true
+                  ? 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30'
+                  : 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
+              }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <MapPin className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  <span className="font-medium text-sm text-red-800 dark:text-red-200">Validación de Ubicación</span>
+                  <MapPin className={`h-4 w-4 ${isWithinRange === true ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                  <span className={`font-medium text-sm ${isWithinRange === true ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
+                    Validación de Ubicación
+                  </span>
                 </div>
 
                 {isGettingLocation && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Obteniendo tu ubicación...
                   </div>
                 )}
 
+                {/* DENTRO DEL RANGO - Éxito (verde) */}
                 {!isGettingLocation && distanceToCustomer !== null && isWithinRange === true && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      <span>Estás a <strong>{distanceToCustomer}m</strong> del cliente. Para un pedido presencial debes estar dentro de {maxPresencialDistance}m.</span>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm"
-                        onClick={validatePresencialLocation}
-                        disabled={isGettingLocation}
-                        className="border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
-                      >
-                        <MapPin className="mr-1 h-3 w-3" />
-                        Reintentar
-                      </Button>
-                      <p className="text-xs text-red-600/80 dark:text-red-400/80">
-                        O cambia a otro tipo de pedido
-                      </p>
+                    <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+                      <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>Estás a <strong>{distanceToCustomer}m</strong> del cliente. Ubicación validada correctamente.</span>
                     </div>
                   </div>
                 )}
 
+                {/* FUERA DEL RANGO - Error (rojo) */}
                 {!isGettingLocation && isWithinRange === false && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
@@ -579,9 +571,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                       <span>{locationError || `Estás a ${distanceToCustomer}m del cliente. Para un pedido presencial debes estar dentro de ${maxPresencialDistance}m.`}</span>
                     </div>
                     <div className="flex gap-2 items-center">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         size="sm"
                         onClick={validatePresencialLocation}
                         disabled={isGettingLocation}
@@ -598,9 +590,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 )}
 
                 {!isGettingLocation && isWithinRange === null && !locationError && (
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     size="sm"
                     onClick={validatePresencialLocation}
                     className="border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50"
@@ -667,8 +659,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             selectedProduct={selectedProduct}
             onSelect={(product) => setSelectedProductId(product?.id || "")}
           />
-          
-          {/* 🆕 Warning de stock del producto seleccionado */}
+
+          {/* Warning de stock del producto seleccionado */}
           {selectedProduct && selectedProduct.current_stock === 0 && (
             <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2 text-red-700 dark:text-red-300">
@@ -680,7 +672,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               </div>
             </div>
           )}
-          
+
           {selectedProduct && selectedProduct.current_stock > 0 && selectedProduct.current_stock <= selectedProduct.min_stock && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
               <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
@@ -693,7 +685,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
           )}
 
-          {/* 🆕 Información sobre cantidades decimales */}
+          {/* Información sobre cantidades decimales */}
           {selectedProduct && selectedProduct.allows_decimal_quantity && (
             <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
               <div className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
@@ -784,9 +776,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           </div>
 
           {/* Botón agregar - ancho completo y más grande en móvil */}
-          <Button 
-            onClick={handleAddProduct} 
-            disabled={!selectedProductId || quantity <= 0} 
+          <Button
+            onClick={handleAddProduct}
+            disabled={!selectedProductId || quantity <= 0}
             className="w-full h-12 text-base font-semibold"
             size="lg"
           >
@@ -800,7 +792,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               <p className="text-sm font-medium text-muted-foreground">
                 {orderItems.length} {orderItems.length === 1 ? 'producto agregado' : 'productos agregados'}
               </p>
-              
+
               {/* Vista móvil - Cards */}
               <div className="sm:hidden space-y-2">
                 {orderItems.map((item, index) => (
@@ -819,9 +811,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm">${item.subtotal.toFixed(2)}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => handleRemoveProduct(index)}
                         >
@@ -897,8 +889,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   type="button"
                   onClick={() => setDiscountType("fixed")}
                   className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    discountType === "fixed" 
-                      ? "bg-primary text-primary-foreground" 
+                    discountType === "fixed"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
@@ -908,8 +900,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   type="button"
                   onClick={() => setDiscountType("percentage")}
                   className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    discountType === "percentage" 
-                      ? "bg-primary text-primary-foreground" 
+                    discountType === "percentage"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-muted hover:bg-muted/80"
                   }`}
                 >
@@ -949,18 +941,18 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
       {/* Botones de acción - stack vertical en móvil */}
       <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
-        <Button 
-          variant="outline" 
-          onClick={() => handleSaveOrder(true)} 
+        <Button
+          variant="outline"
+          onClick={() => handleSaveOrder(true)}
           disabled={isLoading}
           className="h-12 sm:h-10"
         >
           <Save className="mr-2 h-4 w-4" />
           {isLoading ? "Guardando..." : "Guardar Borrador"}
         </Button>
-        <Button 
-          onClick={() => handleSaveOrder(false)} 
-          disabled={isLoading} 
+        <Button
+          onClick={() => handleSaveOrder(false)}
+          disabled={isLoading}
           size="lg"
           className="h-12 sm:h-10 font-semibold"
         >
