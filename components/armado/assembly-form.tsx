@@ -40,6 +40,8 @@ interface AssemblyItem {
   substitutedProductId?: string
   unitPrice: number
   discount: number
+  allowsDecimalQuantity: boolean
+  unitOfMeasure: string
 }
 
 interface AssemblyFormProps {
@@ -91,6 +93,8 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
       substitutedProductId: item.substituted_product_id,
       unitPrice: item.unit_price,
       discount: item.discount,
+      allowsDecimalQuantity: item.products.allows_decimal_quantity || false,
+      unitOfMeasure: item.products.unit_of_measure || "unidad",
     })),
   )
 
@@ -419,13 +423,29 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
               <p className="text-sm">Los items del pedido pueden no estar cargados correctamente en la base de datos.</p>
             </div>
           )}
-          {assemblyItems.map((item, index) => (
+          {assemblyItems.map((item, index) => {
+            const isWeightBased = item.allowsDecimalQuantity
+            const qtyDiff = item.quantityAssembled - item.quantityRequested
+            const projectedSubtotal = item.quantityRequested * item.unitPrice - item.discount
+            const realSubtotal = item.quantityAssembled * item.unitPrice - item.discount
+            const subtotalDiff = realSubtotal - projectedSubtotal
+
+            return (
             <div key={item.id} className="border rounded-lg p-4 space-y-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <h4 className="font-medium">{item.productName}</h4>
+                  <h4 className="font-medium">
+                    {item.productName}
+                    {isWeightBased && (
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {item.unitOfMeasure}
+                      </Badge>
+                    )}
+                  </h4>
                   <p className="text-sm text-muted-foreground">
-                    Solicitado: {item.quantityRequested} | Precio: ${item.unitPrice.toFixed(2)}
+                    Solicitado: {Number.isInteger(item.quantityRequested) ? item.quantityRequested : item.quantityRequested.toFixed(2)}
+                    {isWeightBased ? ` ${item.unitOfMeasure}` : ""} | Precio: ${item.unitPrice.toFixed(2)}
+                    {isWeightBased ? `/${item.unitOfMeasure}` : ""}
                   </p>
                 </div>
                 {item.isShortage && (
@@ -438,16 +458,29 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={`quantity-${index}`}>Cantidad Armada</Label>
+                  <Label htmlFor={`quantity-${index}`}>
+                    {isWeightBased ? `Peso Real (${item.unitOfMeasure})` : "Cantidad Armada"}
+                  </Label>
                   <Input
                     id={`quantity-${index}`}
                     type="number"
-                    min="0"
-                    max={item.quantityRequested}
-                    value={item.quantityAssembled}
-                    onChange={(e) =>
-                      handleItemChange(index, "quantityAssembled", Number.parseInt(e.target.value) || 0)
-                    }
+                    min={isWeightBased ? "0.001" : "0"}
+                    step={isWeightBased ? "0.01" : "1"}
+                    value={item.quantityAssembled || ""}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      if (raw === "" || raw === "0.") {
+                        handleItemChange(index, "quantityAssembled", 0)
+                        return
+                      }
+                      const value = Number.parseFloat(raw)
+                      if (isNaN(value)) return
+                      handleItemChange(
+                        index,
+                        "quantityAssembled",
+                        isWeightBased ? (value >= 0 ? value : 0) : (Math.round(value) || 0)
+                      )
+                    }}
                     disabled={isLocked}
                   />
                 </div>
@@ -466,6 +499,32 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                   </div>
                 </div>
               </div>
+
+              {/* Diferencia peso/cantidad para productos pesables */}
+              {isWeightBased && item.quantityAssembled > 0 && Math.abs(qtyDiff) > 0.001 && (
+                <div className={`text-xs p-2 rounded-md ${
+                  qtyDiff > 0
+                    ? "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                    : "bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                }`}>
+                  <div className="flex justify-between">
+                    <span>
+                      Pedido: {item.quantityRequested.toFixed(2)} {item.unitOfMeasure} → Pesado: {item.quantityAssembled.toFixed(2)} {item.unitOfMeasure}
+                      <strong className="ml-1">
+                        ({qtyDiff > 0 ? "+" : ""}{qtyDiff.toFixed(3)} {item.unitOfMeasure})
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span>
+                      Proyectado: ${projectedSubtotal.toFixed(2)} → Real: ${realSubtotal.toFixed(2)}
+                      <strong className="ml-1">
+                        ({subtotalDiff > 0 ? "+" : ""}${subtotalDiff.toFixed(2)})
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {item.isShortage && (
                 <div className="space-y-4 bg-muted/50 p-4 rounded-md">
@@ -505,7 +564,8 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
         </CardContent>
       </Card>
 
