@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
+import { createProductsService } from "@/lib/services/productsService"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
 import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
@@ -70,6 +71,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   // Get delayed orders count
   const delayedService = createDelayedOrdersService(supabase)
   const delayedOrdersCount = await delayedService.getDelayedOrdersCount()
+
+  // Get stock alerts
+  const productsService = createProductsService(supabase)
+  const productStats = await productsService.getProductStats()
+  const stockAlertsCount = productStats.lowStockProducts + productStats.outOfStockProducts
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -220,9 +226,17 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className={stockAlertsCount > 0 ? "border-amber-300 dark:border-amber-700" : ""}>
               <CardHeader>
-                <CardTitle className="text-base md:text-lg">Catálogo de Productos</CardTitle>
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  Catálogo de Productos
+                  {stockAlertsCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                      <AlertTriangle className="h-3 w-3" />
+                      {stockAlertsCount}
+                    </span>
+                  )}
+                </CardTitle>
                 <CardDescription className="text-xs md:text-sm">Administra productos e inventario</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -232,6 +246,22 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     Ver Productos
                   </Link>
                 </Button>
+                {productStats.outOfStockProducts > 0 && (
+                  <Button asChild variant="destructive" className="w-full">
+                    <Link href="/admin/products?low_stock=true">
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Sin Stock ({productStats.outOfStockProducts})
+                    </Link>
+                  </Button>
+                )}
+                {productStats.lowStockProducts > 0 && (
+                  <Button asChild variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">
+                    <Link href="/admin/products?low_stock=true">
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Stock Bajo ({productStats.lowStockProducts})
+                    </Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
 

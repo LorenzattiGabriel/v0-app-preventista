@@ -203,7 +203,7 @@ export function useOrderFormActions() {
         throw new Error("No se pudo guardar el pedido.");
       }
 
-      // Insert order items
+      // Insert order items - si falla, eliminar la orden para no dejar huérfanos
       const itemsToInsert = orderItems.map((item) => ({
         order_id: orderResult.id,
         product_id: item.productId,
@@ -216,7 +216,11 @@ export function useOrderFormActions() {
       const { error: itemsError } = await supabase.from("order_items").insert(itemsToInsert);
       if (itemsError) {
         console.error("Error inserting order items:", itemsError);
-        throw itemsError;
+        // Rollback: eliminar la orden creada para no dejar pedidos sin items
+        if (!orderId) {
+          await supabase.from("orders").delete().eq("id", orderResult.id);
+        }
+        throw new Error("Error al guardar los productos del pedido. Intente nuevamente.");
       }
 
       // Create order history entry

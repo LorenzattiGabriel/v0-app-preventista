@@ -412,6 +412,13 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
           <CardDescription>Verifica cada producto y marca los faltantes</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {assemblyItems.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+              <p className="font-medium">No se encontraron productos para este pedido</p>
+              <p className="text-sm">Los items del pedido pueden no estar cargados correctamente en la base de datos.</p>
+            </div>
+          )}
           {assemblyItems.map((item, index) => (
             <div key={item.id} className="border rounded-lg p-4 space-y-4">
               <div className="flex items-start justify-between">

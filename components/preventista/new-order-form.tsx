@@ -115,6 +115,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [itemDiscount, setItemDiscount] = useState(0)
+  const [itemDiscountType, setItemDiscountType] = useState<"fixed" | "percentage">("fixed")
 
   // Cargar configuración del depot al montar el componente
   useEffect(() => {
@@ -255,14 +256,18 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     }
 
     const unitPrice = customPrice !== null ? customPrice : basePrice
-    const subtotal = finalQuantity * unitPrice - itemDiscount
+    const lineTotal = finalQuantity * unitPrice
+    const discountAmount = itemDiscountType === "percentage"
+      ? (lineTotal * itemDiscount / 100)
+      : itemDiscount
+    const subtotal = Math.max(0, lineTotal - discountAmount)
 
     const newItem: OrderItem = {
       productId: product.id,
       productName: `${product.name} ${product.brand ? `- ${product.brand}` : ""}`,
       quantity: finalQuantity,
       unitPrice,
-      discount: itemDiscount,
+      discount: discountAmount,
       subtotal,
       unitOfMeasure: product.unit_of_measure || "unidad",
     }
@@ -274,6 +279,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     setQuantity(1)
     setCustomPrice(null)
     setItemDiscount(0)
+    setItemDiscountType("fixed")
   }
 
   const handleRemoveProduct = (index: number) => {
@@ -762,16 +768,45 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="itemDiscount" className="text-sm font-medium">Descuento ($)</Label>
-              <Input
-                id="itemDiscount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={itemDiscount}
-                onChange={(e) => setItemDiscount(Number.parseFloat(e.target.value) || 0)}
-                className="h-12 text-lg"
-              />
+              <Label htmlFor="itemDiscount" className="text-sm font-medium">
+                Descuento {itemDiscountType === "percentage" ? "(%)" : "($)"}
+              </Label>
+              <div className="flex gap-1">
+                <Input
+                  id="itemDiscount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={itemDiscountType === "percentage" ? 100 : undefined}
+                  value={itemDiscount}
+                  onChange={(e) => setItemDiscount(Number.parseFloat(e.target.value) || 0)}
+                  className="h-12 text-lg flex-1"
+                />
+                <div className="flex flex-col border rounded-md overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setItemDiscountType("fixed")}
+                    className={`px-2 py-1 text-xs font-medium transition-colors flex-1 ${
+                      itemDiscountType === "fixed"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    $
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setItemDiscountType("percentage")}
+                    className={`px-2 py-1 text-xs font-medium transition-colors flex-1 ${
+                      itemDiscountType === "percentage"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    %
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
