@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Package, Clock, CheckCircle } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import { PaginatedOrdersList } from "@/components/armado/paginated-orders-list"
+import { MergeableOrdersBanner } from "@/components/armado/mergeable-orders-banner"
+import { findMergeableGroups } from "@/lib/utils/mergeable-orders"
 
 export default async function ArmadoDashboardPage() {
   const supabase = await createClient()
@@ -48,6 +50,9 @@ export default async function ArmadoDashboardPage() {
 
   const pending = safeOrders.filter(o => o.status === "PENDIENTE_ARMADO");
   const inProgress = safeOrders.filter(o => o.status === "EN_ARMADO");
+
+  // Detectar pedidos fusionables del mismo cliente
+  const mergeableGroups = findMergeableGroups(pending);
 
   const priorityColors = {
     urgente: "destructive",
@@ -120,6 +125,9 @@ export default async function ArmadoDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Banner de pedidos fusionables */}
+          <MergeableOrdersBanner groups={mergeableGroups} />
 
           <Card>
             <CardHeader>

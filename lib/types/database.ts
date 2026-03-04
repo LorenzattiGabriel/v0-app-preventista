@@ -207,6 +207,7 @@ export interface Order {
   // Campos para tracking de reprogramaciones
   original_delivery_date?: string
   reschedule_count?: number
+  merged_from?: string[] // IDs de pedidos absorbidos en una fusión
 }
 
 // Pedido retrasado con información adicional
