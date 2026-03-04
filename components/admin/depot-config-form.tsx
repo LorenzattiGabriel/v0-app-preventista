@@ -31,6 +31,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
     province: depot?.province || "",
     postalCode: depot?.postal_code || "",
     radiusMeters: depot?.radius_meters || 200,
+    presencialOrderRadiusMeters: depot?.presencial_order_radius_meters || 600,
   })
 
   const [coordinates, setCoordinates] = useState<{
@@ -117,6 +118,7 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
           radius_meters: formData.radiusMeters,
+          presencial_order_radius_meters: formData.presencialOrderRadiusMeters,
           is_active: true,
           created_by: userId,
         })
@@ -229,8 +231,8 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
           />
         </div>
 
-        <div className="md:col-span-2">
-          <Label htmlFor="radiusMeters">Radio de Tolerancia (metros)</Label>
+        <div>
+          <Label htmlFor="radiusMeters">Radio Tolerancia Repartidor (metros)</Label>
           <Input
             id="radiusMeters"
             type="number"
@@ -241,7 +243,23 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
             required
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Los repartidores deben estar dentro de este radio para iniciar/finalizar rutas
+            Repartidores deben estar dentro de este radio para iniciar/finalizar rutas
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="presencialOrderRadiusMeters">Radio Pedido Presencial (metros)</Label>
+          <Input
+            id="presencialOrderRadiusMeters"
+            type="number"
+            value={formData.presencialOrderRadiusMeters}
+            onChange={(e) => setFormData({ ...formData, presencialOrderRadiusMeters: parseInt(e.target.value) })}
+            min={50}
+            max={2000}
+            required
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            El preventista debe estar dentro de este radio del cliente para crear pedidos presenciales
           </p>
         </div>
       </div>
