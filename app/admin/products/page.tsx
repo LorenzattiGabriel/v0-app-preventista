@@ -8,6 +8,7 @@ import { Plus, Package, AlertTriangle, Archive, FolderOpen, PackageX, ArrowLeft,
 import { ProductsFilters } from "@/components/admin/products-filters"
 import { ProductsList } from "@/components/admin/products-list"
 import { ProductsPagination } from "@/components/admin/products-pagination"
+import { BulkPriceUpdateButton } from "@/components/admin/bulk-price-update-button"
 
 export default async function ProductsPage({
   searchParams,
@@ -73,7 +74,8 @@ export default async function ProductsPage({
             <p className="text-muted-foreground">Administra tu catálogo de productos</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <BulkPriceUpdateButton />
           <Button variant="outline" asChild>
             <Link href="/admin/products/stock-history">
               <History className="mr-2 h-4 w-4" />
