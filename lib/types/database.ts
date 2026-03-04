@@ -142,6 +142,8 @@ export interface Product {
   product_margin: number
   location?: string
   supplier?: string
+  max_discount_percentage?: number | null
+  max_discount_fixed?: number | null
 }
 
 export type PaymentMethod = 

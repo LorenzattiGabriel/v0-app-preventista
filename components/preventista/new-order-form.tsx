@@ -257,6 +257,23 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
     const unitPrice = customPrice !== null ? customPrice : basePrice
     const lineTotal = finalQuantity * unitPrice
+
+    // Validar límite de descuento del producto
+    if (itemDiscount > 0) {
+      if (itemDiscountType === "percentage" && product.max_discount_percentage != null) {
+        if (itemDiscount > product.max_discount_percentage) {
+          setError(`El descuento máximo permitido para "${product.name}" es ${product.max_discount_percentage}%. Ingresaste ${itemDiscount}%.`)
+          return
+        }
+      }
+      if (itemDiscountType === "fixed" && product.max_discount_fixed != null) {
+        if (itemDiscount > product.max_discount_fixed) {
+          setError(`El descuento máximo permitido para "${product.name}" es $${product.max_discount_fixed}. Ingresaste $${itemDiscount}.`)
+          return
+        }
+      }
+    }
+
     const discountAmount = itemDiscountType === "percentage"
       ? (lineTotal * itemDiscount / 100)
       : itemDiscount
@@ -727,18 +744,19 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 type="number"
                 min={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
                 step={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
-                value={quantity}
+                value={quantity || ""}
                 onChange={(e) => {
                   const rawValue = e.target.value
                   // Permitir campo vacío temporalmente mientras el usuario escribe
-                  if (rawValue === '' || rawValue === '0' || rawValue === '0.') {
+                  if (rawValue === '' || rawValue === '0.') {
                     setQuantity(0)
                     return
                   }
                   const value = Number.parseFloat(rawValue)
+                  if (isNaN(value)) return
                   // Si no permite decimales, redondear a entero
                   if (selectedProduct && !selectedProduct.allows_decimal_quantity) {
-                    setQuantity(Math.round(value) || 1)
+                    setQuantity(Math.round(value) || 0)
                   } else {
                     // Permitir valores desde 0.01 para decimales
                     setQuantity(value >= 0 ? value : 0)
@@ -809,6 +827,23 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               </div>
             </div>
           </div>
+
+          {/* Aviso de límite de descuento */}
+          {selectedProduct && (selectedProduct.max_discount_percentage != null || selectedProduct.max_discount_fixed != null) && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-sm">Límite de descuento</p>
+                  <p className="text-xs">
+                    {selectedProduct.max_discount_percentage != null && `Máx. porcentaje: ${selectedProduct.max_discount_percentage}%`}
+                    {selectedProduct.max_discount_percentage != null && selectedProduct.max_discount_fixed != null && " | "}
+                    {selectedProduct.max_discount_fixed != null && `Máx. fijo: $${selectedProduct.max_discount_fixed}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Botón agregar - ancho completo y más grande en móvil */}
           <Button

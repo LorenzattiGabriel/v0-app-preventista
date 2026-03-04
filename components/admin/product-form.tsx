@@ -34,9 +34,10 @@ interface ProductFormProps {
     product_margin: number
     location?: string
     supplier?: string
-    // 🆕 Configuración de cantidades decimales
     allows_decimal_quantity?: boolean
     unit_of_measure?: string
+    max_discount_percentage?: number | null
+    max_discount_fixed?: number | null
   }
   initialCode: string
 }
@@ -64,9 +65,10 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
     product_margin: product?.product_margin?.toString() || "0",
     location: product?.location || "",
     supplier: product?.supplier || "",
-    // 🆕 Configuración de cantidades decimales
     allows_decimal_quantity: product?.allows_decimal_quantity ?? false,
     unit_of_measure: product?.unit_of_measure || "unidad",
+    max_discount_percentage: product?.max_discount_percentage?.toString() || "",
+    max_discount_fixed: product?.max_discount_fixed?.toString() || "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,9 +98,10 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
         product_margin: parseFloat(formData.product_margin),
         location: formData.location || null,
         supplier: formData.supplier || null,
-        // 🆕 Configuración de cantidades decimales
         allows_decimal_quantity: formData.allows_decimal_quantity,
         unit_of_measure: formData.unit_of_measure || "unidad",
+        max_discount_percentage: formData.max_discount_percentage ? parseFloat(formData.max_discount_percentage as string) : null,
+        max_discount_fixed: formData.max_discount_fixed ? parseFloat(formData.max_discount_fixed as string) : null,
       }
 
       if (product) {
@@ -341,6 +344,42 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
                   Solo se permiten cantidades enteras (1, 2, 3...)
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Límites de Descuento */}
+          <div className="border-t pt-4">
+            <Label className="text-sm font-semibold mb-3 block">Límite de Descuento</Label>
+            <p className="text-xs text-muted-foreground mb-3">
+              El preventista no podrá aplicar un descuento mayor a estos valores. Deja vacío para no limitar.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="max_discount_percentage">Máximo Descuento (%)</Label>
+                <Input
+                  id="max_discount_percentage"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.max_discount_percentage}
+                  onChange={(e) => setFormData({ ...formData, max_discount_percentage: e.target.value })}
+                  placeholder="Ej: 15 (sin límite si vacío)"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="max_discount_fixed">Máximo Descuento ($)</Label>
+                <Input
+                  id="max_discount_fixed"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.max_discount_fixed}
+                  onChange={(e) => setFormData({ ...formData, max_discount_fixed: e.target.value })}
+                  placeholder="Ej: 500 (sin límite si vacío)"
+                />
+              </div>
             </div>
           </div>
         </CardContent>
