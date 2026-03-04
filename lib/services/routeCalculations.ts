@@ -5,7 +5,7 @@
  * Single source of truth for payment and delivery calculations.
  */
 
-import type { Order, PaymentMethod, OrderStatus } from '@/lib/types/database'
+import type { Order, PaymentMethod, PaymentLine, OrderStatus } from '@/lib/types/database'
 
 // =====================================================
 // TYPES
@@ -48,6 +48,7 @@ export interface DeliveredOrderSummary {
   collectedAmount: number
   debtAmount: number
   paymentMethod: PaymentMethod | null
+  paymentMethodsJson?: PaymentLine[] | null
   wasCollected: boolean
 }
 
@@ -156,6 +157,7 @@ export function buildDeliveredOrderSummary(order: OrderWithCustomer): DeliveredO
     collectedAmount,
     debtAmount: calculateOrderDebt(order),
     paymentMethod: getOrderPaymentMethod(order),
+    paymentMethodsJson: order.payment_methods_json || null,
     wasCollected: wasOrderCollected(order),
   }
 }
@@ -177,14 +179,21 @@ export function buildNotDeliveredOrderSummary(order: OrderWithCustomer): NotDeli
  */
 export function calculatePaymentBreakdown(deliveredOrders: DeliveredOrderSummary[]): PaymentBreakdown {
   const breakdown: PaymentBreakdown = {}
-  
+
   for (const order of deliveredOrders) {
-    if (order.wasCollected && order.collectedAmount > 0 && order.paymentMethod) {
-      const method = order.paymentMethod
-      breakdown[method] = (breakdown[method] || 0) + order.collectedAmount
+    if (!order.wasCollected || order.collectedAmount <= 0) continue
+
+    // Si tiene desglose de pagos múltiples, usarlo
+    if (order.paymentMethodsJson && order.paymentMethodsJson.length > 0) {
+      for (const line of order.paymentMethodsJson) {
+        breakdown[line.method] = (breakdown[line.method] || 0) + line.amount
+      }
+    } else if (order.paymentMethod) {
+      // Fallback a método único (pedidos anteriores al split payment)
+      breakdown[order.paymentMethod] = (breakdown[order.paymentMethod] || 0) + order.collectedAmount
     }
   }
-  
+
   return breakdown
 }
 
@@ -303,4 +312,5 @@ export function calculateRouteDebt(routeOrders: RouteOrderData[]): number {
   const collected = calculateRouteCollectedTotal(routeOrders)
   return Math.max(0, deliveredExpected - collected)
 }
+
 

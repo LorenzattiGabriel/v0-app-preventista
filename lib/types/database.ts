@@ -153,6 +153,12 @@ export type PaymentMethod =
   | "Cheque" 
   | "Otro"
 
+export interface PaymentLine {
+  method: PaymentMethod
+  amount: number
+  transferProofUrl?: string
+}
+
 export const PAYMENT_METHODS: PaymentMethod[] = [
   "Efectivo",
   "Transferencia",
@@ -198,6 +204,7 @@ export interface Order {
   amount_paid?: number // Monto pagado al momento de la entrega
   was_collected_on_delivery?: boolean // Si se cobró al momento de la entrega
   transfer_proof_url?: string // URL del comprobante de transferencia bancaria
+  payment_methods_json?: PaymentLine[] | null // Desglose de pagos múltiples (split payment)
   // Time Windows (VRPTW) - Restricciones horarias para la entrega
   has_time_restriction: boolean // Si tiene restricción horaria
   delivery_window_start?: string // Hora inicio (HH:MM)

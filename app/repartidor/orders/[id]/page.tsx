@@ -248,30 +248,58 @@ export default async function RepartidorOrderDetailPage({ params }: { params: Pr
                         </div>
                         <div>
                           <p className="text-muted-foreground">Método de Pago</p>
-                          <Badge variant="outline" className="mt-1">
-                            {order.payment_method === "efectivo" && "💵 Efectivo"}
-                            {order.payment_method === "transferencia" && "🏦 Transferencia"}
-                            {order.payment_method === "tarjeta" && "💳 Tarjeta"}
-                          </Badge>
+                          {order.payment_methods_json && order.payment_methods_json.length > 1 ? (
+                            <div className="space-y-1 mt-1">
+                              {order.payment_methods_json.map((p: any, i: number) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    {p.method}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">${p.amount.toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="mt-1">
+                              {order.payment_method || "Efectivo"}
+                            </Badge>
+                          )}
                         </div>
-                        {/* Mostrar comprobante de transferencia si existe */}
-                        {order.payment_method === "transferencia" && order.transfer_proof_url && (
+                        {/* Mostrar comprobante(s) de transferencia si existe(n) */}
+                        {order.payment_methods_json?.some((p: any) => p.method === "Transferencia" && p.transferProofUrl) ? (
+                          <div className="col-span-2 space-y-1">
+                            <p className="text-muted-foreground mb-1">Comprobante(s) de Transferencia</p>
+                            {order.payment_methods_json
+                              .filter((p: any) => p.method === "Transferencia" && p.transferProofUrl)
+                              .map((p: any, i: number) => (
+                                <a
+                                  key={i}
+                                  href={p.transferProofUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline text-sm block"
+                                >
+                                  Ver comprobante {order.payment_methods_json.filter((x: any) => x.method === "Transferencia").length > 1 ? `#${i + 1}` : ""}
+                                </a>
+                              ))}
+                          </div>
+                        ) : order.transfer_proof_url ? (
                           <div className="col-span-2">
                             <p className="text-muted-foreground mb-2">Comprobante de Transferencia</p>
-                            <a 
-                              href={order.transfer_proof_url} 
-                              target="_blank" 
+                            <a
+                              href={order.transfer_proof_url}
+                              target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline text-sm"
                             >
-                              📎 Ver comprobante
+                              Ver comprobante
                             </a>
                           </div>
-                        )}
+                        ) : null}
                         {(order.amount_paid || 0) < order.total && (
                           <div className="col-span-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
                             <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                              ⚠️ Deuda generada: <strong>${(order.total - (order.amount_paid || 0)).toFixed(2)}</strong>
+                              Deuda generada: <strong>${(order.total - (order.amount_paid || 0)).toFixed(2)}</strong>
                             </p>
                           </div>
                         )}

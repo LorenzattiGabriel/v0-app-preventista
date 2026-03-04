@@ -86,10 +86,22 @@ export function ReceiptPreviewDialog({ open, onOpenChange, order, repartidorName
             </div>
             
              {order.was_collected && (
-              <div className="flex justify-between text-xs text-gray-600 mt-1">
-                <span>Forma de Pago:</span>
-                <span>{order.payment_method || "Efectivo"}</span>
-              </div>
+              order.payment_methods_json && order.payment_methods_json.length > 1 ? (
+                <div className="mt-1 space-y-0.5">
+                  <span className="text-xs text-gray-600">Formas de Pago:</span>
+                  {order.payment_methods_json.map((p: any, i: number) => (
+                    <div key={i} className="flex justify-between text-xs text-gray-600 pl-2">
+                      <span>{p.method}:</span>
+                      <span>${p.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>Forma de Pago:</span>
+                  <span>{order.payment_method || "Efectivo"}</span>
+                </div>
+              )
             )}
             
              {order.received_by_name && (

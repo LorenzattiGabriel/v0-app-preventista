@@ -27,7 +27,7 @@ import { ReceiptButton } from "./receipt-button"
 import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
-import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/types/database"
+import { PAYMENT_METHODS, type PaymentMethod, type PaymentLine } from "@/lib/types/database"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import { 
   calculateRouteSummary, 
@@ -61,26 +61,53 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
   // Delivery form state
   const [wasCollected, setWasCollected] = useState(false)
-  const [collectedAmount, setCollectedAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // 🆕 Payment method state
   const [deliveryNotes, setDeliveryNotes] = useState("")
 
-  
-  // 🆕 New states for delivery evidence and non-delivery
+  // Payment lines para split payment (múltiples métodos de pago)
+  interface PaymentLineState {
+    id: string
+    method: PaymentMethod
+    amount: string
+    transferProof: File | null
+    transferProofPreview: string | null
+  }
+  const [paymentLines, setPaymentLines] = useState<PaymentLineState[]>([
+    { id: "1", method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+  ])
+
+  const addPaymentLine = () => {
+    setPaymentLines(prev => [
+      ...prev,
+      { id: Date.now().toString(), method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+    ])
+  }
+
+  const removePaymentLine = (id: string) => {
+    setPaymentLines(prev => prev.filter(line => line.id !== id))
+  }
+
+  const updatePaymentLine = (id: string, updates: Partial<PaymentLineState>) => {
+    setPaymentLines(prev => prev.map(line =>
+      line.id === id ? { ...line, ...updates } : line
+    ))
+  }
+
+  const totalCollected = paymentLines.reduce(
+    (sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0
+  )
+
+
+  // New states for delivery evidence and non-delivery
   const [deliveryPhoto, setDeliveryPhoto] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [receivedByName, setReceivedByName] = useState("")
   const [cannotDeliver, setCannotDeliver] = useState(false)
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
-  
-  // 🆕 Foto de comprobante cuando no se puede entregar
+
+  // Foto de comprobante cuando no se puede entregar
   const [noDeliveryPhoto, setNoDeliveryPhoto] = useState<File | null>(null)
   const [noDeliveryPhotoPreview, setNoDeliveryPhotoPreview] = useState<string | null>(null)
-  
-  // 🆕 Transfer proof (comprobante de transferencia)
-  const [transferProof, setTransferProof] = useState<File | null>(null)
-  const [transferProofPreview, setTransferProofPreview] = useState<string | null>(null)
   
   // 🆕 Estado para expandir/colapsar segmentos de ruta
   const [segmentsExpanded, setSegmentsExpanded] = useState(false)
@@ -298,10 +325,11 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const handleOpenDeliveryDialog = (order: any) => {
     setSelectedOrder(order)
     setWasCollected(false)
-    setCollectedAmount("")
-    setPaymentMethod(order.payment_method || "Efectivo") // 🆕 Default to preferred or Cash
     setDeliveryNotes("")
-    setPaymentMethod("Efectivo")
+    // Reset payment lines a una sola línea por defecto
+    setPaymentLines([
+      { id: "1", method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+    ])
     // Reset delivery evidence fields
     setDeliveryPhoto(null)
     setPhotoPreview(null)
@@ -309,12 +337,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setCannotDeliver(false)
     setNoDeliveryReason("")
     setNoDeliveryNotes("")
-    // 🆕 Reset no-delivery photo
     setNoDeliveryPhoto(null)
     setNoDeliveryPhotoPreview(null)
-    // 🆕 Reset transfer proof
-    setTransferProof(null)
-    setTransferProofPreview(null)
     setShowDeliveryDialog(true)
   }
 
@@ -388,30 +412,6 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     
     // Open WhatsApp
     window.open(`https://wa.me/${phone.replace("+", "")}?text=${message}`, "_blank")
-  }
-
-  // 🆕 Handle transfer proof selection
-  const handleTransferProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError("Por favor selecciona una imagen válida para el comprobante")
-        return
-      }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError("El comprobante no puede ser mayor a 5MB")
-        return
-      }
-      setTransferProof(file)
-      // Create preview
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setTransferProofPreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
   }
 
   const handleConfirmDelivery = async () => {
@@ -509,18 +509,22 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       return
     }
 
-    // 🆕 Validate collected amount if marked as collected
+    // Validate payment lines if marked as collected
     if (wasCollected) {
-      const amount = Number.parseFloat(collectedAmount)
-      if (!collectedAmount || isNaN(amount) || amount <= 0) {
-        setError("Debe ingresar un monto cobrado válido (mayor a $0)")
+      if (totalCollected <= 0) {
+        setError("Debe ingresar al menos un monto cobrado válido (mayor a $0)")
         return
       }
-
-      // 🆕 Validate transfer proof if payment method is "Transferencia"
-      if (paymentMethod === "Transferencia" && !transferProof) {
-        setError("Debe adjuntar el comprobante de transferencia para este método de pago")
-        return
+      for (const line of paymentLines) {
+        const lineAmount = Number.parseFloat(line.amount) || 0
+        if (lineAmount <= 0) {
+          setError("Cada línea de pago debe tener un monto mayor a $0")
+          return
+        }
+        if (line.method === "Transferencia" && !line.transferProof) {
+          setError("Debe adjuntar el comprobante de transferencia para cada pago con transferencia")
+          return
+        }
       }
     }
 
@@ -532,7 +536,6 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       // 1. Upload photo to Supabase Storage
       let publicUrl = ""
-      let transferProofUrl = ""
       let bucketNotFound = false
       
       // Helper function to get file extension safely
@@ -585,60 +588,78 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         bucketNotFound = true
       }
 
-      // 🆕 Upload transfer proof if payment method is "Transferencia"
-      if (paymentMethod === "Transferencia" && transferProof) {
-        // Si el bucket no existe, no intentamos subir el comprobante pero mostramos advertencia
-        if (bucketNotFound) {
-          console.warn("[v0] Skipping transfer proof upload - bucket not found")
-        } else {
-          try {
-            const proofExt = getFileExtension(transferProof)
-            const proofFileName = `${selectedOrder.id}_transfer_proof_${Date.now()}.${proofExt}`
-            
-            const { error: proofUploadError } = await supabase.storage
-        .from('delivery')
-              .upload(proofFileName, transferProof, {
-                cacheControl: '3600',
-                upsert: false
-              })
+      // Upload transfer proofs para cada línea de pago con Transferencia
+      if (wasCollected && !bucketNotFound) {
+        for (const line of paymentLines) {
+          if (line.method === "Transferencia" && line.transferProof) {
+            try {
+              const proofExt = getFileExtension(line.transferProof)
+              const proofFileName = `${selectedOrder.id}_transfer_proof_${line.id}_${Date.now()}.${proofExt}`
 
-            if (proofUploadError) {
-              console.error("Error uploading transfer proof:", proofUploadError)
-              // Para el comprobante de transferencia, el error ES crítico (no continuamos)
-              throw new Error(`Error al subir el comprobante de transferencia: ${proofUploadError.message}`)
-            } else {
+              const { error: proofUploadError } = await supabase.storage
+                .from('delivery')
+                .upload(proofFileName, line.transferProof, {
+                  cacheControl: '3600',
+                  upsert: false
+                })
+
+              if (proofUploadError) {
+                throw new Error(`Error al subir comprobante de transferencia: ${proofUploadError.message}`)
+              }
+
               const { data: proofData } = supabase.storage
                 .from('delivery')
                 .getPublicUrl(proofFileName)
-              transferProofUrl = proofData.publicUrl
-              console.log("[v0] Transfer proof uploaded successfully:", transferProofUrl)
+
+              // Guardar URL en la línea para uso posterior
+              updatePaymentLine(line.id, { transferProofPreview: proofData.publicUrl })
+              // También guardar en variable local para el JSON
+              line.transferProofPreview = proofData.publicUrl
+            } catch (proofError: any) {
+              throw new Error(`Error al subir comprobante de transferencia: ${proofError.message || 'Error desconocido'}`)
             }
-          } catch (proofError: any) {
-            // Re-throw transfer proof errors - they are mandatory
-            console.error("[v0] Transfer proof upload failed:", proofError)
-            throw new Error(`Error al subir el comprobante de transferencia: ${proofError.message || 'Error desconocido'}`)
           }
         }
       }
 
-      // 3. Update order with delivery evidence AND payment data (normalized)
-      const collectedAmountNum = wasCollected ? Number.parseFloat(collectedAmount) || 0 : 0
-      
+      // 3. Update order with delivery evidence AND payment data
+      const collectedAmountNum = wasCollected ? totalCollected : 0
+
+      // Determinar método principal (mayor monto) para backward compat
+      const primaryLine = wasCollected
+        ? paymentLines.reduce((max, line) =>
+            (Number.parseFloat(line.amount) || 0) > (Number.parseFloat(max.amount) || 0) ? line : max
+          )
+        : null
+
+      // Construir JSON de desglose de pagos
+      const paymentMethodsJson = wasCollected
+        ? paymentLines.map(line => ({
+            method: line.method,
+            amount: Number.parseFloat(line.amount) || 0,
+            transferProofUrl: line.method === "Transferencia" ? (line.transferProofPreview || undefined) : undefined,
+          }))
+        : null
+
+      // Primera URL de comprobante de transferencia (backward compat)
+      const firstTransferProofUrl = wasCollected
+        ? paymentLines.find(l => l.method === "Transferencia" && l.transferProofPreview)?.transferProofPreview || ""
+        : ""
+
       const orderUpdateData: any = {
         status: "ENTREGADO",
         delivered_at: new Date().toISOString(),
         delivery_notes: deliveryNotes || null,
         delivery_photo_url: publicUrl,
         received_by_name: receivedByName.trim(),
-        // 🆕 Datos de pago normalizados (ahora en orders, no en route_orders)
         amount_paid: collectedAmountNum,
         was_collected_on_delivery: wasCollected,
-        payment_method: wasCollected ? paymentMethod : null,
+        payment_method: primaryLine?.method || null,
+        payment_methods_json: paymentMethodsJson,
       }
-      
-      // Agregar URL del comprobante de transferencia si existe
-      if (transferProofUrl) {
-        orderUpdateData.transfer_proof_url = transferProofUrl
+
+      if (firstTransferProofUrl) {
+        orderUpdateData.transfer_proof_url = firstTransferProofUrl
       }
 
       const { error: orderError } = await supabase
@@ -659,45 +680,49 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       if (routeOrderError) throw routeOrderError
 
-      // 🆕 Registrar pago en cuenta corriente del cliente
-      // La deuda ya fue creada cuando el armador confirmó el pedido
-      // Aquí solo registramos el PAGO para reducir esa deuda
+      // Registrar pagos en cuenta corriente del cliente
       const orderTotal = selectedOrder.total || 0
-      const debtAmount = orderTotal - collectedAmountNum // Deuda restante después del cobro
+      const debtAmount = orderTotal - collectedAmountNum
 
       try {
         const accountService = createAccountMovementsService(supabase)
-        
-        // Si cobró algo, registrar el pago para reducir la deuda existente
+
+        // Registrar un pago por cada línea de pago
         if (wasCollected && collectedAmountNum > 0) {
-          await accountService.recordDebtPayment({
-            orderId: selectedOrder.id,
-            amount: collectedAmountNum,
-            paymentMethod: paymentMethod,
-            routeId: route.id,
-            createdBy: userId,
-            notes: `Cobrado en entrega por ${repartidorName || 'Repartidor'}`,
-          })
-          console.log(`✅ Pago registrado: $${collectedAmountNum} para pedido ${selectedOrder.order_number}`)
+          for (const line of paymentLines) {
+            const lineAmount = Number.parseFloat(line.amount) || 0
+            if (lineAmount > 0) {
+              const proofUrl = line.method === "Transferencia" ? (line.transferProofPreview || undefined) : undefined
+              await accountService.recordDebtPayment({
+                orderId: selectedOrder.id,
+                amount: lineAmount,
+                paymentMethod: line.method,
+                routeId: route.id,
+                createdBy: userId,
+                notes: `Cobrado en entrega por ${repartidorName || 'Repartidor'}`,
+                proofUrl,
+              })
+            }
+          }
+          console.log(`✅ Pagos registrados: $${collectedAmountNum} (${paymentLines.length} línea(s)) para pedido ${selectedOrder.order_number}`)
         }
-        
-        // Si NO cobró nada, la deuda completa queda pendiente (ya fue creada por el armador)
-        // No necesitamos hacer nada más aquí
-        
       } catch (accountError) {
-        // Si las tablas de cuenta corriente no existen, continuar sin error
-        // Esto permite usar el sistema sin la migración de cuenta corriente
         console.warn("[v0] Account system not available (tables may not exist):", accountError)
       }
 
       // Create history entry
+      const methodsSummary = paymentLines
+        .filter(l => (Number.parseFloat(l.amount) || 0) > 0)
+        .map(l => `${l.method}: $${(Number.parseFloat(l.amount) || 0).toFixed(2)}`)
+        .join(", ")
+
       await supabase.from("order_history").insert({
         order_id: selectedOrder.id,
         previous_status: "EN_REPARTICION",
         new_status: "ENTREGADO",
         changed_by: userId,
-        change_reason: wasCollected 
-          ? `Entrega confirmada - Cobrado: $${collectedAmountNum.toFixed(2)} (${paymentMethod})${debtAmount > 0 ? ` - Deuda: $${debtAmount.toFixed(2)}` : ""}`
+        change_reason: wasCollected
+          ? `Entrega confirmada - Cobrado: $${collectedAmountNum.toFixed(2)} (${methodsSummary})${debtAmount > 0 ? ` - Deuda: $${debtAmount.toFixed(2)}` : ""}`
           : `Entrega confirmada - Sin cobro - Deuda: $${orderTotal.toFixed(2)}`,
       })
 
@@ -1606,7 +1631,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                     onCheckedChange={(checked) => {
                       setWasCollected(checked as boolean)
                       if (checked && selectedOrder?.total) {
-                        setCollectedAmount(selectedOrder.total.toFixed(2))
+                        setPaymentLines([
+                          { id: "1", method: "Efectivo", amount: selectedOrder.total.toFixed(2), transferProof: null, transferProofPreview: null }
+                        ])
                       }
                     }}
                   />
@@ -1616,138 +1643,170 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 </div>
 
                 {wasCollected && (() => {
-                  const amount = Number.parseFloat(collectedAmount) || 0
                   const total = selectedOrder?.total || 0
-                  const debt = total - amount
+                  const debt = total - totalCollected
                   const isExact = Math.abs(debt) <= 0.01
-                  
+
                   return (
                     <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="payment-method">Método de Pago *</Label>
-                        <Select 
-                          value={paymentMethod} 
-                          onValueChange={(val) => {
-                            setPaymentMethod(val as PaymentMethod)
-                            // Reset transfer proof when changing payment method
-                            if (val !== "Transferencia") {
-                              setTransferProof(null)
-                              setTransferProofPreview(null)
-                            }
-                          }}
-                        >
-                          <SelectTrigger id="payment-method">
-                            <SelectValue placeholder="Seleccionar método" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAYMENT_METHODS.map((method) => (
-                              <SelectItem key={method} value={method}>
-                                {method}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* 🆕 Transfer Proof (comprobante de transferencia) */}
-                      {paymentMethod === "Transferencia" && (
-                        <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
-                          <Label className="font-bold text-blue-900 dark:text-blue-100">
-                            🧾 Comprobante de Transferencia *
-                          </Label>
-                          
-                          {!transferProofPreview ? (
-                            <div className="space-y-3">
-                              {/* Botón principal para tomar foto del comprobante */}
-                              <label 
-                                htmlFor="transfer-proof-camera"
-                                className="flex items-center justify-center gap-2 w-full p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors text-center font-medium"
-                              >
-                                📷 Fotografiar Comprobante
-                              </label>
-                              <input
-                                id="transfer-proof-camera"
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                onChange={handleTransferProofChange}
-                                className="hidden"
-                              />
-                              
-                              {/* Opción secundaria para galería */}
-                              <label 
-                                htmlFor="transfer-proof-gallery"
-                                className="flex items-center justify-center gap-2 w-full p-3 border-2 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors text-center text-sm"
-                              >
-                                🖼️ Seleccionar de Galería
-                              </label>
-                              <input
-                                id="transfer-proof-gallery"
-                                type="file"
-                                accept="image/*"
-                                onChange={handleTransferProofChange}
-                                className="hidden"
-                              />
-                              
-                              <p className="text-xs text-blue-600 dark:text-blue-400 text-center">
-                                ⚠️ El comprobante es obligatorio para pagos con transferencia
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              <div className="relative">
-                                <img
-                                  src={transferProofPreview}
-                                  alt="Comprobante de transferencia"
-                                  className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
-                                />
-                                <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                                  ✓ Comprobante cargado
-                                </div>
-                              </div>
+                      {paymentLines.map((line, index) => (
+                        <div key={line.id} className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">
+                              {paymentLines.length > 1 ? `Pago ${index + 1}` : "Pago"}
+                            </Label>
+                            {paymentLines.length > 1 && (
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  setTransferProof(null)
-                                  setTransferProofPreview(null)
-                                }}
-                                className="w-full"
+                                className="h-7 px-2 text-red-500 hover:text-red-700"
+                                onClick={() => removePaymentLine(line.id)}
                               >
-                                🔄 Cambiar comprobante
+                                Quitar
                               </Button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Método *</Label>
+                              <Select
+                                value={line.method}
+                                onValueChange={(val) => {
+                                  const updates: Partial<PaymentLineState> = { method: val as PaymentMethod }
+                                  if (val !== "Transferencia") {
+                                    updates.transferProof = null
+                                    updates.transferProofPreview = null
+                                  }
+                                  updatePaymentLine(line.id, updates)
+                                }}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_METHODS.map((method) => (
+                                    <SelectItem key={method} value={method}>
+                                      {method}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Importe ($) *</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={line.amount}
+                                onChange={(e) => updatePaymentLine(line.id, { amount: e.target.value })}
+                                className="h-9"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Comprobante de transferencia por línea */}
+                          {line.method === "Transferencia" && (
+                            <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-300 dark:border-blue-700 rounded-lg">
+                              <Label className="text-xs font-bold text-blue-900 dark:text-blue-100">
+                                Comprobante de Transferencia *
+                              </Label>
+                              {!line.transferProofPreview ? (
+                                <div className="space-y-2">
+                                  <label
+                                    htmlFor={`transfer-proof-${line.id}`}
+                                    className="flex items-center justify-center gap-2 w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors text-center text-sm font-medium"
+                                  >
+                                    Fotografiar Comprobante
+                                  </label>
+                                  <input
+                                    id={`transfer-proof-${line.id}`}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0]
+                                      if (file) {
+                                        if (!file.type.startsWith('image/')) return
+                                        if (file.size > 5 * 1024 * 1024) {
+                                          setError("El comprobante no debe superar 5MB")
+                                          return
+                                        }
+                                        const reader = new FileReader()
+                                        reader.onload = (ev) => {
+                                          updatePaymentLine(line.id, {
+                                            transferProof: file,
+                                            transferProofPreview: ev.target?.result as string,
+                                          })
+                                        }
+                                        reader.readAsDataURL(file)
+                                      }
+                                    }}
+                                    className="hidden"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="relative">
+                                    <img
+                                      src={line.transferProofPreview}
+                                      alt="Comprobante"
+                                      className="w-full max-w-[200px] mx-auto rounded-lg border-2 border-green-500"
+                                    />
+                                    <div className="absolute top-1 right-1 bg-green-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                                      Cargado
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updatePaymentLine(line.id, { transferProof: null, transferProofPreview: null })}
+                                    className="w-full text-xs"
+                                  >
+                                    Cambiar comprobante
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      ))}
 
-                      <div className="space-y-2">
-                        <Label htmlFor="amount">Importe Cobrado ($) *</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                          min="0"
-                      value={collectedAmount}
-                      onChange={(e) => setCollectedAmount(e.target.value)}
-                          className={!isExact && collectedAmount ? "border-yellow-500" : ""}
-                        />
-                        {collectedAmount && (
-                          <p className={`text-xs ${isExact ? "text-green-600" : "text-yellow-600"}`}>
-                            {isExact ? "✅ Cobro completo" : debt > 0 ? `⚠️ Quedará deuda: $${debt.toFixed(2)}` : `⚠️ Exceso: $${Math.abs(debt).toFixed(2)}`}
-                          </p>
-                        )}
+                      {/* Botón agregar otro medio de pago */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addPaymentLine}
+                        className="w-full border-dashed"
+                      >
+                        + Agregar otro medio de pago
+                      </Button>
+
+                      {/* Total y comparación con pedido */}
+                      <div className="space-y-1 pt-2 border-t">
+                        <div className="flex justify-between text-sm">
+                          <span>Total cobrado:</span>
+                          <span className="font-bold">${totalCollected.toFixed(2)}</span>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           Total del pedido: <strong>${total.toFixed(2)}</strong>
                         </p>
+                        {totalCollected > 0 && (
+                          <p className={`text-xs ${isExact ? "text-green-600" : "text-yellow-600"}`}>
+                            {isExact ? "Cobro completo" : debt > 0 ? `Quedará deuda: $${debt.toFixed(2)}` : `Exceso: $${Math.abs(debt).toFixed(2)}`}
+                          </p>
+                        )}
                       </div>
 
                       {/* Alerta de deuda */}
-                      {debt > 0 && collectedAmount && (
+                      {debt > 0 && totalCollected > 0 && (
                         <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3">
                           <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                            💳 Se generará una <strong>deuda de ${debt.toFixed(2)}</strong> en la cuenta corriente del cliente.
+                            Se generará una <strong>deuda de ${debt.toFixed(2)}</strong> en la cuenta corriente del cliente.
                           </p>
                         </div>
                       )}
