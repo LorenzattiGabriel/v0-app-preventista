@@ -224,17 +224,29 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   
   doc.setFont("helvetica", "normal")
   const items = order.order_items || []
-  
+
+  // Resolver cantidad armada con shortage explícito: si is_shortage=true, fuerza 0
+  const resolveAssembled = (item: any) => {
+    if (item.is_shortage === true) {
+      return item.quantity_assembled ?? 0
+    }
+    if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
+      return item.quantity_assembled
+    }
+    return item.quantity_requested || 0
+  }
+
+  let assembledTotal = 0
   items.forEach((item: any) => {
     const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 35)
     const quantityRequested = item.quantity_requested || 0
-    const quantityAssembled = item.quantity_assembled ?? item.quantity_requested ?? 0
-    const price = (item.unit_price * quantityAssembled).toFixed(2)
-    // Solo marcar como faltante si is_shortage es true o si hay cantidad armada definida que es menor
-    const hasShortage = item.is_shortage === true || 
-      (item.quantity_assembled !== null && item.quantity_assembled !== undefined && item.quantity_assembled < quantityRequested)
-    
-    if (yPos > 270) {
+    const quantityAssembled = resolveAssembled(item)
+    const lineTotal = item.unit_price * quantityAssembled - (item.discount || 0)
+    const price = Math.max(0, lineTotal).toFixed(2)
+    assembledTotal += Math.max(0, lineTotal)
+    const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
+
+    if (yPos > 265) {
       doc.addPage()
       yPos = 20
     }
@@ -242,36 +254,68 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
     if (hasShortage) {
       doc.setTextColor(200, 100, 0) // Orange for shortages
     }
-    
+
     doc.text(productName, col1, yPos)
     doc.text(quantityRequested.toString(), col2 + 5, yPos, { align: "center" })
     doc.text(quantityAssembled.toString(), col3 + 8, yPos, { align: "center" })
     doc.text(`$${price}`, col4, yPos, { align: "right" })
-    
+
     if (hasShortage) {
       doc.setTextColor(0) // Reset
+      // Línea adicional con motivo del faltante
+      yPos += 4
+      doc.setFontSize(8)
+      doc.setTextColor(150, 80, 0)
+      const faltante = quantityRequested - quantityAssembled
+      const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
+      doc.text(`  Faltante: ${faltante}${motivo}`, col1, yPos)
+      doc.setFontSize(9)
+      doc.setTextColor(0)
     }
     yPos += 6
   })
-  
+
   yPos += 5
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 8
 
   // --- Totals ---
+  // Usar el total armado real, con fallback al total del pedido
+  const generalDiscount = order.general_discount || 0
+  const finalAssembledTotal = order.total ?? Math.max(0, assembledTotal - generalDiscount)
+  const originalTotal = order.original_total ?? order.total ?? 0
+  const difference = originalTotal - finalAssembledTotal
+  const hasDifference = Math.abs(difference) > 0.01
+
   doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+
+  if (hasDifference) {
+    doc.setTextColor(80, 80, 80)
+    doc.text(`Total Original: $${originalTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 6
+    doc.setTextColor(0)
+    doc.text(`Total Armado: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 6
+    doc.setTextColor(200, 100, 0)
+    const diffSign = difference > 0 ? "-" : "+"
+    doc.text(
+      `Diferencia: ${diffSign}$${Math.abs(difference).toFixed(2)}`,
+      pageWidth - margin,
+      yPos,
+      { align: "right" },
+    )
+    doc.setTextColor(0)
+    yPos += 8
+  }
+
   doc.setFontSize(11)
-  const total = order.total || 0
-  
-  doc.text(`TOTAL: $${total.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+  doc.text(`TOTAL: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 10
 
   // --- Status ---
-  // Verificar faltantes correctamente: solo hay faltante si is_shortage es true 
-  // o si quantity_assembled existe y es menor que quantity_requested
-  const hasShortages = items.some((item: any) => {
+  const hasShortages = order.has_shortages === true || items.some((item: any) => {
     if (item.is_shortage === true) return true
-    // Solo comparar si quantity_assembled tiene un valor definido
     if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
       return item.quantity_assembled < item.quantity_requested
     }

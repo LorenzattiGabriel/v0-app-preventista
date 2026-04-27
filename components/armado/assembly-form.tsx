@@ -73,9 +73,25 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
     window.open(url, '_blank')
   }
 
-  // 🆕 Descargar PDF
+  // 🆕 Descargar PDF - usar los items armados localmente (reflejan faltantes y total real)
   const handleDownloadPDF = () => {
-    downloadAssemblyReceipt(order)
+    const orderForReceipt = {
+      ...order,
+      total: assembledOrder?.total ?? order.total,
+      original_total: order.total,
+      has_shortages: assembledOrder?.hasShortages ?? false,
+      order_items: order.order_items.map((item: any) => {
+        const assembled = assemblyItems.find((a) => a.id === item.id)
+        if (!assembled) return item
+        return {
+          ...item,
+          quantity_assembled: assembled.quantityAssembled,
+          is_shortage: assembled.isShortage,
+          shortage_reason: assembled.shortageReason,
+        }
+      }),
+    }
+    downloadAssemblyReceipt(orderForReceipt)
   }
 
   // Initialize assembly items from order items
@@ -144,22 +160,30 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
     const newItems = [...assemblyItems]
     newItems[index] = { ...newItems[index], [field]: value }
 
-    // If marking as shortage, set assembled quantity to what was assembled
-    if (field === "isShortage" && value === true) {
-      const quantityShortage = newItems[index].quantityRequested - newItems[index].quantityAssembled
-      if (quantityShortage > 0 && newItems[index].quantityAssembled === newItems[index].quantityRequested) {
-        newItems[index].quantityAssembled = 0
+    // Auto-detectar faltante: si la cantidad armada es menor que la solicitada,
+    // se marca como faltante. Si es igual o mayor (productos por peso), se desmarca.
+    if (field === "quantityAssembled") {
+      const it = newItems[index]
+      const isShort = it.quantityAssembled < it.quantityRequested
+      newItems[index].isShortage = isShort
+      // Limpiar motivo y notas si ya no hay faltante
+      if (!isShort) {
+        newItems[index].shortageReason = undefined
+        newItems[index].shortageNotes = ""
       }
     }
 
-    // If unmarking shortage, reset to requested quantity
-    if (field === "isShortage" && value === false) {
-      newItems[index].quantityAssembled = newItems[index].quantityRequested
-      newItems[index].shortageReason = undefined
-      newItems[index].shortageNotes = ""
-    }
-
     setAssemblyItems(newItems)
+  }
+
+  // Botón "Faltante total" - pone la cantidad en 0 (auto-marca shortage)
+  const markAsTotalShortage = (index: number) => {
+    handleItemChange(index, "quantityAssembled", 0)
+  }
+
+  // Botón "Restablecer" - vuelve a la cantidad solicitada (auto-desmarca shortage)
+  const resetToRequested = (index: number) => {
+    handleItemChange(index, "quantityAssembled", assemblyItems[index].quantityRequested)
   }
 
   const calculateTotals = () => {
@@ -456,17 +480,18 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor={`quantity-${index}`}>
-                    {isWeightBased ? `Peso Real (${item.unitOfMeasure})` : "Cantidad Armada"}
-                  </Label>
+              <div className="space-y-2">
+                <Label htmlFor={`quantity-${index}`}>
+                  {isWeightBased ? `Peso Real (${item.unitOfMeasure})` : "Cantidad Armada"}
+                </Label>
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id={`quantity-${index}`}
                     type="number"
-                    min={isWeightBased ? "0.001" : "0"}
+                    min="0"
+                    max={isWeightBased ? undefined : item.quantityRequested}
                     step={isWeightBased ? "0.01" : "1"}
-                    value={item.quantityAssembled || ""}
+                    value={item.quantityAssembled || (item.quantityAssembled === 0 ? "0" : "")}
                     onChange={(e) => {
                       const raw = e.target.value
                       if (raw === "" || raw === "0.") {
@@ -475,29 +500,52 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                       }
                       const value = Number.parseFloat(raw)
                       if (isNaN(value)) return
-                      handleItemChange(
-                        index,
-                        "quantityAssembled",
-                        isWeightBased ? (value >= 0 ? value : 0) : (Math.round(value) || 0)
-                      )
+                      let final = isWeightBased
+                        ? Math.max(0, value)
+                        : Math.max(0, Math.round(value))
+                      // Para productos por unidad, no permitir más de lo solicitado
+                      if (!isWeightBased && final > item.quantityRequested) {
+                        final = item.quantityRequested
+                      }
+                      handleItemChange(index, "quantityAssembled", final)
                     }}
                     disabled={isLocked}
+                    className="flex-1"
                   />
-                </div>
-
-                <div className="flex items-end">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`shortage-${index}`}
-                      checked={item.isShortage}
-                      onCheckedChange={(checked) => handleItemChange(index, "isShortage", checked)}
-                      disabled={isLocked}
-                    />
-                    <Label htmlFor={`shortage-${index}`} className="font-normal">
-                      Marcar como faltante
-                    </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => markAsTotalShortage(index)}
+                      disabled={isLocked || item.quantityAssembled === 0}
+                      className="flex-1 sm:flex-none"
+                    >
+                      Faltante total
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetToRequested(index)}
+                      disabled={isLocked || item.quantityAssembled === item.quantityRequested}
+                      className="flex-1 sm:flex-none"
+                    >
+                      Restablecer
+                    </Button>
                   </div>
                 </div>
+
+                {/* Visual de faltante para productos por unidad */}
+                {!isWeightBased && item.isShortage && (
+                  <div className="flex items-center gap-2 text-sm p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>
+                      <strong>Faltante: {item.quantityRequested - item.quantityAssembled}</strong> de {item.quantityRequested} solicitados
+                      {item.quantityAssembled === 0 && " (faltante total)"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Diferencia peso/cantidad para productos pesables */}

@@ -37,6 +37,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
   const [street, setStreet] = useState("")
   const [streetNumber, setStreetNumber] = useState("")
   const [floorApt, setFloorApt] = useState("")
+  const [addressNotes, setAddressNotes] = useState("")
   const [locality, setLocality] = useState("")
   const [province, setProvince] = useState("")
   const [postalCode, setPostalCode] = useState("")
@@ -336,6 +337,7 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
         street,
         street_number: streetNumber,
         floor_apt: floorApt || null,
+        address_notes: addressNotes || null,
         locality,
         province,
         postal_code: postalCode || null,
@@ -678,6 +680,20 @@ export function NewCustomerForm({ zones, userId }: NewCustomerFormProps) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="addressNotes">Referencias de la Ubicación</Label>
+            <Input
+              id="addressNotes"
+              value={addressNotes}
+              onChange={(e) => setAddressNotes(e.target.value)}
+              placeholder="Ej: casa con rejas negras, cartel luminoso en la entrada"
+              maxLength={300}
+            />
+            <p className="text-xs text-muted-foreground">
+              Detalles que ayuden al repartidor a encontrar la dirección
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -13,7 +13,7 @@ export type OrderStatus =
 
 export type OrderPriority = "baja" | "normal" | "media" | "alta" | "urgente"
 
-export type OrderType = "web" | "presencial" | "telefono" | "whatsapp"
+export type OrderType = "web" | "presencial" | "telefono" | "whatsapp" | "local"
 
 export type CustomerType = "mayorista" | "minorista"
 
@@ -92,6 +92,7 @@ export interface Customer {
   locality: string
   province: string
   postal_code?: string
+  address_notes?: string // Referencias de la ubicación (ej: "casa rejas negras")
   latitude?: number
   longitude?: number
   legal_name?: string

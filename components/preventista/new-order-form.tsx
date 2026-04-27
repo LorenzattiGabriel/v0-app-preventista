@@ -114,8 +114,45 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState(1)
   const [customPrice, setCustomPrice] = useState<number | null>(null)
+  const [priceType, setPriceType] = useState<"mayorista" | "minorista" | "base" | "custom">("base")
   const [itemDiscount, setItemDiscount] = useState(0)
   const [itemDiscountType, setItemDiscountType] = useState<"fixed" | "percentage">("fixed")
+
+  // Auto-cargar precio al seleccionar producto, según tipo de cliente
+  useEffect(() => {
+    if (!selectedProductId) {
+      setCustomPrice(null)
+      setPriceType("base")
+      return
+    }
+    const product = products.find((p) => p.id === selectedProductId)
+    if (!product) return
+    if (selectedCustomer?.customer_type === "mayorista" && product.wholesale_price) {
+      setCustomPrice(product.wholesale_price)
+      setPriceType("mayorista")
+    } else if (selectedCustomer?.customer_type === "minorista" && product.retail_price) {
+      setCustomPrice(product.retail_price)
+      setPriceType("minorista")
+    } else {
+      setCustomPrice(product.base_price)
+      setPriceType("base")
+    }
+  }, [selectedProductId, selectedCustomer?.customer_type, products])
+
+  // Cambiar tipo de precio: actualiza el valor del precio
+  const handlePriceTypeChange = (type: "mayorista" | "minorista" | "base" | "custom") => {
+    setPriceType(type)
+    const product = products.find((p) => p.id === selectedProductId)
+    if (!product) return
+    if (type === "mayorista" && product.wholesale_price) {
+      setCustomPrice(product.wholesale_price)
+    } else if (type === "minorista" && product.retail_price) {
+      setCustomPrice(product.retail_price)
+    } else if (type === "base") {
+      setCustomPrice(product.base_price)
+    }
+    // Para "custom" no cambiamos el precio actual
+  }
 
   // Cargar configuración del depot al montar el componente
   useEffect(() => {
@@ -295,6 +332,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     setSelectedProductId("")
     setQuantity(1)
     setCustomPrice(null)
+    setPriceType("base")
     setItemDiscount(0)
     setItemDiscountType("fixed")
   }
@@ -553,6 +591,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   WhatsApp
                 </Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="local" id="local" />
+                <Label htmlFor="local" className="font-normal">
+                  En el Local
+                </Label>
+              </div>
             </RadioGroup>
 
             {/* Validación de ubicación para pedidos presenciales */}
@@ -681,6 +725,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             products={products}
             selectedProduct={selectedProduct}
             onSelect={(product) => setSelectedProductId(product?.id || "")}
+            customerType={selectedCustomer?.customer_type}
           />
 
           {/* Warning de stock del producto seleccionado */}
@@ -767,20 +812,52 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="unitPrice" className="text-sm font-medium">Precio Unit.</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="unitPrice" className="text-sm font-medium">Precio Unit.</Label>
+                {selectedProduct && (
+                  <Select
+                    value={priceType}
+                    onValueChange={(v) => handlePriceTypeChange(v as "mayorista" | "minorista" | "base" | "custom")}
+                  >
+                    <SelectTrigger className="h-7 w-[130px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedProduct.wholesale_price && (
+                        <SelectItem value="mayorista">
+                          Mayorista (${selectedProduct.wholesale_price})
+                        </SelectItem>
+                      )}
+                      {selectedProduct.retail_price && (
+                        <SelectItem value="minorista">
+                          Minorista (${selectedProduct.retail_price})
+                        </SelectItem>
+                      )}
+                      <SelectItem value="base">
+                        Base (${selectedProduct.base_price})
+                      </SelectItem>
+                      <SelectItem value="custom">Personalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
               <Input
                 id="unitPrice"
                 type="number"
                 step="0.01"
-                placeholder={
-                  selectedProduct
-                    ? selectedCustomer?.customer_type === "mayorista"
-                      ? selectedProduct.wholesale_price?.toString() || selectedProduct.base_price.toString()
-                      : selectedProduct.retail_price?.toString() || selectedProduct.base_price.toString()
-                    : "0"
-                }
+                placeholder={selectedProduct ? selectedProduct.base_price.toString() : "0"}
                 value={customPrice || ""}
-                onChange={(e) => setCustomPrice(e.target.value ? Number.parseFloat(e.target.value) : null)}
+                onChange={(e) => {
+                  const v = e.target.value ? Number.parseFloat(e.target.value) : null
+                  setCustomPrice(v)
+                  // Si edita manualmente, marcar como personalizado (salvo que coincida con un tipo conocido)
+                  if (selectedProduct && v !== null) {
+                    if (v === selectedProduct.wholesale_price) setPriceType("mayorista")
+                    else if (v === selectedProduct.retail_price) setPriceType("minorista")
+                    else if (v === selectedProduct.base_price) setPriceType("base")
+                    else setPriceType("custom")
+                  }
+                }}
                 className="h-12 text-lg"
               />
             </div>

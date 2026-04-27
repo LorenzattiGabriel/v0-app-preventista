@@ -38,6 +38,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
   const [street, setStreet] = useState(customer.street || "")
   const [streetNumber, setStreetNumber] = useState(customer.street_number || "")
   const [floorApt, setFloorApt] = useState(customer.floor_apt || "")
+  const [addressNotes, setAddressNotes] = useState(customer.address_notes || "")
   const [locality, setLocality] = useState(customer.locality || "")
   const [province, setProvince] = useState(customer.province || "")
   const [postalCode, setPostalCode] = useState(customer.postal_code || "")
@@ -318,6 +319,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
           street,
           street_number: streetNumber,
           floor_apt: floorApt || null,
+          address_notes: addressNotes || null,
           locality,
           province,
           postal_code: postalCode || null,
@@ -680,6 +682,20 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="addressNotes">Referencias de la Ubicación</Label>
+            <Input
+              id="addressNotes"
+              value={addressNotes}
+              onChange={(e) => setAddressNotes(e.target.value)}
+              placeholder="Ej: casa con rejas negras, cartel luminoso en la entrada"
+              maxLength={300}
+            />
+            <p className="text-xs text-muted-foreground">
+              Detalles que ayuden al repartidor a encontrar la dirección
+            </p>
           </div>
         </CardContent>
       </Card>

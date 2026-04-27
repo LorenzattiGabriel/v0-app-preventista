@@ -41,13 +41,45 @@ const { data: pedidos, error } = await supabase
     order_type,
     status,
     subtotal,
+    general_discount,
     total,
     requires_invoice,
     has_shortages,
+    observations,
+    payment_method,
+    payment_status,
+    has_time_restriction,
+    delivery_window_start,
+    delivery_window_end,
+    time_restriction_notes,
+    created_at,
     created_by,
     customer:customers (
       id,
-      commercial_name
+      commercial_name,
+      legal_name,
+      phone,
+      street,
+      street_number,
+      floor_apt,
+      address_notes,
+      locality,
+      province,
+      customer_type
+    ),
+    items:order_items (
+      id,
+      quantity_requested,
+      unit_price,
+      discount_amount,
+      subtotal,
+      product:products (
+        id,
+        code,
+        name,
+        brand,
+        unit_of_measure
+      )
     )
   `)
   .eq("created_by", profile.id)

@@ -15,9 +15,16 @@ interface ProductSelectorProps {
   onSelect: (product: Product | null) => void
   selectedProduct: Product | null
   disabled?: boolean
+  customerType?: "mayorista" | "minorista" | string | null
 }
 
-export function ProductSelector({ products, onSelect, selectedProduct, disabled }: ProductSelectorProps) {
+function getDisplayPrice(product: Product, customerType?: string | null): number {
+  if (customerType === "mayorista" && product.wholesale_price) return product.wholesale_price
+  if (customerType === "minorista" && product.retail_price) return product.retail_price
+  return product.base_price
+}
+
+export function ProductSelector({ products, onSelect, selectedProduct, disabled, customerType }: ProductSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState("")
 
@@ -125,7 +132,7 @@ export function ProductSelector({ products, onSelect, selectedProduct, disabled 
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          ${product.base_price.toLocaleString("es-AR")}
+                          ${getDisplayPrice(product, customerType).toLocaleString("es-AR")}
                         </span>
                       </div>
                     </CommandItem>
