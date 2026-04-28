@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -124,6 +124,9 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   // Generated route
   const [generatedRoute, setGeneratedRoute] = useState<GeneratedRoute | null>(null)
 
+  // Fuel price override: populated from microservice response, editable by admin
+  const [fuelPriceOverride, setFuelPriceOverride] = useState<string>("")
+
   // Filtered orders by zone and date
   const [availableOrders, setAvailableOrders] = useState<any[]>([])
 
@@ -196,6 +199,13 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     // Do NOT reset selectedOrderIds here - we want to keep selections across locality changes
   }, [selectedLocality, deliveryDate, pendingOrders])
   
+  // Sync fuel price override when a new route is generated
+  useEffect(() => {
+    if (generatedRoute?.costCalculation?.fuelPricePerLiter) {
+      setFuelPriceOverride(generatedRoute.costCalculation.fuelPricePerLiter.toFixed(2))
+    }
+  }, [generatedRoute])
+
   // Reset selections only when date changes (different delivery day = fresh start)
   useEffect(() => {
     setSelectedOrderIds([])
@@ -557,6 +567,23 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
       }))
     })
   }, [selectedOrderIds, availableOrders])
+
+  // Recalculate cost when admin overrides the fuel price
+  const effectiveCost = useMemo(() => {
+    if (!generatedRoute?.costCalculation) return null
+    const calc = generatedRoute.costCalculation
+    const overridePrice = parseFloat(fuelPriceOverride)
+    if (!isNaN(overridePrice) && overridePrice > 0) {
+      const newFuelCost = calc.fuelLiters * overridePrice
+      const newTotalCost = newFuelCost + calc.driverCost
+      return { ...calc, fuelPricePerLiter: overridePrice, fuelCost: newFuelCost, totalCost: newTotalCost }
+    }
+    return calc
+  }, [generatedRoute?.costCalculation, fuelPriceOverride])
+
+  const isOverridden = effectiveCost !== null &&
+    generatedRoute?.costCalculation !== null &&
+    effectiveCost.fuelPricePerLiter !== generatedRoute?.costCalculation?.fuelPricePerLiter
 
   return (
     <div className="space-y-6">
@@ -1301,25 +1328,58 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                   )}
 
                   {/* Cost Calculation */}
-                  {generatedRoute.costCalculation ? (
+                  {effectiveCost ? (
                     <div className="space-y-3 p-4 border-2 border-purple-500/30 rounded-lg bg-purple-500/5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          💰 Estimación de Costos
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          Precio combustible:{" "}
-                          <span className="font-semibold text-foreground">
-                            ${generatedRoute.costCalculation.fuelPricePerLiter.toFixed(2)}/L
-                          </span>
-                          {" "}· Fuente: Ministerio de Energía
-                        </span>
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        💰 Estimación de Costos
                       </div>
+
+                      {/* Editable fuel price */}
+                      <div className="flex items-center gap-3 p-3 rounded-lg border bg-background">
+                        <div className="flex-1 space-y-1">
+                          <Label htmlFor="fuelPriceOverride" className="text-xs text-muted-foreground">
+                            Precio combustible ($/L) · Fuente: Ministerio de Energía
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <Input
+                              id="fuelPriceOverride"
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={fuelPriceOverride}
+                              onChange={(e) => setFuelPriceOverride(e.target.value)}
+                              className="h-8 w-36 text-sm"
+                            />
+                            <span className="text-sm text-muted-foreground">/L</span>
+                            {isOverridden && (
+                              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                Modificado
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {isOverridden && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-muted-foreground h-8"
+                            onClick={() =>
+                              setFuelPriceOverride(
+                                generatedRoute.costCalculation!.fuelPricePerLiter.toFixed(2)
+                              )
+                            }
+                          >
+                            Restaurar
+                          </Button>
+                        )}
+                      </div>
+
                       {/* Total Cost */}
                       <div className="p-4 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-lg border-2 border-purple-300 dark:border-purple-700">
                         <p className="text-sm text-muted-foreground">Costo Total Estimado</p>
                         <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-                          ${generatedRoute.costCalculation.totalCost.toLocaleString('es-AR')}
+                          ${effectiveCost.totalCost.toLocaleString('es-AR')}
                         </p>
                       </div>
                       {/* Breakdown */}
@@ -1327,23 +1387,23 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                         <div className="p-3 bg-background rounded border">
                           <p className="text-xs text-muted-foreground">Combustible</p>
                           <p className="text-lg font-semibold">
-                            ${generatedRoute.costCalculation.fuelCost.toLocaleString('es-AR')}
+                            ${effectiveCost.fuelCost.toLocaleString('es-AR')}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {generatedRoute.costCalculation.fuelLiters.toFixed(1)}L @ $
-                            {generatedRoute.costCalculation.fuelPricePerLiter.toFixed(2)}/L
+                            {effectiveCost.fuelLiters.toFixed(1)}L @ $
+                            {effectiveCost.fuelPricePerLiter.toFixed(2)}/L
                           </p>
                         </div>
                         <div className="p-3 bg-background rounded border">
                           <p className="text-xs text-muted-foreground">Conductor</p>
-                          {generatedRoute.costCalculation.driverCost > 0 ? (
+                          {effectiveCost.driverCost > 0 ? (
                             <>
                               <p className="text-lg font-semibold">
-                                ${generatedRoute.costCalculation.driverCost.toLocaleString('es-AR')}
+                                ${effectiveCost.driverCost.toLocaleString('es-AR')}
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {generatedRoute.costCalculation.driverHours.toFixed(1)}hs @ $
-                                {generatedRoute.costCalculation.driverHourlyRate.toFixed(2)}/h
+                                {effectiveCost.driverHours.toFixed(1)}hs @ $
+                                {effectiveCost.driverHourlyRate.toFixed(2)}/h
                               </p>
                             </>
                           ) : (
