@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { Zone, CustomerType, IvaCondition, CustomerPriority } from '@/lib/types/database'
 import { MapPin, Loader2, AlertCircle } from 'lucide-react'
 import { useGoogleMapsScript } from '@/lib/hooks/useGoogleMapsScript'
+import { ProvinceLocalitySelector } from '@/components/shared/province-locality-selector'
 
 interface AdminNewCustomerFormProps {
   zones: Zone[]
@@ -505,48 +506,37 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="floorApt">Piso/Depto</Label>
               <Input id="floorApt" value={floorApt} onChange={(e) => setFloorApt(e.target.value)} />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="locality">
-                Localidad <span className="text-destructive">*</span>
-              </Label>
-              <Input id="locality" required value={locality} onChange={(e) => setLocality(e.target.value)} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="province">
-                Provincia <span className="text-destructive">*</span>
-              </Label>
-              <Input id="province" required value={province} onChange={(e) => setProvince(e.target.value)} />
-            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="postalCode">Código Postal</Label>
-              <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
-            </div>
+          <ProvinceLocalitySelector
+            province={province}
+            locality={locality}
+            postalCode={postalCode}
+            onProvinceChange={setProvince}
+            onLocalityChange={setLocality}
+            onPostalCodeChange={setPostalCode}
+            isGoogleMapsLoaded={isGoogleMapsLoaded}
+          />
 
-            <div className="space-y-2">
-              <Label htmlFor="zone">Zona</Label>
-              <Select value={zoneId} onValueChange={setZoneId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar zona" />
-                </SelectTrigger>
-                <SelectContent>
-                  {zones.map((zone) => (
-                    <SelectItem key={zone.id} value={zone.id}>
-                      {zone.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="zone">Zona</Label>
+            <Select value={zoneId} onValueChange={setZoneId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar zona" />
+              </SelectTrigger>
+              <SelectContent>
+                {zones.map((zone) => (
+                  <SelectItem key={zone.id} value={zone.id}>
+                    {zone.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
