@@ -18,11 +18,11 @@ interface Provincia {
 interface Localidad {
   id: string
   nombre: string
+  centroide: { lat: number; lon: number }
 }
 
 const GEOREF_BASE = "https://apis.datos.gob.ar/georef/api"
 
-// Module-level cache to avoid re-fetching on every mount
 let cachedProvincias: Provincia[] | null = null
 const localidadesCache = new Map<string, Localidad[]>()
 
@@ -70,7 +70,6 @@ export function ProvinceLocalitySelector({
   const [localidadOpen, setLocalidadOpen] = useState(false)
   const [isFetchingPostal, setIsFetchingPostal] = useState(false)
 
-  // Load provinces once
   useEffect(() => {
     if (cachedProvincias) {
       setProvincias(cachedProvincias)
@@ -91,7 +90,7 @@ export function ProvinceLocalitySelector({
       .finally(() => setIsLoadingProvincias(false))
   }, [])
 
-  // When external province changes (e.g. from Google Places autocomplete), match it
+  // Sync when province is set externally (e.g. Google Places autocomplete)
   useEffect(() => {
     if (!province || !provincias.length) return
     const match = matchProvincia(province, provincias)
@@ -107,7 +106,10 @@ export function ProvinceLocalitySelector({
       return
     }
     setIsLoadingLocalidades(true)
-    fetch(`${GEOREF_BASE}/localidades?provincia=${provinciaId}&max=1000&campos=id,nombre&orden=nombre`)
+    // Fetch centroide so we can reverse-geocode for the postal code
+    fetch(
+      `${GEOREF_BASE}/localidades?provincia=${provinciaId}&max=1000&campos=id,nombre,centroide.lat,centroide.lon&orden=nombre`
+    )
       .then((r) => r.json())
       .then((data) => {
         const sorted = [...(data.localidades as Localidad[])].sort((a, b) =>
@@ -137,19 +139,27 @@ export function ProvinceLocalitySelector({
 
     if (!isGoogleMapsLoaded || !window.google) return
 
-    const provNombre = provincias.find((p) => p.id === selectedProvinciaId)?.nombre || province
+    // Find the selected localidad to get its centroid coordinates
+    const localidad = localidades.find((l) => l.nombre === localidadNombre)
+    if (!localidad?.centroide) return
+
+    // Reverse geocode using the centroid — returns postal_code reliably
     setIsFetchingPostal(true)
     const geocoder = new google.maps.Geocoder()
     geocoder.geocode(
-      { address: `${localidadNombre}, ${provNombre}, Argentina` },
+      { location: { lat: localidad.centroide.lat, lng: localidad.centroide.lon } },
       (results, status) => {
         setIsFetchingPostal(false)
-        if (status === "OK" && results?.[0]) {
-          const postalComponent = results[0].address_components.find((c) =>
-            c.types.includes("postal_code")
-          )
-          if (postalComponent) {
-            onPostalCodeChange(postalComponent.long_name)
+        if (status === "OK" && results) {
+          // Search all results for a postal_code component (most specific first)
+          for (const result of results) {
+            const postalComponent = result.address_components.find((c) =>
+              c.types.includes("postal_code")
+            )
+            if (postalComponent) {
+              onPostalCodeChange(postalComponent.long_name)
+              return
+            }
           }
         }
       }
