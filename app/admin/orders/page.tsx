@@ -116,7 +116,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                   Pendientes de Facturación
                 </p>
                 <p className="text-sm text-orange-700 dark:text-orange-300">
-                  Mostrando pedidos entregados que requieren factura ({totalCount})
+                  Pedidos armados o entregados que requieren factura ({totalCount})
                 </p>
               </div>
               <Button variant="outline" size="sm" asChild className="ml-auto shrink-0">

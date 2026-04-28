@@ -77,11 +77,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const productStats = await productsService.getProductStats()
   const stockAlertsCount = productStats.lowStockProducts + productStats.outOfStockProducts
 
-  // Get pending billing count (delivered orders that require an invoice)
+  // Get pending billing count: assembled orders that require an invoice (PENDIENTE_ENTREGA, EN_REPARTICION, ENTREGADO)
   const { count: pendingBillingCount } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
-    .eq("status", "ENTREGADO")
+    .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION", "ENTREGADO"])
     .eq("requires_invoice", true)
 
   return (
@@ -247,11 +247,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </span>
                   ) : null}
                 </CardTitle>
-                <CardDescription className="text-xs md:text-sm">Pedidos entregados pendientes de factura</CardDescription>
+                <CardDescription className="text-xs md:text-sm">Pedidos armados o entregados pendientes de factura</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/orders?status=ENTREGADO&requires_invoice=true">
+                  <Link href="/admin/orders?requires_invoice=true">
                     <Receipt className="mr-2 h-4 w-4" />
                     {pendingBillingCount
                       ? `Ver Pendientes (${pendingBillingCount})`
