@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { ArrowLeft, Package, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Package, AlertTriangle, Receipt } from 'lucide-react'
 import { createDelayedOrdersService } from '@/lib/services/delayedOrdersService'
 import { OrdersFilters } from '@/components/admin/orders-filters'
 import { OrdersList } from '@/components/admin/orders-list'
@@ -15,6 +15,7 @@ interface SearchParams {
   priority?: string
   search?: string
   page?: string
+  requires_invoice?: string
 }
 
 interface PageProps {
@@ -56,6 +57,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
     priority: params.priority,
     search: params.search,
     page: params.page ? parseInt(params.page) : 1,
+    requires_invoice: params.requires_invoice === 'true' ? true : undefined,
   })
 
   // Fetch statistics
@@ -104,6 +106,24 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
               </Button>
             )}
           </div>
+
+          {/* Billing filter banner */}
+          {params.requires_invoice === 'true' && (
+            <div className="flex items-center gap-3 p-4 rounded-lg border-2 border-orange-300 bg-orange-50 dark:bg-orange-950 dark:border-orange-700">
+              <Receipt className="h-5 w-5 text-orange-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-orange-800 dark:text-orange-200">
+                  Pendientes de Facturación
+                </p>
+                <p className="text-sm text-orange-700 dark:text-orange-300">
+                  Mostrando pedidos entregados que requieren factura ({totalCount})
+                </p>
+              </div>
+              <Button variant="outline" size="sm" asChild className="ml-auto shrink-0">
+                <Link href="/admin/orders">Ver todos</Link>
+              </Button>
+            </div>
+          )}
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-5">

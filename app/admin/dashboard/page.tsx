@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
 import { LogoutButton } from "@/components/logout-button"
@@ -76,6 +76,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const productsService = createProductsService(supabase)
   const productStats = await productsService.getProductStats()
   const stockAlertsCount = productStats.lowStockProducts + productStats.outOfStockProducts
+
+  // Get pending billing count (delivered orders that require an invoice)
+  const { count: pendingBillingCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "ENTREGADO")
+    .eq("requires_invoice", true)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -224,6 +231,31 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   <Link href="/admin/reports">
                     <FileText className="mr-2 h-4 w-4" />
                     Ver Reportes
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className={pendingBillingCount ? "border-orange-300 dark:border-orange-700" : ""}>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  Facturación
+                  {pendingBillingCount ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                      {pendingBillingCount}
+                    </span>
+                  ) : null}
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">Pedidos entregados pendientes de factura</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/orders?status=ENTREGADO&requires_invoice=true">
+                    <Receipt className="mr-2 h-4 w-4" />
+                    {pendingBillingCount
+                      ? `Ver Pendientes (${pendingBillingCount})`
+                      : "Sin Pendientes"}
                   </Link>
                 </Button>
               </CardContent>

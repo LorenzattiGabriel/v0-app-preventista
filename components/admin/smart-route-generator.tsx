@@ -983,6 +983,11 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  El precio por litro se obtiene en tiempo real del{" "}
+                  <span className="font-medium">Ministerio de Energía de la Nación</span> al generar la ruta,
+                  usando el producto &quot;{FUEL_TYPES[fuelType].apiProduct}&quot;.
+                </p>
               </div>
 
               {/* Driver Salary (Optional) */}
@@ -1298,8 +1303,17 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                   {/* Cost Calculation */}
                   {generatedRoute.costCalculation ? (
                     <div className="space-y-3 p-4 border-2 border-purple-500/30 rounded-lg bg-purple-500/5">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        💰 Estimación de Costos
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          💰 Estimación de Costos
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          Precio combustible:{" "}
+                          <span className="font-semibold text-foreground">
+                            ${generatedRoute.costCalculation.fuelPricePerLiter.toFixed(2)}/L
+                          </span>
+                          {" "}· Fuente: Ministerio de Energía
+                        </span>
                       </div>
                       {/* Total Cost */}
                       <div className="p-4 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-lg border-2 border-purple-300 dark:border-purple-700">

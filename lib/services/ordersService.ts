@@ -9,6 +9,7 @@ export interface OrderFilters {
   priority?: string
   search?: string
   page?: number
+  requires_invoice?: boolean
 }
 
 /**
@@ -32,7 +33,7 @@ export class OrdersService {
    * Fetch orders with filters and pagination
    */
   async getOrders(filters: OrderFilters = {}): Promise<PaginatedOrders> {
-    const { status, priority, search, page = 1 } = filters
+    const { status, priority, search, page = 1, requires_invoice } = filters
     const from = (page - 1) * ORDERS_PER_PAGE
     const to = from + ORDERS_PER_PAGE - 1
 
@@ -55,7 +56,7 @@ export class OrdersService {
       )
 
     // Apply filters
-    query = this.applyFilters(query, { status, priority, search })
+    query = this.applyFilters(query, { status, priority, search, requires_invoice })
 
     // Execute query with pagination
     const { data: orders, error, count } = await query
@@ -98,7 +99,7 @@ export class OrdersService {
    * Apply filters to query
    */
   private applyFilters(query: any, filters: Omit<OrderFilters, 'page'>) {
-    const { status, priority, search } = filters
+    const { status, priority, search, requires_invoice } = filters
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
@@ -106,6 +107,10 @@ export class OrdersService {
 
     if (priority && priority !== 'all') {
       query = query.eq('priority', priority)
+    }
+
+    if (requires_invoice !== undefined) {
+      query = query.eq('requires_invoice', requires_invoice)
     }
 
     if (search && search.trim()) {
