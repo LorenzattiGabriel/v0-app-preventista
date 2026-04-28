@@ -499,11 +499,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       return
     }
 
-    // 🆕 Validate delivery evidence (photo + name)
-    if (!deliveryPhoto) {
-      setError("Debe tomar una foto de la entrega")
-      return
-    }
+    // Validate delivery evidence
     if (!receivedByName.trim()) {
       setError("Debe ingresar el nombre de quien recibió el pedido")
       return
@@ -1575,10 +1571,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 {/* 🆕 Delivery Photo Evidence */}
                 <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
                   <Label className="font-bold text-blue-900 dark:text-blue-100">
-                    📸 Foto de Entrega *
+                    📸 Foto de Entrega <span className="font-normal text-blue-600 dark:text-blue-400">(opcional)</span>
                   </Label>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                    Toma una foto del pedido entregado
+                    Podés tomar una foto del pedido entregado como respaldo
                   </p>
                   <CameraCapture onCapture={handlePhotoCapture} />
                   {photoPreview && (
