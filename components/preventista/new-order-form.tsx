@@ -1086,12 +1086,22 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         </CardContent>
       </Card>
 
+      {/* Aviso cuando no hay items */}
+      {orderItems.length === 0 && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            Tenés que agregar al menos un producto para poder guardar el pedido.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Botones de acción - stack vertical en móvil */}
       <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
         <Button
           variant="outline"
           onClick={() => handleSaveOrder(true)}
-          disabled={isLoading}
+          disabled={isLoading || orderItems.length === 0}
           className="h-12 sm:h-10"
         >
           <Save className="mr-2 h-4 w-4" />
@@ -1099,7 +1109,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
         </Button>
         <Button
           onClick={() => handleSaveOrder(false)}
-          disabled={isLoading}
+          disabled={isLoading || orderItems.length === 0}
           size="lg"
           className="h-12 sm:h-10 font-semibold"
         >

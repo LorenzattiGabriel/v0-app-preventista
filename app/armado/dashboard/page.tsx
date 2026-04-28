@@ -48,10 +48,18 @@ export default async function ArmadoDashboardPage() {
     o.assembly_completed_at?.startsWith(today)
   );
 
-  const pending = safeOrders.filter(o => o.status === "PENDIENTE_ARMADO");
-  const inProgress = safeOrders.filter(o => o.status === "EN_ARMADO");
+  // Pendientes: solo los visibles para este armador
+  // - Asignados a mí
+  // - Sin asignar (cualquier armador puede tomarlos)
+  // Excluye los asignados a OTROS armadores
+  const allPending = safeOrders.filter(o => o.status === "PENDIENTE_ARMADO");
+  const assignedToMe = allPending.filter(o => o.assembled_by === user.id);
+  const unassigned = allPending.filter(o => !o.assembled_by);
+  const pending = [...assignedToMe, ...unassigned]; // visible total
 
-  // Detectar pedidos fusionables del mismo cliente
+  const inProgress = safeOrders.filter(o => o.status === "EN_ARMADO" && o.assembled_by === user.id);
+
+  // Detectar pedidos fusionables del mismo cliente (solo entre los visibles)
   const mergeableGroups = findMergeableGroups(pending);
 
   const priorityColors = {
@@ -136,18 +144,30 @@ export default async function ArmadoDashboardPage() {
             </CardHeader>
             <CardContent>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Pendientes - con paginación */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Asignados a mí */}
                 <PaginatedOrdersList
-                  orders={pending}
+                  orders={assignedToMe}
                   userId={user.id}
                   itemsPerPage={10}
-                  title="Pendientes"
-                  emptyMessage="No hay pedidos pendientes"
+                  title={`📌 Asignados a mí (${assignedToMe.length})`}
+                  emptyMessage="No tenés pedidos asignados"
                   variant="pending"
                 />
 
-                {/* En Proceso - con paginación */}
+                {/* Sin asignar - cualquiera puede tomarlos */}
+                <PaginatedOrdersList
+                  orders={unassigned}
+                  userId={user.id}
+                  itemsPerPage={10}
+                  title={`Sin asignar (${unassigned.length})`}
+                  emptyMessage="No hay pedidos sin asignar"
+                  variant="pending"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                {/* En Proceso (mis pedidos en armado) */}
                 <PaginatedOrdersList
                   orders={inProgress}
                   userId={user.id}
@@ -157,7 +177,7 @@ export default async function ArmadoDashboardPage() {
                   variant="inProgress"
                 />
 
-                {/* Terminados Hoy - con paginación */}
+                {/* Terminados Hoy */}
                 <PaginatedOrdersList
                   orders={finishedToday}
                   userId={user.id}

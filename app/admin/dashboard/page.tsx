@@ -200,6 +200,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/orders?status=PENDIENTE_ENTREGA">Pedidos Pendientes</Link>
                 </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/orders/assign">Asignar a Armadores</Link>
+                </Button>
                 {delayedOrdersCount > 0 && (
                   <Button asChild variant="destructive" className="w-full">
                     <Link href="/admin/orders/delayed">

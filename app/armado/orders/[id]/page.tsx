@@ -43,8 +43,41 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
     redirect("/armado/dashboard")
   }
 
+  // 🆕 Bloquear acceso si está PRE-ASIGNADO a otro armador
+  // (PENDIENTE_ARMADO + assembled_by != current_user)
+  if (
+    order.status === "PENDIENTE_ARMADO" &&
+    order.assembled_by &&
+    order.assembled_by !== user.id
+  ) {
+    const { data: assignedUser } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", order.assembled_by)
+      .single()
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full bg-yellow-50 border border-yellow-300 rounded-lg p-6 text-center">
+          <h2 className="text-lg font-semibold text-yellow-900 mb-2">
+            Pedido asignado a otro armador
+          </h2>
+          <p className="text-sm text-yellow-800">
+            Este pedido fue asignado a <strong>{assignedUser?.full_name || "otro armador"}</strong>.
+            Solo el administrador puede reasignarlo.
+          </p>
+          <a
+            href="/armado/dashboard"
+            className="inline-block mt-4 px-4 py-2 bg-yellow-700 text-white rounded-md text-sm hover:bg-yellow-800"
+          >
+            Volver al dashboard
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   // 🆕 CRITICAL-1: Auto-lock order when opened
-  // If order is PENDIENTE_ARMADO, change to EN_ARMADO and assign to current user
+  // If order is PENDIENTE_ARMADO (sin asignar O asignado a mí mismo), change to EN_ARMADO
   if (order.status === "PENDIENTE_ARMADO") {
     const { error: lockError } = await supabase
       .from("orders")

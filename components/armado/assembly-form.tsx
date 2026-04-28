@@ -16,6 +16,7 @@ import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download
 import Link from "next/link"
 import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
+import { releaseOrderAction } from "@/app/armado/actions"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +43,7 @@ interface AssemblyItem {
   discount: number
   allowsDecimalQuantity: boolean
   unitOfMeasure: string
+  weight: number | null // peso unitario en kg (del producto)
 }
 
 interface AssemblyFormProps {
@@ -111,43 +113,24 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
       discount: item.discount,
       allowsDecimalQuantity: item.products.allows_decimal_quantity || false,
       unitOfMeasure: item.products.unit_of_measure || "unidad",
+      weight: item.products.weight ? Number(item.products.weight) : null,
     })),
   )
 
   const [assemblyNotes, setAssemblyNotes] = useState(order.assembly_notes || "")
   const [startTime] = useState(order.assembly_started_at || new Date().toISOString())
 
-  // 🆕 CRITICAL-2: Release order function
+  // 🆕 CRITICAL-2: Release order function (vía server action con revalidatePath)
   const handleReleaseOrder = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const supabase = createClient()
-
-      // Change status back to PENDIENTE_ARMADO and clear assembled_by
-      const { error: releaseError } = await supabase
-        .from("orders")
-        .update({
-          status: "PENDIENTE_ARMADO",
-          assembled_by: null,
-          assembly_started_at: null,
-        })
-        .eq("id", order.id)
-
-      if (releaseError) throw releaseError
-
-      // Create history entry
-      await supabase.from("order_history").insert({
-        order_id: order.id,
-        previous_status: "EN_ARMADO",
-        new_status: "PENDIENTE_ARMADO",
-        changed_by: userId,
-        change_reason: "Pedido liberado por el armador",
-      })
-
+      const result = await releaseOrderAction(order.id)
+      if (result.error) {
+        throw new Error(result.error)
+      }
       router.push("/armado/dashboard")
-      router.refresh()
     } catch (err) {
       console.error("[v0] Error releasing order:", err)
       setError(err instanceof Error ? err.message : "Error al liberar el pedido")
@@ -471,6 +454,13 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                     {isWeightBased ? ` ${item.unitOfMeasure}` : ""} | Precio: ${item.unitPrice.toFixed(2)}
                     {isWeightBased ? `/${item.unitOfMeasure}` : ""}
                   </p>
+                  {/* Referencia de peso para productos por unidad */}
+                  {!isWeightBased && item.weight && item.weight > 0 && (
+                    <p className="text-xs text-muted-foreground italic">
+                      Peso aprox.: {(item.quantityRequested * item.weight).toFixed(2)} kg
+                      <span className="opacity-70"> ({item.weight.toFixed(2)} kg c/u)</span>
+                    </p>
+                  )}
                 </div>
                 {item.isShortage && (
                   <Badge variant="destructive">
@@ -653,6 +643,39 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
               </div>
             )}
           </div>
+
+          {/* Resumen de peso del pedido (solicitado vs armado) */}
+          {(() => {
+            // Solo cuenta items con peso configurado y que NO son por kg (los de kg ya tienen el peso como cantidad)
+            const itemsWithWeight = assemblyItems.filter(
+              (i) => !i.allowsDecimalQuantity && i.weight && i.weight > 0,
+            )
+            if (itemsWithWeight.length === 0) return null
+            const requestedKg = itemsWithWeight.reduce(
+              (sum, i) => sum + i.quantityRequested * (i.weight || 0),
+              0,
+            )
+            const assembledKg = itemsWithWeight.reduce(
+              (sum, i) => sum + i.quantityAssembled * (i.weight || 0),
+              0,
+            )
+            return (
+              <div className="space-y-1 pt-2 border-t">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Peso solicitado:</span>
+                  <span className="font-medium">{requestedKg.toFixed(2)} kg</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Peso armado:</span>
+                  <span className="font-medium">{assembledKg.toFixed(2)} kg</span>
+                </div>
+                <p className="text-xs text-muted-foreground italic">
+                  Estimación basada en el peso unitario de {itemsWithWeight.length}{" "}
+                  {itemsWithWeight.length === 1 ? "producto" : "productos"} con peso configurado
+                </p>
+              </div>
+            )
+          })()}
 
           {hasShortages && (
             <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-md">

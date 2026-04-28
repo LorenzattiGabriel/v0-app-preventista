@@ -237,14 +237,24 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   }
 
   let assembledTotal = 0
+  let totalWeightRequested = 0
+  let totalWeightAssembled = 0
   items.forEach((item: any) => {
     const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 35)
-    const quantityRequested = item.quantity_requested || 0
-    const quantityAssembled = resolveAssembled(item)
+    const quantityRequested = Number(item.quantity_requested) || 0
+    const quantityAssembled = Number(resolveAssembled(item)) || 0
     const lineTotal = item.unit_price * quantityAssembled - (item.discount || 0)
     const price = Math.max(0, lineTotal).toFixed(2)
     assembledTotal += Math.max(0, lineTotal)
     const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
+
+    // Peso unitario del producto (excluye productos por kg, donde la cantidad ya es peso)
+    const allowsDecimal = item.products.allows_decimal_quantity === true
+    const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+    if (unitWeight > 0) {
+      totalWeightRequested += quantityRequested * unitWeight
+      totalWeightAssembled += quantityAssembled * unitWeight
+    }
 
     if (yPos > 265) {
       doc.addPage()
@@ -269,6 +279,20 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
       const faltante = quantityRequested - quantityAssembled
       const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
       doc.text(`  Faltante: ${faltante}${motivo}`, col1, yPos)
+      doc.setFontSize(9)
+      doc.setTextColor(0)
+    }
+
+    // Línea de peso aproximado (si el producto tiene peso configurado)
+    if (unitWeight > 0) {
+      yPos += 4
+      doc.setFontSize(8)
+      doc.setTextColor(120)
+      doc.text(
+        `  Peso aprox.: ${(quantityAssembled * unitWeight).toFixed(2)} kg (${unitWeight.toFixed(2)} kg c/u)`,
+        col1,
+        yPos,
+      )
       doc.setFontSize(9)
       doc.setTextColor(0)
     }
@@ -312,6 +336,31 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   doc.setFontSize(11)
   doc.text(`TOTAL: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 10
+
+  // --- Peso del pedido (solo si hay productos con peso configurado) ---
+  if (totalWeightRequested > 0 || totalWeightAssembled > 0) {
+    doc.setFontSize(9)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(80, 80, 80)
+    if (Math.abs(totalWeightRequested - totalWeightAssembled) > 0.01) {
+      doc.text(
+        `Peso solicitado: ${totalWeightRequested.toFixed(2)} kg`,
+        pageWidth - margin,
+        yPos,
+        { align: "right" },
+      )
+      yPos += 5
+    }
+    doc.setTextColor(0)
+    doc.setFont("helvetica", "bold")
+    doc.text(
+      `Peso armado: ${totalWeightAssembled.toFixed(2)} kg`,
+      pageWidth - margin,
+      yPos,
+      { align: "right" },
+    )
+    yPos += 8
+  }
 
   // --- Status ---
   const hasShortages = order.has_shortages === true || items.some((item: any) => {

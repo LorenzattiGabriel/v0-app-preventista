@@ -111,6 +111,8 @@ export async function POST(request: Request) {
     }
 
     // 4. Consolidate items: same product = sum quantities, use lower price
+    // IMPORTANTE: Supabase puede devolver columnas DECIMAL como strings.
+    // Forzamos coerción a Number para evitar concatenación al sumar.
     const consolidatedItems = new Map<
       string,
       {
@@ -122,31 +124,37 @@ export async function POST(request: Request) {
       }
     >()
 
+    const toNum = (v: any) => {
+      const n = typeof v === "number" ? v : parseFloat(v)
+      return Number.isFinite(n) ? n : 0
+    }
+
     for (const item of allItems || []) {
+      const qty = toNum(item.quantity_requested)
+      const price = toNum(item.unit_price)
+      const disc = toNum(item.discount)
+
       const existing = consolidatedItems.get(item.product_id)
       if (existing) {
-        existing.quantity_requested += item.quantity_requested
-        // Use lower unit price
-        existing.unit_price = Math.min(existing.unit_price, item.unit_price)
+        existing.quantity_requested += qty
+        // Use lower unit price (decisión de negocio: favorecer al cliente)
+        existing.unit_price = Math.min(existing.unit_price, price)
         // Sum discounts
-        existing.discount += item.discount
-        // Recalculate subtotal
-        existing.subtotal =
-          existing.quantity_requested * existing.unit_price - existing.discount
+        existing.discount += disc
       } else {
         consolidatedItems.set(item.product_id, {
           product_id: item.product_id,
-          quantity_requested: item.quantity_requested,
-          unit_price: item.unit_price,
-          discount: item.discount || 0,
-          subtotal: item.subtotal,
+          quantity_requested: qty,
+          unit_price: price,
+          discount: disc,
+          subtotal: 0, // se recalcula abajo
         })
       }
     }
 
-    // Recalculate subtotals properly
+    // Recalculate subtotals con los valores ya consolidados
     for (const item of consolidatedItems.values()) {
-      item.subtotal = item.quantity_requested * item.unit_price - item.discount
+      item.subtotal = Math.max(0, item.quantity_requested * item.unit_price - item.discount)
     }
 
     // 5. Resolve conflicts
@@ -201,29 +209,33 @@ export async function POST(request: Request) {
     // Requires invoice: if any order requires it
     const requiresInvoice = orders.some((o) => o.requires_invoice)
 
-    // Calculate new totals
+    // Calculate new totals (con coerción defensiva para columnas DECIMAL)
     const newSubtotal = Array.from(consolidatedItems.values()).reduce(
       (sum, item) => sum + item.subtotal,
       0
     )
     // Sum general discounts from all orders
     const newGeneralDiscount = orders.reduce(
-      (sum, o) => sum + (o.general_discount || 0),
+      (sum, o) => sum + toNum(o.general_discount),
       0
     )
-    const newTotal = newSubtotal - newGeneralDiscount
+    const newTotal = Math.max(0, newSubtotal - newGeneralDiscount)
 
-    // 6. Delete existing items of surviving order
-    const { error: deleteItemsError } = await supabase
-      .from("order_items")
-      .delete()
-      .eq("order_id", survivingOrder.id)
+    // 6. Delete originales por ID específico (más seguro que por order_id)
+    const originalItemIds = (allItems || []).map((i) => i.id).filter(Boolean)
+    if (originalItemIds.length > 0) {
+      const { error: deleteItemsError } = await supabase
+        .from("order_items")
+        .delete()
+        .in("id", originalItemIds)
 
-    if (deleteItemsError) {
-      return NextResponse.json(
-        { error: "Error al actualizar items del pedido" },
-        { status: 500 }
-      )
+      if (deleteItemsError) {
+        console.error("[merge] Error deleting original items:", deleteItemsError)
+        return NextResponse.json(
+          { error: "Error al eliminar items originales" },
+          { status: 500 }
+        )
+      }
     }
 
     // 7. Insert consolidated items for surviving order
@@ -238,14 +250,33 @@ export async function POST(request: Request) {
       is_substituted: false,
     }))
 
+    console.log(
+      `[merge] Consolidating ${allItems?.length || 0} items into ${newItems.length} unique products for order ${survivingOrder.order_number}`,
+    )
+
     if (newItems.length > 0) {
-      const { error: insertError } = await supabase
+      const { data: insertedItems, error: insertError } = await supabase
         .from("order_items")
         .insert(newItems)
+        .select("id")
 
       if (insertError) {
+        console.error("[merge] Error inserting consolidated items:", insertError)
         return NextResponse.json(
-          { error: "Error al insertar items consolidados" },
+          { error: `Error al insertar items consolidados: ${insertError.message}` },
+          { status: 500 }
+        )
+      }
+
+      // Validar que se insertaron todos los items consolidados
+      if (!insertedItems || insertedItems.length !== newItems.length) {
+        console.error(
+          `[merge] Item count mismatch: expected ${newItems.length}, got ${insertedItems?.length || 0}`,
+        )
+        return NextResponse.json(
+          {
+            error: `Solo se insertaron ${insertedItems?.length || 0} de ${newItems.length} items. Reverta y reintente.`,
+          },
           { status: 500 }
         )
       }
@@ -266,34 +297,33 @@ export async function POST(request: Request) {
         delivery_window_start: deliveryWindowStart,
         delivery_window_end: deliveryWindowEnd,
         time_restriction_notes: timeRestrictionNotes,
-        merged_from: absorbedIds,
+        // Preservar histórico de fusiones previas
+        merged_from: [...(survivingOrder.merged_from || []), ...absorbedIds],
         status: "PENDIENTE_ARMADO",
       })
       .eq("id", survivingOrder.id)
 
     if (updateError) {
+      console.error("[merge] Error updating surviving order:", updateError)
       return NextResponse.json(
         { error: "Error al actualizar pedido principal" },
         { status: 500 }
       )
     }
 
-    // 9. Cancel absorbed orders
+    // 9. Cancel absorbed orders (sus items ya fueron borrados en paso 6)
     for (const absorbed of absorbedOrders) {
-      // Delete items of absorbed order
-      await supabase
-        .from("order_items")
-        .delete()
-        .eq("order_id", absorbed.id)
-
-      // Update absorbed order status
-      await supabase
+      const { error: cancelError } = await supabase
         .from("orders")
         .update({
           status: "CANCELADO",
           observations: `Fusionado en ${survivingOrder.order_number}. ${absorbed.observations || ""}`.trim(),
         })
         .eq("id", absorbed.id)
+
+      if (cancelError) {
+        console.error(`[merge] Error cancelling absorbed order ${absorbed.order_number}:`, cancelError)
+      }
 
       // Create history entry for absorbed order
       await supabase.from("order_date_changes").insert({
