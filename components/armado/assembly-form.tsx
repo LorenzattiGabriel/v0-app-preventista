@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { ShortageReason } from "@/lib/types/database"
 import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download } from "lucide-react"
 import Link from "next/link"
-import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
+import { downloadAssemblyReceipt, generateAssemblyReceipt } from "@/lib/receipt-generator"
+import { shareOnWhatsApp } from "@/lib/share-utils"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import { releaseOrderAction } from "@/app/armado/actions"
 import {
@@ -62,17 +63,31 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [assembledOrder, setAssembledOrder] = useState<any>(null)
 
-  // 🆕 Enviar comprobante de armado por WhatsApp (solo mensaje)
+  // Enviar comprobante de armado por WhatsApp adjuntando el PDF
   const handleSendWhatsAppAssembly = () => {
-    const phone = order.customers?.phone?.replace(/\D/g, '') || ''
+    const phone = order.customers?.phone || ''
     const customerName = order.customers?.commercial_name || order.customers?.name || 'Cliente'
     const message = `Hola ${customerName}, le informamos que su pedido #${order.order_number} ha sido armado y está listo para ser despachado. ¡Gracias por su compra!`
-    
-    const url = phone 
-      ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`
-    
-    window.open(url, '_blank')
+
+    // Construir el mismo order que se usa para el PDF
+    const orderForReceipt = {
+      ...order,
+      total: assembledOrder?.total ?? order.total,
+      has_shortages: assembledOrder?.hasShortages ?? false,
+      order_items: order.order_items.map((item: any) => {
+        const assembled = assemblyItems.find((a) => a.id === item.id)
+        if (!assembled) return item
+        return {
+          ...item,
+          quantity_assembled: assembled.quantityAssembled,
+          is_shortage: assembled.isShortage,
+          shortage_reason: assembled.shortageReason,
+        }
+      }),
+    }
+
+    const blob = generateAssemblyReceipt(orderForReceipt).output('blob') as Blob
+    shareOnWhatsApp(phone, order.order_number, blob, message)
   }
 
   // 🆕 Descargar PDF - usar los items armados localmente (reflejan faltantes y total real)

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, AlertTriangle, CheckCircle } from "lucide-react"
+import { DownloadAssemblyReceiptButton } from "@/components/armado/download-assembly-receipt-button"
 
 export default async function Detalle({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -55,12 +56,15 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
       
-      {/* ---- Botón Volver ---- */}
-      <Button variant="outline" asChild>
-        <Link href="/armado/dashboard">
-          <ArrowLeft className="h-4 w-4 mr-2" /> Volver
-        </Link>
-      </Button>
+      {/* ---- Botón Volver + Descargar ---- */}
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" asChild>
+          <Link href="/armado/dashboard">
+            <ArrowLeft className="h-4 w-4 mr-2" /> Volver
+          </Link>
+        </Button>
+        <DownloadAssemblyReceiptButton order={order} />
+      </div>
 
       {/* ---- Información del Pedido ---- */}
       <Card>

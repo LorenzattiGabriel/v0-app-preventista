@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, FileText, MessageCircle } from "lucide-react"
-import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
+import { downloadAssemblyReceipt, getAssemblyReceiptBlob } from "@/lib/receipt-generator"
+import { shareOnWhatsApp } from "@/lib/share-utils"
 import { toast } from "sonner"
 
 interface PaginatedOrdersListProps {
@@ -110,21 +111,29 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
       }
     }
 
-    const handleSendWhatsApp = () => {
-      const phone = order.customers?.phone?.replace(/\D/g, "") || ""
+    const handleSendWhatsApp = async () => {
+      const phone = order.customers?.phone || ""
       if (!phone) {
         toast.error("El cliente no tiene teléfono registrado")
         return
       }
-      
+
       const message = `Hola ${order.customers?.commercial_name}! 👋\n\n` +
         `Su pedido #${order.order_number} ha sido armado y está listo para ser despachado.\n\n` +
         `📦 Total: $${order.total?.toFixed(2) || "0.00"}\n` +
         (isIncomplete ? `⚠️ Nota: Hubo algunos productos faltantes.\n` : "") +
         `\nGracias por su compra! 🙏`
-      
-      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
-      window.open(whatsappUrl, "_blank")
+
+      try {
+        const response = await fetch(`/api/orders/${order.id}`)
+        if (!response.ok) throw new Error()
+        const fullOrder = await response.json()
+        const blob = getAssemblyReceiptBlob(fullOrder)
+        shareOnWhatsApp(phone, order.order_number, blob, message)
+      } catch {
+        // Si falla la obtención del PDF, compartir solo el mensaje
+        shareOnWhatsApp(phone, order.order_number, null, message)
+      }
     }
 
     return (
