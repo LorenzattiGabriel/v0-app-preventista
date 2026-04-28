@@ -715,7 +715,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
                 id="creditDays"
                 type="number"
                 min="0"
-                value={creditDays}
+                value={creditDays || ""}
                 onChange={(e) => setCreditDays(Number.parseInt(e.target.value) || 0)}
               />
             </div>
@@ -727,7 +727,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
                 type="number"
                 step="0.01"
                 min="0"
-                value={creditLimit}
+                value={creditLimit || ""}
                 onChange={(e) => setCreditLimit(Number.parseFloat(e.target.value) || 0)}
               />
             </div>
@@ -740,7 +740,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
                 step="0.01"
                 min="0"
                 max="30"
-                value={generalDiscount}
+                value={generalDiscount || ""}
                 onChange={(e) => setGeneralDiscount(Number.parseFloat(e.target.value) || 0)}
               />
             </div>

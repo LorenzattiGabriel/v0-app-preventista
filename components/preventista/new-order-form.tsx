@@ -873,7 +873,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   step="0.01"
                   min="0"
                   max={itemDiscountType === "percentage" ? 100 : undefined}
-                  value={itemDiscount}
+                  value={itemDiscount || ""}
                   onChange={(e) => setItemDiscount(Number.parseFloat(e.target.value) || 0)}
                   className="h-12 text-lg flex-1"
                 />
@@ -1027,7 +1027,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 step="0.01"
                 min="0"
                 max={discountType === "percentage" ? 100 : undefined}
-                value={generalDiscount}
+                value={generalDiscount || ""}
                 onChange={(e) => setGeneralDiscount(Number.parseFloat(e.target.value) || 0)}
                 className="flex-1"
               />
