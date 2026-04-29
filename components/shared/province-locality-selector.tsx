@@ -51,6 +51,8 @@ export interface ProvinceLocalitySelectorProps {
   onLocalityChange: (locality: string) => void
   onPostalCodeChange: (postalCode: string) => void
   isGoogleMapsLoaded?: boolean
+  provinceError?: string
+  localityError?: string
 }
 
 export function ProvinceLocalitySelector({
@@ -61,6 +63,8 @@ export function ProvinceLocalitySelector({
   onLocalityChange,
   onPostalCodeChange,
   isGoogleMapsLoaded,
+  provinceError,
+  localityError,
 }: ProvinceLocalitySelectorProps) {
   const [provincias, setProvincias] = useState<Provincia[]>(cachedProvincias ?? [])
   const [localidades, setLocalidades] = useState<Localidad[]>([])
@@ -181,7 +185,7 @@ export function ProvinceLocalitySelector({
             </div>
           ) : (
             <Select value={selectedProvinciaId} onValueChange={handleProvinciaChange}>
-              <SelectTrigger id="province-select">
+              <SelectTrigger id="province-select" className={provinceError ? "border-destructive" : ""}>
                 <SelectValue placeholder="Seleccionar provincia" />
               </SelectTrigger>
               <SelectContent>
@@ -193,6 +197,7 @@ export function ProvinceLocalitySelector({
               </SelectContent>
             </Select>
           )}
+          {provinceError && <p className="text-xs text-destructive">{provinceError}</p>}
         </div>
 
         {/* Localidad */}
@@ -207,7 +212,7 @@ export function ProvinceLocalitySelector({
                 role="combobox"
                 aria-expanded={localidadOpen}
                 disabled={!selectedProvinciaId || isLoadingLocalidades}
-                className="w-full justify-between font-normal h-10"
+                className={`w-full justify-between font-normal h-10 ${localityError ? "border-destructive" : ""}`}
               >
                 {isLoadingLocalidades ? (
                   <span className="flex items-center gap-2 text-muted-foreground">
@@ -250,6 +255,7 @@ export function ProvinceLocalitySelector({
               </Command>
             </PopoverContent>
           </Popover>
+          {localityError && <p className="text-xs text-destructive">{localityError}</p>}
         </div>
       </div>
 

@@ -28,6 +28,7 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
   const isGoogleMapsLoaded = useGoogleMapsScript()
 
@@ -262,21 +263,23 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
     setError(null)
     setSuccess(false)
 
-    // Validate required fields
-    const missingFields: string[] = []
-    if (!commercialName.trim()) missingFields.push("Nombre Comercial")
-    if (!contactName.trim()) missingFields.push("Nombre de Contacto")
-    if (!phone.trim()) missingFields.push("Teléfono")
-    if (!street.trim()) missingFields.push("Calle")
-    if (!streetNumber.trim()) missingFields.push("Número")
-    if (!locality.trim()) missingFields.push("Localidad")
-    if (!province.trim()) missingFields.push("Provincia")
+    // Validación inline de campos requeridos
+    const errors: Record<string, string> = {}
+    if (!commercialName.trim()) errors.commercialName = "El nombre comercial es obligatorio"
+    if (!contactName.trim()) errors.contactName = "El nombre de contacto es obligatorio"
+    if (!phone.trim()) errors.phone = "El teléfono es obligatorio"
+    if (!street.trim()) errors.street = "La calle es obligatoria"
+    if (!streetNumber.trim()) errors.streetNumber = "El número de calle es obligatorio"
+    if (!locality.trim()) errors.locality = "La localidad es obligatoria"
+    if (!province.trim()) errors.province = "La provincia es obligatoria"
 
-    if (missingFields.length > 0) {
-      setError(`Campos requeridos faltantes: ${missingFields.join(", ")}`)
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setError("Corregí los campos marcados antes de continuar")
       setIsLoading(false)
       return
     }
+    setFieldErrors({})
 
     try {
       let lat = latitude
@@ -308,7 +311,8 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
       }
 
       if (lat === null || lng === null) {
-        setError("La ubicación del cliente es requerida. Buscá una dirección o mové el pin en el mapa.")
+        setFieldErrors(prev => ({ ...prev, coordinates: "La ubicación es obligatoria. Buscá una dirección o mové el pin en el mapa." }))
+        setError("Corregí los campos marcados antes de continuar")
         setIsLoading(false)
         return
       }
@@ -469,17 +473,24 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
               </Label>
               <Input
                 id="commercialName"
-                required
                 value={commercialName}
-                onChange={(e) => setCommercialName(e.target.value)}
+                onChange={(e) => { setCommercialName(e.target.value); setFieldErrors(prev => ({ ...prev, commercialName: "" })) }}
+                className={fieldErrors.commercialName ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.commercialName && <p className="text-xs text-destructive">{fieldErrors.commercialName}</p>}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="contactName">
                 Nombre de Contacto <span className="text-destructive">*</span>
               </Label>
-              <Input id="contactName" required value={contactName} onChange={(e) => setContactName(e.target.value)} />
+              <Input
+                id="contactName"
+                value={contactName}
+                onChange={(e) => { setContactName(e.target.value); setFieldErrors(prev => ({ ...prev, contactName: "" })) }}
+                className={fieldErrors.contactName ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {fieldErrors.contactName && <p className="text-xs text-destructive">{fieldErrors.contactName}</p>}
             </div>
           </div>
 
@@ -488,7 +499,14 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
               <Label htmlFor="phone">
                 Teléfono <span className="text-destructive">*</span>
               </Label>
-              <Input id="phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setFieldErrors(prev => ({ ...prev, phone: "" })) }}
+                className={fieldErrors.phone ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {fieldErrors.phone && <p className="text-xs text-destructive">{fieldErrors.phone}</p>}
             </div>
 
             <div className="space-y-2">
@@ -613,9 +631,14 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
             onLocationChange={(lat, lng) => {
               setLatitude(lat)
               setLongitude(lng)
+              setFieldErrors(prev => ({ ...prev, coordinates: "" }))
             }}
           />
-          
+
+          {fieldErrors.coordinates && (
+            <p className="text-sm text-destructive font-medium">{fieldErrors.coordinates}</p>
+          )}
+
           {/* Coordenadas actuales */}
           {(latitude !== null && longitude !== null) && (
             <div className="bg-muted p-3 rounded-md text-sm">
@@ -630,7 +653,13 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
               <Label htmlFor="street">
                 Calle <span className="text-destructive">*</span>
               </Label>
-              <Input id="street" required value={street} onChange={(e) => setStreet(e.target.value)} />
+              <Input
+                id="street"
+                value={street}
+                onChange={(e) => { setStreet(e.target.value); setFieldErrors(prev => ({ ...prev, street: "" })) }}
+                className={fieldErrors.street ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {fieldErrors.street && <p className="text-xs text-destructive">{fieldErrors.street}</p>}
             </div>
 
             <div className="space-y-2">
@@ -639,10 +668,11 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
               </Label>
               <Input
                 id="streetNumber"
-                required
                 value={streetNumber}
-                onChange={(e) => setStreetNumber(e.target.value)}
+                onChange={(e) => { setStreetNumber(e.target.value); setFieldErrors(prev => ({ ...prev, streetNumber: "" })) }}
+                className={fieldErrors.streetNumber ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.streetNumber && <p className="text-xs text-destructive">{fieldErrors.streetNumber}</p>}
             </div>
           </div>
 
@@ -657,10 +687,12 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
             province={province}
             locality={locality}
             postalCode={postalCode}
-            onProvinceChange={setProvince}
-            onLocalityChange={setLocality}
+            onProvinceChange={(v) => { setProvince(v); setFieldErrors(prev => ({ ...prev, province: "" })) }}
+            onLocalityChange={(v) => { setLocality(v); setFieldErrors(prev => ({ ...prev, locality: "" })) }}
             onPostalCodeChange={setPostalCode}
             isGoogleMapsLoaded={isGoogleMapsLoaded}
+            provinceError={fieldErrors.province}
+            localityError={fieldErrors.locality}
           />
 
           <div className="space-y-2">

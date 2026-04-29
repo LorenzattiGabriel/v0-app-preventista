@@ -28,6 +28,7 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const isGoogleMapsLoaded = useGoogleMapsScript()
 
   // Form state
@@ -240,6 +241,23 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
     setIsLoading(true)
     setError(null)
 
+    const errors: Record<string, string> = {}
+    if (!commercialName.trim()) errors.commercialName = "El nombre comercial es obligatorio"
+    if (!contactName.trim()) errors.contactName = "El nombre de contacto es obligatorio"
+    if (!phone.trim()) errors.phone = "El teléfono es obligatorio"
+    if (!street.trim()) errors.street = "La calle es obligatoria"
+    if (!streetNumber.trim()) errors.streetNumber = "El número de calle es obligatorio"
+    if (!locality.trim()) errors.locality = "La localidad es obligatoria"
+    if (!province.trim()) errors.province = "La provincia es obligatoria"
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setError("Corregí los campos marcados antes de continuar")
+      setIsLoading(false)
+      return
+    }
+    setFieldErrors({})
+
     try {
       const supabase = createClient()
 
@@ -325,10 +343,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               </Label>
               <Input
                 id="commercialName"
-                required
                 value={commercialName}
-                onChange={(e) => setCommercialName(e.target.value)}
+                onChange={(e) => { setCommercialName(e.target.value); setFieldErrors(prev => ({ ...prev, commercialName: "" })) }}
+                className={fieldErrors.commercialName ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.commercialName && <p className="text-xs text-destructive">{fieldErrors.commercialName}</p>}
             </div>
 
             <div className="space-y-2">
@@ -337,10 +356,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               </Label>
               <Input
                 id="contactName"
-                required
                 value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
+                onChange={(e) => { setContactName(e.target.value); setFieldErrors(prev => ({ ...prev, contactName: "" })) }}
+                className={fieldErrors.contactName ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.contactName && <p className="text-xs text-destructive">{fieldErrors.contactName}</p>}
             </div>
           </div>
 
@@ -352,10 +372,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               <Input
                 id="phone"
                 type="tel"
-                required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => { setPhone(e.target.value); setFieldErrors(prev => ({ ...prev, phone: "" })) }}
+                className={fieldErrors.phone ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.phone && <p className="text-xs text-destructive">{fieldErrors.phone}</p>}
             </div>
 
             <div className="space-y-2">
@@ -490,7 +511,13 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               <Label htmlFor="street">
                 Calle <span className="text-destructive">*</span>
               </Label>
-              <Input id="street" required value={street} onChange={(e) => setStreet(e.target.value)} />
+              <Input
+                id="street"
+                value={street}
+                onChange={(e) => { setStreet(e.target.value); setFieldErrors(prev => ({ ...prev, street: "" })) }}
+                className={fieldErrors.street ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {fieldErrors.street && <p className="text-xs text-destructive">{fieldErrors.street}</p>}
             </div>
 
             <div className="space-y-2">
@@ -499,10 +526,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
               </Label>
               <Input
                 id="streetNumber"
-                required
                 value={streetNumber}
-                onChange={(e) => setStreetNumber(e.target.value)}
+                onChange={(e) => { setStreetNumber(e.target.value); setFieldErrors(prev => ({ ...prev, streetNumber: "" })) }}
+                className={fieldErrors.streetNumber ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {fieldErrors.streetNumber && <p className="text-xs text-destructive">{fieldErrors.streetNumber}</p>}
             </div>
           </div>
 
@@ -517,10 +545,12 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
             province={province}
             locality={locality}
             postalCode={postalCode}
-            onProvinceChange={setProvince}
-            onLocalityChange={setLocality}
+            onProvinceChange={(v) => { setProvince(v); setFieldErrors(prev => ({ ...prev, province: "" })) }}
+            onLocalityChange={(v) => { setLocality(v); setFieldErrors(prev => ({ ...prev, locality: "" })) }}
             onPostalCodeChange={setPostalCode}
             isGoogleMapsLoaded={isGoogleMapsLoaded}
+            provinceError={fieldErrors.province}
+            localityError={fieldErrors.locality}
           />
 
           <div className="space-y-2">
