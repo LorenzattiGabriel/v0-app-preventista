@@ -73,6 +73,28 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
   // Sort orders by delivery sequence
   const sortedOrders = [...(route.route_orders || [])].sort((a, b) => a.delivery_order - b.delivery_order)
 
+  // 🆕 Historial de cambios manuales del orden de la ruta
+  const { data: reorderLog } = await supabase
+    .from("route_reorder_log")
+    .select(
+      `
+      id,
+      previous_order,
+      new_order,
+      reason,
+      changed_at,
+      orders (
+        order_number,
+        customers ( commercial_name )
+      ),
+      changed_by:profiles!route_reorder_log_changed_by_fkey (
+        full_name
+      )
+    `
+    )
+    .eq("route_id", id)
+    .order("changed_at", { ascending: true })
+
   const statusLabels = {
     PLANIFICADO: "Planificado",
     EN_CURSO: "En Curso",
@@ -363,6 +385,64 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 🆕 Historial de cambios manuales del orden de la ruta */}
+          {reorderLog && reorderLog.length > 0 && (
+            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/10">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  ⚡ Cambios manuales del orden ({reorderLog.length})
+                </CardTitle>
+                <CardDescription>
+                  El repartidor reordenó la ruta original en estos momentos. Mostramos lo entregado vs lo propuesto.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-3">
+                  {reorderLog.map((entry: any) => {
+                    const order = Array.isArray(entry.orders) ? entry.orders[0] : entry.orders
+                    const changedBy = Array.isArray(entry.changed_by)
+                      ? entry.changed_by[0]
+                      : entry.changed_by
+                    const customer = Array.isArray(order?.customers)
+                      ? order.customers[0]
+                      : order?.customers
+                    return (
+                      <li
+                        key={entry.id}
+                        className="flex flex-col sm:flex-row gap-2 sm:gap-4 p-3 rounded-lg border bg-background"
+                      >
+                        <div className="text-xs text-muted-foreground sm:w-40 shrink-0">
+                          {new Date(entry.changed_at).toLocaleString("es-AR")}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <Badge variant="outline" className="font-mono">
+                              {order?.order_number}
+                            </Badge>
+                            <span className="text-muted-foreground">
+                              {customer?.commercial_name || "—"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              · Posición {entry.previous_order} → {entry.new_order}
+                            </span>
+                          </div>
+                          <p className="text-sm">
+                            <span className="text-muted-foreground">Motivo:</span> {entry.reason}
+                          </p>
+                          {changedBy?.full_name && (
+                            <p className="text-xs text-muted-foreground">
+                              Por: {changedBy.full_name}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
               </CardContent>
             </Card>
           )}

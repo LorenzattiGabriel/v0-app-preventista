@@ -19,6 +19,7 @@ interface SaveOrderParams {
   priority: OrderPriority
   orderType: OrderType
   requiresInvoice: boolean
+  invoiceType?: "A" | "B" | "C" | null
   observations: string
   generalDiscount: number
   paymentMethod?: PaymentMethod // Payment method (Efectivo, Transferencia, etc.)
@@ -57,6 +58,7 @@ export function useOrderFormActions() {
     priority,
     orderType,
     requiresInvoice,
+    invoiceType,
     observations,
     generalDiscount,
     paymentMethod,
@@ -144,6 +146,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            invoice_type: requiresInvoice ? invoiceType ?? null : null,
             payment_method: paymentMethod || "Efectivo",
             observations,
             // 🆕 Time Windows (VRPTW)
@@ -180,6 +183,7 @@ export function useOrderFormActions() {
             general_discount: generalDiscount,
             total,
             requires_invoice: requiresInvoice,
+            invoice_type: requiresInvoice ? invoiceType ?? null : null,
             payment_method: paymentMethod || "Efectivo",
             created_by: userId,
             observations,

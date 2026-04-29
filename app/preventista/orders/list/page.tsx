@@ -44,6 +44,7 @@ const { data: pedidos, error } = await supabase
     general_discount,
     total,
     requires_invoice,
+    invoice_type,
     has_shortages,
     observations,
     payment_method,

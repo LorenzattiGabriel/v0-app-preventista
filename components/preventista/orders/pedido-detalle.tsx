@@ -283,7 +283,7 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
             <section className="flex flex-wrap gap-2">
               {pedido.requires_invoice ? (
                 <Badge variant="outline" className="text-green-700 border-green-200">
-                  ✓ Requiere factura
+                  ✓ Requiere factura{pedido.invoice_type ? ` ${pedido.invoice_type}` : ""}
                 </Badge>
               ) : (
                 <Badge variant="outline" className="text-muted-foreground">

@@ -39,6 +39,7 @@ export default async function AssignOrdersPage() {
       priority,
       total,
       assembled_by,
+      early_assembly_allowed,
       customer:customers (
         commercial_name,
         locality

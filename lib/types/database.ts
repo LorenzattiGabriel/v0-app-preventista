@@ -185,6 +185,8 @@ export interface Order {
   general_discount: number
   total: number
   requires_invoice: boolean
+  invoice_type?: "A" | "B" | "C" | null // Tipo de factura cuando requires_invoice = true
+  early_assembly_allowed?: boolean // Si el admin permitió armar antes de la fecha
   has_shortages: boolean
   created_by?: string
   assembled_by?: string

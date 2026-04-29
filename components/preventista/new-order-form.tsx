@@ -88,6 +88,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
   const [orderType, setOrderType] = useState<OrderType>(initialOrderData?.orderType || "presencial")
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
+  const [invoiceType, setInvoiceType] = useState<"A" | "B" | "C">("B")
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
   const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
   const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed") // Tipo de descuento
@@ -377,6 +378,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       priority,
       orderType,
       requiresInvoice,
+      invoiceType: requiresInvoice ? invoiceType : null,
       observations,
       generalDiscount,
       paymentMethod,
@@ -672,17 +674,36 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             )}
           </div>
 
-          <div className="flex items-center space-x-2 ">
-            <input
-              type="checkbox"
-              id="requiresInvoice"
-              checked={requiresInvoice}
-              onChange={(e) => setRequiresInvoice(e.target.checked)}
-              className="h-4 w-4 hover:cursor-pointer "
-            />
-            <Label htmlFor="requiresInvoice" className="font-normal hover:cursor-pointer ">
-              Requiere Factura
-            </Label>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 ">
+              <input
+                type="checkbox"
+                id="requiresInvoice"
+                checked={requiresInvoice}
+                onChange={(e) => setRequiresInvoice(e.target.checked)}
+                className="h-4 w-4 hover:cursor-pointer "
+              />
+              <Label htmlFor="requiresInvoice" className="font-normal hover:cursor-pointer ">
+                Requiere Factura
+              </Label>
+            </div>
+            {requiresInvoice && (
+              <div className="ml-6 space-y-1">
+                <Label htmlFor="invoiceType" className="text-sm">
+                  Tipo de Factura <span className="text-destructive">*</span>
+                </Label>
+                <Select value={invoiceType} onValueChange={(v) => setInvoiceType(v as "A" | "B" | "C")}>
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="A">Factura A</SelectItem>
+                    <SelectItem value="B">Factura B</SelectItem>
+                    <SelectItem value="C">Factura C</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

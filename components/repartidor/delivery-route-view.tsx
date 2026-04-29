@@ -11,7 +11,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import type { RouteSegment } from "@/lib/types/rutas-inteligentes.types"
 import Link from "next/link"
 import {
@@ -48,12 +66,80 @@ interface DeliveryRouteViewProps {
   repartidorName?: string
 }
 
+/**
+ * Card compacta de un stop en modo edición. Sortable con drag handle.
+ */
+function SortableStopItem({
+  id,
+  position,
+  order,
+}: {
+  id: string
+  position: number
+  order: any
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 p-3 rounded-lg border bg-background ${
+        isDragging ? "shadow-lg ring-2 ring-primary" : ""
+      }`}
+    >
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing touch-none p-1 -m-1 text-muted-foreground hover:text-foreground"
+        {...attributes}
+        {...listeners}
+        aria-label="Arrastrar"
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-semibold text-sm shrink-0">
+        {position}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm truncate">{order.customers?.commercial_name}</p>
+        <p className="text-xs text-muted-foreground truncate">
+          {order.order_number} · {order.customers?.street} {order.customers?.street_number}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false, repartidorName }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [showDeliveryDialog, setShowDeliveryDialog] = useState(false)
+
+  // 🆕 Reordenar ruta: "Ir ahora" con motivo
+  const [showReorderDialog, setShowReorderDialog] = useState(false)
+  const [reorderTargetOrder, setReorderTargetOrder] = useState<any>(null)
+  const [reorderReason, setReorderReason] = useState("")
+  const [isReordering, setIsReordering] = useState(false)
+
+  // 🆕 Modo edición de ruta (drag & drop)
+  const [editMode, setEditMode] = useState(false)
+  const [editedOrderIds, setEditedOrderIds] = useState<string[]>([])
+  const [showSaveOrderDialog, setShowSaveOrderDialog] = useState(false)
+  const [saveOrderReason, setSaveOrderReason] = useState("")
+  const [isSavingOrder, setIsSavingOrder] = useState(false)
+
+  // Sensores DnD: pointer (desktop) + touch (mobile) + keyboard (accesible)
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
   
   // 🆕 MEDIUM-3: Route summary state
   const [showSummaryDialog, setShowSummaryDialog] = useState(false)
@@ -319,6 +405,45 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       setError(err instanceof Error ? err.message : "Error al iniciar la ruta")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // 🆕 Abrir dialog de reordenar (Ir ahora)
+  const handleOpenReorder = (order: any) => {
+    setReorderTargetOrder(order)
+    setReorderReason("")
+    setError(null)
+    setShowReorderDialog(true)
+  }
+
+  // 🆕 Confirmar el reorder llamando al API
+  const handleConfirmReorder = async () => {
+    if (!reorderTargetOrder) return
+    if (reorderReason.trim().length < 5) {
+      setError("El motivo es obligatorio (mínimo 5 caracteres)")
+      return
+    }
+    setIsReordering(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/repartidor/routes/${route.id}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: reorderTargetOrder.id,
+          reason: reorderReason.trim(),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Error al reordenar")
+      setShowReorderDialog(false)
+      setReorderTargetOrder(null)
+      setReorderReason("")
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al reordenar la ruta")
+    } finally {
+      setIsReordering(false)
     }
   }
 
@@ -924,6 +1049,85 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   
   // All orders are managed if they are either delivered or have a no-delivery reason
   const allOrdersManaged = pendingOrders.length === 0
+
+  // 🆕 Identificar el primer stop pendiente (no se puede reordenar a sí mismo)
+  const firstPendingOrderId = pendingOrders.length > 0 ? pendingOrders[0].id : null
+
+  // 🆕 Handlers de modo edición de ruta (drag & drop)
+  const enterEditMode = () => {
+    // Inicializar con el orden actual de los pendientes
+    setEditedOrderIds(pendingOrders.map((o: any) => o.id))
+    setEditMode(true)
+  }
+
+  const cancelEditMode = () => {
+    setEditMode(false)
+    setEditedOrderIds([])
+    setSaveOrderReason("")
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = editedOrderIds.indexOf(active.id as string)
+    const newIndex = editedOrderIds.indexOf(over.id as string)
+    if (oldIndex < 0 || newIndex < 0) return
+    setEditedOrderIds(arrayMove(editedOrderIds, oldIndex, newIndex))
+  }
+
+  const hasOrderChanges = () => {
+    if (editedOrderIds.length === 0) return false
+    return editedOrderIds.some((id, idx) => pendingOrders[idx]?.id !== id)
+  }
+
+  const handleSaveOrderClick = () => {
+    if (!hasOrderChanges()) {
+      setError("No hiciste cambios en el orden")
+      return
+    }
+    setError(null)
+    setShowSaveOrderDialog(true)
+  }
+
+  const handleConfirmSaveOrder = async () => {
+    if (saveOrderReason.trim().length < 5) {
+      setError("El motivo es obligatorio (mínimo 5 caracteres)")
+      return
+    }
+    setIsSavingOrder(true)
+    setError(null)
+    try {
+      // Construir new_orders: a cada id le asignamos el delivery_order de la posición actual
+      // que tenía el pendingOrders en esa posición (mantiene los slots ocupados)
+      const new_orders = editedOrderIds.map((id, idx) => ({
+        order_id: id,
+        delivery_order: pendingOrders[idx].delivery_order,
+      }))
+
+      const response = await fetch(
+        `/api/repartidor/routes/${route.id}/reorder-batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_orders, reason: saveOrderReason.trim() }),
+        },
+      )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Error al guardar")
+      setShowSaveOrderDialog(false)
+      setEditMode(false)
+      setEditedOrderIds([])
+      setSaveOrderReason("")
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar el orden")
+    } finally {
+      setIsSavingOrder(false)
+    }
+  }
+
+  // Mapa para acceder por id rápido en modo edición
+  const pendingById = new Map<string, any>(pendingOrders.map((o: any) => [o.id, o]))
   
   // Check if route is scheduled for today or past
   const isScheduledForTodayOrPast = route.scheduled_date <= today
@@ -1309,10 +1513,75 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       <Card>
         <CardHeader>
-          <CardTitle>Entregas</CardTitle>
-          <CardDescription>Pedidos en orden de entrega</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle>Entregas</CardTitle>
+              <CardDescription>
+                {editMode
+                  ? "Arrastrá los stops para reordenar la ruta"
+                  : "Pedidos en orden de entrega"}
+              </CardDescription>
+            </div>
+            {/* Modo edición: solo si la ruta está PLANIFICADO o EN_CURSO y hay 2+ pendientes */}
+            {pendingOrders.length >= 2 &&
+              ["PLANIFICADO", "EN_CURSO"].includes(route.status) &&
+              !editMode && (
+                <Button variant="outline" size="sm" onClick={enterEditMode}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Modificar orden de la ruta
+                </Button>
+              )}
+            {editMode && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={cancelEditMode}>
+                  Cancelar
+                </Button>
+                <Button size="sm" onClick={handleSaveOrderClick} disabled={!hasOrderChanges()}>
+                  Guardar nuevo orden
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
+          {/* Modo edición: vista compacta con drag & drop */}
+          {editMode && (
+            <div className="space-y-2">
+              {error && (
+                <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm mb-2">
+                  {error}
+                </div>
+              )}
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={editedOrderIds} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {editedOrderIds.map((id, idx) => {
+                      const order = pendingById.get(id)
+                      if (!order) return null
+                      return (
+                        <SortableStopItem
+                          key={id}
+                          id={id}
+                          position={idx + 1}
+                          order={order}
+                        />
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+              <p className="text-xs text-muted-foreground italic mt-3">
+                Solo se reordenan los pendientes. Los entregados o no-entregados quedan en su lugar.
+              </p>
+            </div>
+          )}
+
+          {/* Modo normal: vista completa con todos los detalles */}
+          {!editMode && (
           <div className="space-y-4">
             {sortedOrders.map((order: any, index: number) => (
               <div
@@ -1423,6 +1692,17 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                         <CheckCircle className="mr-2 h-4 w-4" />
                         Marcar Entregado
                       </Button>
+                      {/* "Ir ahora" - solo si NO es el primer pendiente */}
+                      {order.id !== firstPendingOrderId && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="w-full sm:w-auto"
+                          onClick={() => handleOpenReorder(order)}
+                        >
+                          ⚡ Ir ahora
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1466,8 +1746,60 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
               </div>
             ))}
           </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* 🆕 Dialog "Guardar nuevo orden" - drag-and-drop batch */}
+      <Dialog open={showSaveOrderDialog} onOpenChange={setShowSaveOrderDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Guardar nuevo orden de la ruta</DialogTitle>
+            <DialogDescription>
+              Vas a aplicar tu reordenamiento a la ruta. Indicá el motivo del cambio.
+            </DialogDescription>
+          </DialogHeader>
+
+          {error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="save-order-reason">
+              Motivo del cambio <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="save-order-reason"
+              placeholder="Ej: Optimización de tiempos, cambio de prioridad por pedido del cliente, evitar zona con tránsito..."
+              value={saveOrderReason}
+              onChange={(e) => setSaveOrderReason(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+            <p className="text-xs text-muted-foreground">
+              Mínimo 5 caracteres. Quedará registrado para que el administrador pueda revisar el cambio.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSaveOrderDialog(false)}
+              disabled={isSavingOrder}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmSaveOrder}
+              disabled={isSavingOrder || saveOrderReason.trim().length < 5}
+            >
+              {isSavingOrder ? "Guardando..." : "Confirmar y guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showDeliveryDialog} onOpenChange={setShowDeliveryDialog}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -2052,6 +2384,62 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             </Button>
             <Button onClick={handleCompleteRoute} disabled={isLoading}>
               {isLoading ? "Finalizando..." : "Confirmar y Finalizar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🆕 Dialog "Ir ahora" - reordenar stop con motivo */}
+      <Dialog open={showReorderDialog} onOpenChange={setShowReorderDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiar orden de la ruta</DialogTitle>
+            <DialogDescription>
+              {reorderTargetOrder && (
+                <>
+                  Vas a entregar primero <strong>{reorderTargetOrder.order_number}</strong> —{" "}
+                  {reorderTargetOrder.customers?.commercial_name}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="reorder-reason">
+              Motivo del cambio <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="reorder-reason"
+              placeholder="Ej: Cliente anterior cerrado, calle cortada, cliente urgente avisó..."
+              value={reorderReason}
+              onChange={(e) => setReorderReason(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+            <p className="text-xs text-muted-foreground">
+              Mínimo 5 caracteres. Quedará registrado para que el administrador pueda revisar el cambio.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowReorderDialog(false)}
+              disabled={isReordering}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmReorder}
+              disabled={isReordering || reorderReason.trim().length < 5}
+            >
+              {isReordering ? "Reordenando..." : "Confirmar y reordenar"}
             </Button>
           </DialogFooter>
         </DialogContent>

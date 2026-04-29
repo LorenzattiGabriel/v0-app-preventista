@@ -23,6 +23,7 @@ interface OrderRow {
   priority: string
   total: number
   assembled_by: string | null
+  early_assembly_allowed?: boolean
   customer: any
 }
 
@@ -93,6 +94,32 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelectedIds(next)
+  }
+
+  // 🆕 Toggle de armado anticipado para un pedido
+  const toggleEarlyAssembly = async (orderId: string, current: boolean) => {
+    setError(null)
+    setSuccess(null)
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/admin/orders/early-assembly", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_ids: [orderId], allowed: !current }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Error al actualizar")
+      setSuccess(
+        !current
+          ? "Armado anticipado habilitado"
+          : "Armado anticipado deshabilitado"
+      )
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconocido")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const callAssign = async (orderIds: string[], armadorId: string | null) => {
@@ -268,6 +295,9 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                     <th className="px-3 py-2 text-left">Prioridad</th>
                     <th className="px-3 py-2 text-right">Total</th>
                     <th className="px-3 py-2 text-left">Armador</th>
+                    <th className="px-3 py-2 text-center" title="Permitir armar antes de la fecha de entrega">
+                      Anticipado
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -323,6 +353,16 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                               ))}
                             </SelectContent>
                           </Select>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <Checkbox
+                            checked={order.early_assembly_allowed === true}
+                            onCheckedChange={() =>
+                              toggleEarlyAssembly(order.id, order.early_assembly_allowed === true)
+                            }
+                            disabled={isLoading}
+                            title="Permitir armado antes de la fecha de entrega"
+                          />
                         </td>
                       </tr>
                     )

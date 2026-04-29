@@ -43,6 +43,39 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
     redirect("/armado/dashboard")
   }
 
+  // 🆕 Bloquear armado anticipado: solo permite armar si delivery_date <= mañana
+  // o si el admin lo habilitó manualmente con early_assembly_allowed = true.
+  // Solo bloqueamos si está PENDIENTE_ARMADO (si ya está EN_ARMADO, ya pasó el control).
+  if (order.status === "PENDIENTE_ARMADO" && !order.early_assembly_allowed) {
+    const todayStr = new Date().toISOString().split("T")[0]
+    const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+    const deliveryDate = order.delivery_date
+    if (deliveryDate && deliveryDate > tomorrowStr) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center p-6">
+          <div className="max-w-md w-full bg-blue-50 border border-blue-300 rounded-lg p-6 text-center">
+            <h2 className="text-lg font-semibold text-blue-900 mb-2">
+              Armado anticipado bloqueado
+            </h2>
+            <p className="text-sm text-blue-800 mb-2">
+              Este pedido tiene fecha de entrega <strong>{new Date(deliveryDate).toLocaleDateString("es-AR")}</strong>.
+              Solo se puede armar pedidos con entrega hasta <strong>{new Date(tomorrowStr).toLocaleDateString("es-AR")}</strong>.
+            </p>
+            <p className="text-xs text-blue-700">
+              Si necesitás armarlo antes, pedile al administrador que lo habilite manualmente.
+            </p>
+            <a
+              href="/armado/dashboard"
+              className="inline-block mt-4 px-4 py-2 bg-blue-700 text-white rounded-md text-sm hover:bg-blue-800"
+            >
+              Volver al dashboard
+            </a>
+          </div>
+        </div>
+      )
+    }
+  }
+
   // 🆕 Bloquear acceso si está PRE-ASIGNADO a otro armador
   // (PENDIENTE_ARMADO + assembled_by != current_user)
   if (
