@@ -24,6 +24,8 @@ export function LocationPickerMap({
   const mapInstanceRef = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markerRef = useRef<any>(null)
+  const onLocationChangeRef = useRef(onLocationChange)
+  onLocationChangeRef.current = onLocationChange
   const [isDragging, setIsDragging] = useState(false)
   const [initialPosition, setInitialPosition] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -89,7 +91,7 @@ export function LocationPickerMap({
       setIsDragging(false)
       const position = marker.getPosition()
       if (position) {
-        onLocationChange(position.lat(), position.lng())
+        onLocationChangeRef.current(position.lat(), position.lng())
       }
     })
 
@@ -97,7 +99,7 @@ export function LocationPickerMap({
     map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (e.latLng) {
         marker.setPosition(e.latLng)
-        onLocationChange(e.latLng.lat(), e.latLng.lng())
+        onLocationChangeRef.current(e.latLng.lat(), e.latLng.lng())
       }
     })
 

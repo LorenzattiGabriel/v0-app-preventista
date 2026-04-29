@@ -213,50 +213,29 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     return []
   }
 
-  // Helper function to build Google Maps URL with depot as start and end point
+  // Build Google Maps URL always from current delivery_order (never from stored URL which is stale after reordering)
   const buildGoogleMapsUrl = () => {
-    // 🆕 Si está segmentada, retornar null (se usan los segmentos)
     if (isRouteSegmented()) {
       return null
     }
-    
-    // Try to use optimized route URL from microservice first
-    if (route.optimized_route?.googleMapsUrl) {
-      return route.optimized_route.googleMapsUrl
-    }
-    
-    // Try to use google_maps_url from routes table
-    if (route.google_maps_url) {
-      return route.google_maps_url
-    }
 
-    // Fallback: Build URL manually
-    const waypoints: string[] = []
-    
-    // Start point: depot or default coordinates
-    const startPoint = depot 
+    const startPoint = depot
       ? `${depot.latitude},${depot.longitude}`
       : route.start_latitude && route.start_longitude
       ? `${route.start_latitude},${route.start_longitude}`
-      : '-31.4201,-64.1888' // Default Córdoba center
+      : '-31.4201,-64.1888'
 
-    // Customer waypoints in delivery order
     const customerCoords = route.route_orders
       .sort((a: any, b: any) => a.delivery_order - b.delivery_order)
       .filter((ro: any) => ro.orders?.customers?.latitude && ro.orders?.customers?.longitude)
       .map((ro: any) => `${ro.orders.customers.latitude},${ro.orders.customers.longitude}`)
 
-    waypoints.push(...customerCoords)
-
-    // End point: return to depot
-    const endPoint = startPoint // Same as start
-
-    if (waypoints.length === 0) {
-      return null
+    if (customerCoords.length === 0) {
+      // Last resort: stored URLs
+      return route.optimized_route?.googleMapsUrl || route.google_maps_url || null
     }
 
-    // Build Google Maps directions URL: start -> waypoints -> end
-    return `https://www.google.com/maps/dir/${startPoint}/${waypoints.join('/')}/${endPoint}/`
+    return `https://www.google.com/maps/dir/${startPoint}/${customerCoords.join('/')}/${startPoint}/`
   }
 
 
@@ -1522,9 +1501,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   : "Pedidos en orden de entrega"}
               </CardDescription>
             </div>
-            {/* Modo edición: solo si la ruta está PLANIFICADO o EN_CURSO y hay 2+ pendientes */}
+            {/* Modo edición: solo si la ruta está PLANIFICADO (antes de iniciarla) */}
             {pendingOrders.length >= 2 &&
-              ["PLANIFICADO", "EN_CURSO"].includes(route.status) &&
+              route.status === "PLANIFICADO" &&
               !editMode && (
                 <Button variant="outline" size="sm" onClick={enterEditMode}>
                   <Pencil className="mr-2 h-4 w-4" />

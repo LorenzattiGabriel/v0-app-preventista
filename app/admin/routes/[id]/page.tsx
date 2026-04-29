@@ -70,8 +70,22 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
     redirect("/admin/routes")
   }
 
-  // Sort orders by delivery sequence
+  // Sort orders by current (executed) delivery sequence
   const sortedOrders = [...(route.route_orders || [])].sort((a, b) => a.delivery_order - b.delivery_order)
+
+  // Build planned order map from optimized_route snapshot (original microservice order)
+  const plannedOrderMap = new Map<string, number>()
+  const plannedOrders: Array<{ id: string; order_number: string; customer_name: string }> = []
+  if (route.optimized_route?.orders && Array.isArray(route.optimized_route.orders)) {
+    route.optimized_route.orders.forEach((o: any, idx: number) => {
+      plannedOrderMap.set(o.id, idx + 1)
+      plannedOrders.push({ id: o.id, order_number: o.order_number, customer_name: o.customer_name })
+    })
+  }
+  const routeWasReordered = sortedOrders.some((ro: any) => {
+    const planned = plannedOrderMap.get(ro.order_id)
+    return planned !== undefined && planned !== ro.delivery_order
+  })
 
   // 🆕 Historial de cambios manuales del orden de la ruta
   const { data: reorderLog } = await supabase
@@ -385,6 +399,61 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Comparación ruta planificada vs ejecutada */}
+          {plannedOrderMap.size > 0 && (route.status === "EN_CURSO" || route.status === "COMPLETADO") && (
+            <Card className={routeWasReordered ? "border-blue-200 bg-blue-50/30 dark:bg-blue-950/10" : ""}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Navigation className="h-4 w-4" />
+                  Ruta Planificada vs Ejecutada
+                </CardTitle>
+                {routeWasReordered ? (
+                  <CardDescription>El repartidor modificó el orden original. Se muestran las diferencias.</CardDescription>
+                ) : (
+                  <CardDescription>El repartidor siguió el orden planificado sin modificaciones.</CardDescription>
+                )}
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {sortedOrders.map((ro: any) => {
+                    const order = ro.orders
+                    const plannedPos = plannedOrderMap.get(ro.order_id)
+                    const executedPos = ro.delivery_order
+                    const moved = plannedPos !== undefined && plannedPos !== executedPos
+                    return (
+                      <div key={ro.id} className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${moved ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : "bg-background"}`}>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {plannedPos !== undefined ? (
+                            <span className="text-muted-foreground w-6 text-right">{plannedPos}</span>
+                          ) : (
+                            <span className="text-muted-foreground w-6 text-right">—</span>
+                          )}
+                          {moved && (
+                            <>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="font-semibold text-amber-700 dark:text-amber-400 w-6">{executedPos}</span>
+                            </>
+                          )}
+                          {!moved && <span className="text-muted-foreground w-6" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{order.order_number}</span>
+                          <span className="text-muted-foreground ml-2">{order.customers.commercial_name}</span>
+                        </div>
+                        {moved && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">Reordenado</span>
+                        )}
+                        {order.status === "ENTREGADO" && (
+                          <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </CardContent>
             </Card>
           )}

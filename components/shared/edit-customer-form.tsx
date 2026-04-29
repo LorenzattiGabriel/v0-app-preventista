@@ -303,8 +303,14 @@ export function EditCustomerForm({ customer, zones, returnUrl }: EditCustomerFor
           lat = coords.lat
           lng = coords.lng
         } catch (geocodeError) {
-          console.warn("Geocoding failed, saving customer without coordinates.", geocodeError)
+          console.warn("Geocoding failed:", geocodeError)
         }
+      }
+
+      if (lat === null || lng === null) {
+        setError("La ubicación del cliente es requerida. Buscá una dirección o mové el pin en el mapa.")
+        setIsLoading(false)
+        return
       }
 
       const supabase = createClient()
