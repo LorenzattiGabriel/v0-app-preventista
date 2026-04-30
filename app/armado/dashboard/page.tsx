@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Package, Clock, CheckCircle } from "lucide-react"
+import { Package } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
-import { PaginatedOrdersList } from "@/components/armado/paginated-orders-list"
+import { DashboardTabs } from "@/components/armado/dashboard-tabs"
 import { MergeableOrdersBanner } from "@/components/armado/mergeable-orders-banner"
 import { findMergeableGroups } from "@/lib/utils/mergeable-orders"
 
@@ -99,96 +99,25 @@ export default async function ArmadoDashboardPage() {
             <p className="text-muted-foreground">Gestiona el armado de pedidos</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{pending.length}</div>
-                <p className="text-xs text-muted-foreground">Por armar</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">En Proceso</CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{inProgress.length}</div>
-                <p className="text-xs text-muted-foreground">Armando ahora</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Completados Hoy</CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{finishedToday.length}</div>
-                <p className="text-xs text-muted-foreground">Finalizados hoy</p>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Banner de pedidos fusionables */}
           <MergeableOrdersBanner groups={mergeableGroups} />
 
           <Card>
             <CardHeader>
               <CardTitle>Pedidos por Armar</CardTitle>
-              <CardDescription>Ordenados por prioridad y fecha de entrega</CardDescription>
+              <CardDescription>
+                Tocá una pestaña para filtrar la vista. Cada lista tiene búsqueda por
+                número, cliente o localidad.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Asignados a mí */}
-                <PaginatedOrdersList
-                  orders={assignedToMe}
-                  userId={user.id}
-                  itemsPerPage={10}
-                  title={`📌 Asignados a mí (${assignedToMe.length})`}
-                  emptyMessage="No tenés pedidos asignados"
-                  variant="pending"
-                />
-
-                {/* Sin asignar - cualquiera puede tomarlos */}
-                <PaginatedOrdersList
-                  orders={unassigned}
-                  userId={user.id}
-                  itemsPerPage={10}
-                  title={`Sin asignar (${unassigned.length})`}
-                  emptyMessage="No hay pedidos sin asignar"
-                  variant="pending"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                {/* En Proceso (mis pedidos en armado) */}
-                <PaginatedOrdersList
-                  orders={inProgress}
-                  userId={user.id}
-                  itemsPerPage={10}
-                  title="En Proceso"
-                  emptyMessage="No hay pedidos en proceso"
-                  variant="inProgress"
-                />
-
-                {/* Terminados Hoy */}
-                <PaginatedOrdersList
-                  orders={finishedToday}
-                  userId={user.id}
-                  itemsPerPage={10}
-                  title="Terminados Hoy"
-                  emptyMessage="Ningún pedido terminado hoy"
-                  variant="finished"
-                />
-              </div>
-
-
+              <DashboardTabs
+                assignedToMe={assignedToMe}
+                unassigned={unassigned}
+                inProgress={inProgress}
+                finished={finishedToday}
+                userId={user.id}
+              />
             </CardContent>
           </Card>
         </div>
