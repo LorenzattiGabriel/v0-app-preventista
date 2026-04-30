@@ -35,7 +35,7 @@ export async function GET(
         ),
         order_items (
           *,
-          products:products!order_items_product_id_fkey (
+          products:product_id (
             id,
             code,
             name,

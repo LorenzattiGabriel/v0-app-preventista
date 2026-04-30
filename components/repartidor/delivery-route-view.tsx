@@ -1116,11 +1116,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     <div className="space-y-4 sm:space-y-6">
       {/* Header con botones - responsivo */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <Button variant="outline" size="sm" asChild className="w-fit">
-          <Link href="/repartidor/dashboard">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
-          </Link>
+        <Button variant="outline" size="sm" className="w-fit" onClick={() => router.push("/repartidor/dashboard")}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver
         </Button>
 
         <div className="flex flex-col sm:flex-row gap-2">

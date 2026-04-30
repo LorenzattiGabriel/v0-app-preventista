@@ -11,45 +11,68 @@ interface RouteMapViewProps {
 }
 
 export function RouteMapView({ route, orders }: RouteMapViewProps) {
-  // Coordenadas del centro de distribución (Córdoba)
-  const centerLat = -31.4190387
-  const centerLng = -64.1884742
+  // Centro de distribución por defecto (Córdoba) — sólo se usa si la ruta no
+  // tiene un origen guardado en su URL anterior.
+  const FALLBACK_LAT = -31.4190387
+  const FALLBACK_LNG = -64.1884742
 
   // 🆕 Verificar si la ruta está segmentada
   const isSegmented = route.optimized_route?.isSegmented === true
   const segments: RouteSegment[] = route.optimized_route?.segments || []
 
-  // Obtener coordenadas reales de los clientes
+  // Obtener coordenadas reales de los clientes (en el orden actual de delivery_order)
   const locations = orders.map((routeOrder: any, index: number) => {
     const customer = routeOrder.orders?.customers
     return {
       order: routeOrder.orders,
-      lat: customer?.latitude || centerLat,
-      lng: customer?.longitude || centerLng,
+      lat: customer?.latitude || FALLBACK_LAT,
+      lng: customer?.longitude || FALLBACK_LNG,
       label: index + 1,
       name: customer?.commercial_name || customer?.name || `Cliente ${index + 1}`,
       address: customer?.street ? `${customer.street} ${customer.street_number || ''}` : 'Dirección no disponible'
     }
   })
 
-  // Usar el google_maps_url guardado o construir uno con las coordenadas reales
-  // 🆕 Si está segmentada, no hay URL única
-  const googleMapsUrl = isSegmented ? null : (route.google_maps_url || buildGoogleMapsUrl(locations))
+  // Extraer el origen del URL guardado para mantener la misma distribuidora
+  // pero usar el orden actual de paradas. Si no hay URL guardada, usar fallback.
+  function extractOrigin(url: string | null | undefined): { lat: number; lng: number } | null {
+    if (!url) return null
+    try {
+      const u = new URL(url)
+      const origin = u.searchParams.get("origin")
+      if (!origin) return null
+      const [latStr, lngStr] = origin.split(",")
+      const lat = Number.parseFloat(latStr)
+      const lng = Number.parseFloat(lngStr)
+      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+    } catch {}
+    return null
+  }
+
+  const depot = extractOrigin(route.google_maps_url) || { lat: FALLBACK_LAT, lng: FALLBACK_LNG }
+  const depotLat = depot.lat
+  const depotLng = depot.lng
 
   function buildGoogleMapsUrl(locs: typeof locations) {
     if (locs.length === 0) return ''
-    
     const waypoints = locs.map(loc => `${loc.lat},${loc.lng}`).join('|')
-    return `https://www.google.com/maps/dir/?api=1&origin=${centerLat},${centerLng}&destination=${centerLat},${centerLng}&waypoints=${waypoints}`
+    return `https://www.google.com/maps/dir/?api=1&origin=${depotLat},${depotLng}&destination=${depotLat},${depotLng}&waypoints=${waypoints}`
   }
+
+  // CRÍTICO: siempre recalcular el URL desde el delivery_order actual. NO usar
+  // el `route.google_maps_url` guardado, porque ese se cachea con el orden
+  // original del microservicio y queda desincronizado cuando el repartidor
+  // reordena paradas (drag & drop / "Ir ahora") o cuando el orden inicial
+  // difiere del optimizado.
+  const googleMapsUrl = isSegmented ? null : buildGoogleMapsUrl(locations)
 
   // Construir URL para el iframe embed
   const buildEmbedUrl = () => {
     if (locations.length === 0) return ''
-    
+
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDRsczXb0roqcWOV3EXW9DCMVph0FKzpwY'
     const waypoints = locations.map(loc => `${loc.lat},${loc.lng}`).join('|')
-    return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${centerLat},${centerLng}&destination=${centerLat},${centerLng}&waypoints=${waypoints}`
+    return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${depotLat},${depotLng}&destination=${depotLat},${depotLng}&waypoints=${waypoints}`
   }
 
   const embedUrl = buildEmbedUrl()

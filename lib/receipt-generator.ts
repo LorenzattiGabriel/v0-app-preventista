@@ -78,7 +78,8 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   const items = order.order_items || []
   
   items.forEach((item: any) => {
-    const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 40)
+    const p = item.products || {}
+    const productName = `${p.name || "Producto"} ${p.brand || ""}`.substring(0, 40)
     const quantity = Number(item.quantity_assembled || item.quantity_requested || 0)
     const price = (item.unit_price * quantity).toFixed(2)
     const byWeight = item.sale_unit === "peso"
@@ -257,7 +258,8 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   const fmtQty = (v: number, byWeight: boolean) =>
     byWeight ? `${v.toFixed(3)} kg` : Number.isInteger(v) ? v.toString() : v.toFixed(2)
   items.forEach((item: any) => {
-    const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 35)
+    const prod = item.products || {}
+    const productName = `${prod.name || "Producto"} ${prod.brand || ""}`.substring(0, 35)
     const quantityRequested = Number(item.quantity_requested) || 0
     const quantityAssembled = Number(resolveAssembled(item)) || 0
     const lineTotal = item.unit_price * quantityAssembled - (item.discount || 0)
@@ -276,13 +278,13 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
     } else if (refWeightKg && refWeightKg > 0) {
       // Peso real cargado por el armador para producto vendido por unidad
       totalWeightAssembled += refWeightKg
-      const allowsDecimal = item.products.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      const allowsDecimal = prod.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) totalWeightRequested += quantityRequested * unitWeight
     } else {
       // Fallback al peso unitario fijo del producto
-      const allowsDecimal = item.products.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      const allowsDecimal = prod.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) {
         totalWeightRequested += quantityRequested * unitWeight
         totalWeightAssembled += quantityAssembled * unitWeight
@@ -326,8 +328,8 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
       doc.setTextColor(0)
     } else if (!byWeight) {
       // Fallback: peso aprox. en base al peso unitario del producto
-      const allowsDecimal = item.products.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      const allowsDecimal = prod.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) {
         yPos += 4
         doc.setFontSize(8)

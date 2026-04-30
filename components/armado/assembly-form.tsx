@@ -540,10 +540,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                       }
                       handleItemChange(index, "quantityAssembled", final)
                     }}
-                    // Faltante total → input bloqueado: para volver a editar, usar
-                    // el botón "Restablecer". Esto evita confundir 0 con un valor
-                    // típico y deja claro que el armador marcó faltante completo.
-                    disabled={isLocked || item.quantityAssembled === 0}
+                    disabled={isLocked}
                     className="flex-1"
                   />
                   <div className="flex gap-2">
