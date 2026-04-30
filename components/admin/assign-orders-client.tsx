@@ -14,7 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, AlertTriangle, CheckCircle, Users, Package } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  AlertTriangle,
+  CheckCircle,
+  Users,
+  Package,
+  HelpCircle,
+} from "lucide-react"
 
 interface OrderRow {
   id: string
@@ -48,9 +59,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 export function AssignOrdersClient({ orders, armadores }: Props) {
   const router = useRouter()
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<"all" | "unassigned" | string>("all")
-  const [bulkArmador, setBulkArmador] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -80,21 +89,6 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
     if (filter === "unassigned") return orders.filter((o) => !o.assembled_by)
     return orders.filter((o) => o.assembled_by === filter)
   }, [orders, filter])
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredOrders.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(filteredOrders.map((o) => o.id)))
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelectedIds(next)
-  }
 
   // 🆕 Toggle de armado anticipado para un pedido
   const toggleEarlyAssembly = async (orderId: string, current: boolean) => {
@@ -139,26 +133,12 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
           ? `${data.assigned_count} pedido(s) asignados a ${data.armador_name}`
           : `${data.assigned_count} pedido(s) desasignados`
       )
-      setSelectedIds(new Set())
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido")
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleBulkAssign = () => {
-    if (selectedIds.size === 0) {
-      setError("No hay pedidos seleccionados")
-      return
-    }
-    if (!bulkArmador) {
-      setError("Seleccioná un armador")
-      return
-    }
-    const armadorId = bulkArmador === "__unassign__" ? null : bulkArmador
-    callAssign(Array.from(selectedIds), armadorId)
   }
 
   const handlePerRowAssign = (orderId: string, value: string) => {
@@ -182,12 +162,12 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
         </Alert>
       )}
 
-      {/* Resumen por armador */}
+      {/* Filtro por armador */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Distribución actual
+            Filtrar por armador
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -231,45 +211,15 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
         </CardContent>
       </Card>
 
-      {/* Toolbar de asignación masiva */}
+      {/* Listado de pedidos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Pedidos pendientes ({filteredOrders.length})
-            </span>
-            <span className="text-sm font-normal text-muted-foreground">
-              {selectedIds.size} seleccionado(s)
-            </span>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Pedidos pendientes ({filteredOrders.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-2 mb-4">
-            <Select value={bulkArmador} onValueChange={setBulkArmador}>
-              <SelectTrigger className="sm:w-[260px]">
-                <SelectValue placeholder="Asignar seleccionados a..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__unassign__">Sin asignar</SelectItem>
-                {armadores.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={handleBulkAssign}
-              disabled={
-                isLoading || selectedIds.size === 0 || !bulkArmador
-              }
-            >
-              {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Aplicar a {selectedIds.size}
-            </Button>
-          </div>
-
           {filteredOrders.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -280,23 +230,41 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="px-3 py-2 text-left w-10">
-                      <Checkbox
-                        checked={
-                          filteredOrders.length > 0 &&
-                          selectedIds.size === filteredOrders.length
-                        }
-                        onCheckedChange={toggleSelectAll}
-                      />
-                    </th>
                     <th className="px-3 py-2 text-left">Pedido</th>
                     <th className="px-3 py-2 text-left">Cliente</th>
                     <th className="px-3 py-2 text-left">Entrega</th>
                     <th className="px-3 py-2 text-left">Prioridad</th>
                     <th className="px-3 py-2 text-right">Total</th>
                     <th className="px-3 py-2 text-left">Armador</th>
-                    <th className="px-3 py-2 text-center" title="Permitir armar antes de la fecha de entrega">
-                      Anticipado
+                    <th className="px-3 py-2 text-center">
+                      <div className="inline-flex items-center gap-1">
+                        <span>Adelantar armado</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground"
+                              aria-label="Qué significa adelantar armado"
+                            >
+                              <HelpCircle className="h-4 w-4" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-72 text-xs" align="end">
+                            <p className="font-semibold mb-1">¿Qué es adelantar el armado?</p>
+                            <p className="text-muted-foreground">
+                              Por defecto, los armadores sólo pueden armar pedidos cuya
+                              fecha de entrega es <strong>hoy o mañana</strong>. Esto evita
+                              que se armen pedidos demasiado temprano y queden ocupando
+                              lugar en el depósito.
+                            </p>
+                            <p className="text-muted-foreground mt-2">
+                              Si tildás esta casilla, autorizás a que se arme antes de
+                              tiempo. Útil cuando hay capacidad de sobra o un cliente pidió
+                              tener listo el pedido con anticipación.
+                            </p>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </th>
                   </tr>
                 </thead>
@@ -307,12 +275,6 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                       : null
                     return (
                       <tr key={order.id} className="border-t hover:bg-muted/30">
-                        <td className="px-3 py-2">
-                          <Checkbox
-                            checked={selectedIds.has(order.id)}
-                            onCheckedChange={() => toggleOne(order.id)}
-                          />
-                        </td>
                         <td className="px-3 py-2 font-mono text-xs">
                           {order.order_number}
                         </td>
@@ -361,7 +323,7 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                               toggleEarlyAssembly(order.id, order.early_assembly_allowed === true)
                             }
                             disabled={isLoading}
-                            title="Permitir armado antes de la fecha de entrega"
+                            aria-label="Permitir armar antes de la fecha de entrega"
                           />
                         </td>
                       </tr>
