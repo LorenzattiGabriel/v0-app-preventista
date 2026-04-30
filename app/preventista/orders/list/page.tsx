@@ -74,7 +74,7 @@ const { data: pedidos, error } = await supabase
       unit_price,
       discount,
       subtotal,
-      product:products (
+      product:products!order_items_product_id_fkey (
         id,
         code,
         name,
