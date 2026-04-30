@@ -111,6 +111,10 @@ export class OrdersService {
 
     if (requires_invoice !== undefined) {
       query = query.eq('requires_invoice', requires_invoice)
+      // El filtro "pendientes de facturación" sólo lista los aún no facturados
+      if (requires_invoice === true) {
+        query = query.or('is_invoiced.is.null,is_invoiced.eq.false')
+      }
     }
 
     if (search && search.trim()) {

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Package } from 'lucide-react'
+import { Package, FileText } from 'lucide-react'
+import { MarkInvoicedButton } from './mark-invoiced-button'
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -20,6 +21,11 @@ interface Order {
   order_date: string
   delivery_date: string
   total: number
+  requires_invoice?: boolean
+  invoice_type?: string | null
+  is_invoiced?: boolean
+  invoice_number?: string | null
+  invoice_file_url?: string | null
   customers: {
     commercial_name: string
     locality: string
@@ -81,11 +87,29 @@ function OrderCard({ order }: { order: Order }) {
           </Badge>
           
           {order.has_shortages && (
-            <Badge 
-              variant="outline" 
+            <Badge
+              variant="outline"
               className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
             >
               Con Faltantes
+            </Badge>
+          )}
+
+          {order.requires_invoice && order.is_invoiced && (
+            <Badge
+              variant="outline"
+              className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+            >
+              Facturada{order.invoice_number ? ` · ${order.invoice_number}` : ''}
+            </Badge>
+          )}
+
+          {order.requires_invoice && !order.is_invoiced && (
+            <Badge
+              variant="outline"
+              className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800"
+            >
+              Pendiente factura{order.invoice_type ? ` ${order.invoice_type}` : ''}
             </Badge>
           )}
         </div>
@@ -122,9 +146,32 @@ function OrderCard({ order }: { order: Order }) {
         </div>
       </div>
       
-      <Button asChild variant="outline">
-        <Link href={`/admin/orders/${order.id}`}>Ver Detalles</Link>
-      </Button>
+      <div className="flex flex-col gap-2 items-end shrink-0">
+        <Button asChild variant="outline">
+          <Link href={`/admin/orders/${order.id}`}>Ver Detalles</Link>
+        </Button>
+
+        {order.requires_invoice && !order.is_invoiced && (
+          <MarkInvoicedButton
+            orderId={order.id}
+            orderNumber={order.order_number}
+            invoiceType={order.invoice_type}
+          />
+        )}
+
+        {order.is_invoiced && order.invoice_file_url && (
+          <Button asChild variant="ghost" size="sm">
+            <a
+              href={order.invoice_file_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Ver factura
+            </a>
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

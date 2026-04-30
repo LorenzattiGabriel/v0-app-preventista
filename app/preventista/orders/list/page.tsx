@@ -72,7 +72,7 @@ const { data: pedidos, error } = await supabase
       id,
       quantity_requested,
       unit_price,
-      discount_amount,
+      discount,
       subtotal,
       product:products (
         id,

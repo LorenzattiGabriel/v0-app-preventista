@@ -78,11 +78,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const stockAlertsCount = productStats.lowStockProducts + productStats.outOfStockProducts
 
   // Get pending billing count: assembled orders that require an invoice (PENDIENTE_ENTREGA, EN_REPARTICION, ENTREGADO)
+  // Excluye los que ya fueron marcados como facturados.
   const { count: pendingBillingCount } = await supabase
     .from("orders")
     .select("*", { count: "exact", head: true })
     .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION", "ENTREGADO"])
     .eq("requires_invoice", true)
+    .or("is_invoiced.is.null,is_invoiced.eq.false")
 
   return (
     <div className="flex min-h-screen flex-col">

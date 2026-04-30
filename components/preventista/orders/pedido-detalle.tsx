@@ -223,8 +223,8 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
                               ${Number(it.unit_price || 0).toLocaleString("es-AR")}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              {Number(it.discount_amount || 0) > 0
-                                ? `-$${Number(it.discount_amount).toLocaleString("es-AR")}`
+                              {Number(it.discount || 0) > 0
+                                ? `-$${Number(it.discount).toLocaleString("es-AR")}`
                                 : "-"}
                             </td>
                             <td className="px-3 py-2 text-right font-medium">
