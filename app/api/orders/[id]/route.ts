@@ -26,9 +26,11 @@ export async function GET(
         customers (
           id,
           commercial_name,
-          name,
+          legal_name,
           street,
           street_number,
+          floor_apt,
+          address_notes,
           locality,
           province,
           phone

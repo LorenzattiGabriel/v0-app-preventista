@@ -17,6 +17,7 @@ import {
   History,
 } from "lucide-react"
 import { CancelOrderButton } from "@/components/admin/cancel-order-button"
+import { DownloadOrderReceiptButton } from "@/components/admin/download-order-receipt-button"
 
 export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -178,14 +179,22 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               </Link>
             </Button>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Download Receipt Button — disponible una vez armado */}
+              {["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION", "ENTREGADO"].includes(order.status) && (
+                <DownloadOrderReceiptButton
+                  orderId={order.id}
+                  orderNumber={order.order_number}
+                />
+              )}
+
               {/* Edit Order Button */}
               <Button variant="outline" asChild>
                 <Link href={`/admin/orders/${order.id}/edit`}>
                   ✏️ Editar
                 </Link>
               </Button>
-              
+
               {/* Cancel Order Button */}
               <CancelOrderButton
                 orderId={order.id}
