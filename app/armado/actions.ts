@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 export async function releaseOrderAction(orderId: string) {
   const supabase = await createClient()
@@ -57,10 +58,13 @@ export async function releaseOrderAction(orderId: string) {
     change_reason: "Pedido liberado por el armador",
   })
 
-  // Invalidar sólo el dashboard. NO revalidar la página del pedido:
-  // el server component tiene auto-lock y volvería a tomarlo de inmediato.
-  // El cliente hace router.push al dashboard tras success.
   revalidatePath("/armado/dashboard")
 
-  return { success: true }
+  // CRITICAL: usar redirect() server-side. Si retornáramos { success } al cliente
+  // y luego hiciéramos router.push, Next.js auto-revalida la ruta del action
+  // (la página del pedido) ANTES de la navegación → re-ejecuta el server
+  // component → el auto-lock vuelve a tomar el pedido (PENDIENTE_ARMADO →
+  // EN_ARMADO con assembled_by = user.id). Con redirect, el cliente navega
+  // al dashboard sin re-renderizar la página del pedido.
+  redirect("/armado/dashboard")
 }

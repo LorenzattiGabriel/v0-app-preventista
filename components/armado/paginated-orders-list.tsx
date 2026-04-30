@@ -124,15 +124,28 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
         (isIncomplete ? `⚠️ Nota: Hubo algunos productos faltantes.\n` : "") +
         `\nGracias por su compra! 🙏`
 
+      let result: Awaited<ReturnType<typeof shareOnWhatsApp>>
       try {
         const response = await fetch(`/api/orders/${order.id}`)
         if (!response.ok) throw new Error()
         const fullOrder = await response.json()
         const blob = getAssemblyReceiptBlob(fullOrder)
-        shareOnWhatsApp(phone, order.order_number, blob, message)
+        result = await shareOnWhatsApp(phone, order.order_number, blob, message)
       } catch {
         // Si falla la obtención del PDF, compartir solo el mensaje
-        shareOnWhatsApp(phone, order.order_number, null, message)
+        result = await shareOnWhatsApp(phone, order.order_number, null, message)
+      }
+
+      // Feedback al usuario según cómo terminó el share
+      if (result === "shared") {
+        toast.success("Comprobante compartido por WhatsApp")
+      } else if (result === "downloaded") {
+        toast.success(
+          "PDF descargado. WhatsApp Web no permite adjuntar archivos automáticamente — arrastrá el PDF al chat para enviarlo.",
+          { duration: 8000 },
+        )
+      } else if (result === "no-file") {
+        toast.info("No se pudo generar el comprobante. Se abrió WhatsApp con el mensaje.")
       }
     }
 

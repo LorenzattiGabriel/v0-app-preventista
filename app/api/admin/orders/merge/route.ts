@@ -92,6 +92,23 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validate same delivery_date: no se pueden fusionar pedidos de distintos
+    // días porque arman/entregan en jornadas distintas y mezclarlos rompe la
+    // logística (ruta, stock reservado, etc.).
+    const deliveryDates = new Set(orders.map((o) => o.delivery_date))
+    if (deliveryDates.size !== 1) {
+      const fechas = Array.from(deliveryDates)
+        .sort()
+        .map((d) => new Date(d).toLocaleDateString("es-AR"))
+        .join(", ")
+      return NextResponse.json(
+        {
+          error: `Solo se pueden fusionar pedidos con la misma fecha de entrega. Fechas distintas detectadas: ${fechas}.`,
+        },
+        { status: 400 }
+      )
+    }
+
     // 2. Determine surviving order (oldest by created_at)
     const survivingOrder = orders[0]
     const absorbedOrders = orders.slice(1)

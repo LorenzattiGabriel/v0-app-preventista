@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -25,7 +26,12 @@ import {
   Users,
   Package,
   HelpCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
+
+const PAGE_SIZE = 10
 
 interface OrderRow {
   id: string
@@ -60,6 +66,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 export function AssignOrdersClient({ orders, armadores }: Props) {
   const router = useRouter()
   const [filter, setFilter] = useState<"all" | "unassigned" | string>("all")
+  const [search, setSearch] = useState("")
+  const [priorityFilter, setPriorityFilter] = useState<string>("all")
+  const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -85,10 +94,43 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
   }, [orders])
 
   const filteredOrders = useMemo(() => {
-    if (filter === "all") return orders
-    if (filter === "unassigned") return orders.filter((o) => !o.assembled_by)
-    return orders.filter((o) => o.assembled_by === filter)
-  }, [orders, filter])
+    let list = orders
+    if (filter === "unassigned") list = list.filter((o) => !o.assembled_by)
+    else if (filter !== "all") list = list.filter((o) => o.assembled_by === filter)
+
+    if (priorityFilter !== "all") {
+      list = list.filter((o) => o.priority === priorityFilter)
+    }
+
+    const term = search.trim().toLowerCase()
+    if (term) {
+      list = list.filter((o) => {
+        const num = (o.order_number || "").toLowerCase()
+        const cliente = (o.customer?.commercial_name || "").toLowerCase()
+        const loc = (o.customer?.locality || "").toLowerCase()
+        return num.includes(term) || cliente.includes(term) || loc.includes(term)
+      })
+    }
+    return list
+  }, [orders, filter, priorityFilter, search])
+
+  // Resetear paginación cuando cambian filtros
+  useEffect(() => {
+    setPage(1)
+  }, [filter, priorityFilter, search])
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pagedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredOrders.slice(start, start + PAGE_SIZE)
+  }, [filteredOrders, currentPage])
+
+  const clearFilters = () => {
+    setFilter("all")
+    setPriorityFilter("all")
+    setSearch("")
+  }
 
   // 🆕 Toggle de armado anticipado para un pedido
   const toggleEarlyAssembly = async (orderId: string, current: boolean) => {
@@ -219,7 +261,38 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
             Pedidos pendientes ({filteredOrders.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Filtros adicionales */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Buscar por pedido, cliente o localidad..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger className="sm:w-[180px]">
+                <SelectValue placeholder="Prioridad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las prioridades</SelectItem>
+                <SelectItem value="urgente">Urgente</SelectItem>
+                <SelectItem value="alta">Alta</SelectItem>
+                <SelectItem value="media">Media</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="baja">Baja</SelectItem>
+              </SelectContent>
+            </Select>
+            {(filter !== "all" || priorityFilter !== "all" || search) && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+
           {filteredOrders.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -269,7 +342,7 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order) => {
+                  {pagedOrders.map((order) => {
                     const assigned = order.assembled_by
                       ? armadorById.get(order.assembled_by)
                       : null
@@ -331,6 +404,40 @@ export function AssignOrdersClient({ orders, armadores }: Props) {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Paginación */}
+          {filteredOrders.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-xs text-muted-foreground">
+                Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, filteredOrders.length)} de{" "}
+                {filteredOrders.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Anterior
+                </Button>
+                <span className="text-sm tabular-nums">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

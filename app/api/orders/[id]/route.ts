@@ -35,11 +35,14 @@ export async function GET(
         ),
         order_items (
           *,
-          products (
+          products:products!order_items_product_id_fkey (
             id,
             code,
             name,
-            brand
+            brand,
+            allows_decimal_quantity,
+            unit_of_measure,
+            weight
           )
         )
       `)

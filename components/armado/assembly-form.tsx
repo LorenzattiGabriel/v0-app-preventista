@@ -16,6 +16,7 @@ import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download
 import Link from "next/link"
 import { downloadAssemblyReceipt, generateAssemblyReceipt } from "@/lib/receipt-generator"
 import { shareOnWhatsApp } from "@/lib/share-utils"
+import { toast } from "sonner"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import { releaseOrderAction } from "@/app/armado/actions"
 import {
@@ -66,7 +67,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
   const [assembledOrder, setAssembledOrder] = useState<any>(null)
 
   // Enviar comprobante de armado por WhatsApp adjuntando el PDF
-  const handleSendWhatsAppAssembly = () => {
+  const handleSendWhatsAppAssembly = async () => {
     const phone = order.customers?.phone || ''
     const customerName = order.customers?.commercial_name || order.customers?.name || 'Cliente'
     const message = `Hola ${customerName}, le informamos que su pedido #${order.order_number} ha sido armado y está listo para ser despachado. ¡Gracias por su compra!`
@@ -89,7 +90,16 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
     }
 
     const blob = generateAssemblyReceipt(orderForReceipt).output('blob') as Blob
-    shareOnWhatsApp(phone, order.order_number, blob, message)
+    const result = await shareOnWhatsApp(phone, order.order_number, blob, message)
+
+    if (result === "shared") {
+      toast.success("Comprobante compartido por WhatsApp")
+    } else if (result === "downloaded") {
+      toast.success(
+        "PDF descargado. WhatsApp Web no permite adjuntar archivos automáticamente — arrastrá el PDF al chat para enviarlo.",
+        { duration: 8000 },
+      )
+    }
   }
 
   // 🆕 Descargar PDF - usar los items armados localmente (reflejan faltantes y total real)
@@ -139,21 +149,23 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
   const [assemblyNotes, setAssemblyNotes] = useState(order.assembly_notes || "")
   const [startTime] = useState(order.assembly_started_at || new Date().toISOString())
 
-  // 🆕 CRITICAL-2: Release order function (vía server action con revalidatePath)
+  // 🆕 CRITICAL-2: Release order function (vía server action con redirect)
+  // El action hace redirect("/armado/dashboard") server-side en el caso éxito,
+  // así que la navegación ocurre antes de que Next.js auto-revalide la ruta
+  // del pedido y dispare el auto-lock. Sólo retorna en caso de error.
   const handleReleaseOrder = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
       const result = await releaseOrderAction(order.id)
-      if (result.error) {
+      if (result?.error) {
         throw new Error(result.error)
       }
-      router.push("/armado/dashboard")
+      // On success the action redirects server-side; this code rarely runs.
     } catch (err) {
       console.error("[v0] Error releasing order:", err)
       setError(err instanceof Error ? err.message : "Error al liberar el pedido")
-    } finally {
       setIsLoading(false)
     }
   }
@@ -493,7 +505,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                 {item.isShortage && (
                   <Badge variant="destructive">
                     <AlertTriangle className="mr-1 h-3 w-3" />
-                    Faltante
+                    {item.quantityAssembled === 0 ? "Faltante total" : "Faltante parcial"}
                   </Badge>
                 )}
               </div>
@@ -509,7 +521,8 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                     min="0"
                     max={isWeightBased ? undefined : item.quantityRequested}
                     step={isWeightBased ? "0.01" : "1"}
-                    value={item.quantityAssembled || (item.quantityAssembled === 0 ? "0" : "")}
+                    value={item.quantityAssembled === 0 ? "" : item.quantityAssembled}
+                    placeholder={item.quantityAssembled === 0 ? "Faltante total" : ""}
                     onChange={(e) => {
                       const raw = e.target.value
                       if (raw === "" || raw === "0.") {
@@ -527,7 +540,10 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                       }
                       handleItemChange(index, "quantityAssembled", final)
                     }}
-                    disabled={isLocked}
+                    // Faltante total → input bloqueado: para volver a editar, usar
+                    // el botón "Restablecer". Esto evita confundir 0 con un valor
+                    // típico y deja claro que el armador marcó faltante completo.
+                    disabled={isLocked || item.quantityAssembled === 0}
                     className="flex-1"
                   />
                   <div className="flex gap-2">
@@ -556,12 +572,28 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
 
                 {/* Visual de faltante para productos por unidad */}
                 {!isWeightBased && item.isShortage && (
-                  <div className="flex items-center gap-2 text-sm p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  <div
+                    className={`flex items-center gap-2 text-sm p-2 rounded-md border ${
+                      item.quantityAssembled === 0
+                        ? "bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800"
+                        : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                    }`}
+                  >
                     <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>
-                      <strong>Faltante: {item.quantityRequested - item.quantityAssembled}</strong> de {item.quantityRequested} solicitados
-                      {item.quantityAssembled === 0 && " (faltante total)"}
-                    </span>
+                    {item.quantityAssembled === 0 ? (
+                      <span>
+                        <strong>Faltante total</strong> — no se entregará ninguna de las{" "}
+                        {item.quantityRequested} unidades. Tocá "Restablecer" para
+                        modificar.
+                      </span>
+                    ) : (
+                      <span>
+                        <strong>
+                          Faltante parcial: {item.quantityRequested - item.quantityAssembled}
+                        </strong>{" "}
+                        de {item.quantityRequested} solicitados
+                      </span>
+                    )}
                   </div>
                 )}
 
