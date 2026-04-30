@@ -204,7 +204,9 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
                     <tbody>
                       {items.map((it: any) => {
                         const qty = Number(it.quantity_requested || 0)
-                        const unit = it.product?.unit_of_measure
+                        const byWeight = it.sale_unit === "peso"
+                        const unit = byWeight ? "kg" : it.product?.unit_of_measure
+                        const refKg = it.assembled_weight_kg != null ? Number(it.assembled_weight_kg) : null
                         return (
                           <tr key={it.id} className="border-t">
                             <td className="px-3 py-2">
@@ -212,9 +214,14 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
                               {it.product?.brand && (
                                 <div className="text-xs text-muted-foreground">{it.product.brand}</div>
                               )}
+                              {refKg && refKg > 0 && (
+                                <div className="text-xs text-muted-foreground italic">
+                                  Peso real: {refKg.toFixed(3)} kg
+                                </div>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              {Number.isInteger(qty) ? qty : qty.toFixed(2)}
+                              {byWeight ? qty.toFixed(3) : Number.isInteger(qty) ? qty : qty.toFixed(2)}
                               {unit && unit !== "unidad" && (
                                 <span className="text-xs text-muted-foreground ml-1">{unit}</span>
                               )}

@@ -45,6 +45,8 @@ interface AssemblyItem {
   allowsDecimalQuantity: boolean
   unitOfMeasure: string
   weight: number | null // peso unitario en kg (del producto)
+  saleUnit: "unidad" | "peso" // cómo se vende esta línea
+  assembledWeightKg: number | null // peso real opcional al armar
 }
 
 interface AssemblyFormProps {
@@ -129,6 +131,8 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
       allowsDecimalQuantity: item.products.allows_decimal_quantity || false,
       unitOfMeasure: item.products.unit_of_measure || "unidad",
       weight: item.products.weight ? Number(item.products.weight) : null,
+      saleUnit: (item.sale_unit as "unidad" | "peso") || "unidad",
+      assembledWeightKg: item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null,
     })),
   )
 
@@ -269,6 +273,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
             shortage_notes: item.shortageNotes,
             is_substituted: item.isSubstituted,
             substituted_product_id: item.substitutedProductId,
+            assembled_weight_kg: item.assembledWeightKg,
           })
           .eq("id", item.id)
 
@@ -446,7 +451,11 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
             </div>
           )}
           {assemblyItems.map((item, index) => {
-            const isWeightBased = item.allowsDecimalQuantity
+            // saleUnit determina si esta línea se vendió por peso (kg) o por unidad
+            const isWeightBased = item.saleUnit === "peso"
+            // Productos pesables: pueden llevar peso de referencia opcional aunque
+            // se vendan por unidad (ej: 1 horma → kg pesados como referencia)
+            const isWeighable = item.allowsDecimalQuantity
             const qtyDiff = item.quantityAssembled - item.quantityRequested
             const projectedSubtotal = item.quantityRequested * item.unitPrice - item.discount
             const realSubtotal = item.quantityAssembled * item.unitPrice - item.discount
@@ -460,14 +469,18 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                     {item.productName}
                     {isWeightBased && (
                       <Badge variant="outline" className="ml-2 text-xs">
-                        {item.unitOfMeasure}
+                        kg
                       </Badge>
                     )}
                   </h4>
                   <p className="text-sm text-muted-foreground">
-                    Solicitado: {Number.isInteger(item.quantityRequested) ? item.quantityRequested : item.quantityRequested.toFixed(2)}
-                    {isWeightBased ? ` ${item.unitOfMeasure}` : ""} | Precio: ${item.unitPrice.toFixed(2)}
-                    {isWeightBased ? `/${item.unitOfMeasure}` : ""}
+                    Solicitado: {isWeightBased
+                      ? item.quantityRequested.toFixed(3)
+                      : Number.isInteger(item.quantityRequested)
+                        ? item.quantityRequested
+                        : item.quantityRequested.toFixed(2)}
+                    {isWeightBased ? " kg" : ""} | Precio: ${item.unitPrice.toFixed(2)}
+                    {isWeightBased ? "/kg" : ""}
                   </p>
                   {/* Referencia de peso para productos por unidad */}
                   {!isWeightBased && item.weight && item.weight > 0 && (
@@ -487,7 +500,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
 
               <div className="space-y-2">
                 <Label htmlFor={`quantity-${index}`}>
-                  {isWeightBased ? `Peso Real (${item.unitOfMeasure})` : "Cantidad Armada"}
+                  {isWeightBased ? "Peso Real (kg)" : "Cantidad Armada"}
                 </Label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
@@ -551,6 +564,34 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                     </span>
                   </div>
                 )}
+
+                {/* Peso real de referencia (opcional) para productos pesables */}
+                {isWeighable && (
+                  <div className="space-y-1">
+                    <Label htmlFor={`weight-ref-${index}`} className="text-xs text-muted-foreground">
+                      Peso real (kg) — referencia opcional
+                    </Label>
+                    <Input
+                      id={`weight-ref-${index}`}
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      placeholder={isWeightBased ? "Igual al pesado en balanza" : "Ej: 3.450"}
+                      value={item.assembledWeightKg ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        if (raw === "") {
+                          handleItemChange(index, "assembledWeightKg", null)
+                          return
+                        }
+                        const v = Number.parseFloat(raw)
+                        handleItemChange(index, "assembledWeightKg", isNaN(v) ? null : Math.max(0, v))
+                      }}
+                      disabled={isLocked}
+                      className="max-w-[200px]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Diferencia peso/cantidad para productos pesables */}
@@ -562,9 +603,9 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                 }`}>
                   <div className="flex justify-between">
                     <span>
-                      Pedido: {item.quantityRequested.toFixed(2)} {item.unitOfMeasure} → Pesado: {item.quantityAssembled.toFixed(2)} {item.unitOfMeasure}
+                      Pedido: {item.quantityRequested.toFixed(3)} kg → Pesado: {item.quantityAssembled.toFixed(3)} kg
                       <strong className="ml-1">
-                        ({qtyDiff > 0 ? "+" : ""}{qtyDiff.toFixed(3)} {item.unitOfMeasure})
+                        ({qtyDiff > 0 ? "+" : ""}{qtyDiff.toFixed(3)} kg)
                       </strong>
                     </span>
                   </div>

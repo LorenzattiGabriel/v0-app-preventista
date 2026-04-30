@@ -208,13 +208,14 @@ export function useOrderFormActions() {
       }
 
       // Insert order items - si falla, eliminar la orden para no dejar huérfanos
-      const itemsToInsert = orderItems.map((item) => ({
+      const itemsToInsert = orderItems.map((item: any) => ({
         order_id: orderResult.id,
         product_id: item.productId,
         quantity_requested: item.quantity,
         unit_price: item.unitPrice,
         discount: item.discount,
         subtotal: item.subtotal,
+        sale_unit: item.saleUnit || "unidad",
       }));
 
       const { error: itemsError } = await supabase.from("order_items").insert(itemsToInsert);
@@ -305,7 +306,8 @@ export function useOrderFormActions() {
           quantity: item.quantity_requested,
           unitPrice: item.unit_price,
           discount: item.discount,
-          subtotal: item.subtotal
+          subtotal: item.subtotal,
+          saleUnit: item.sale_unit || "unidad",
         })),
         userId: originalOrder.created_by,
         isDraft: true,

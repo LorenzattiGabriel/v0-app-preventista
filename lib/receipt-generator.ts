@@ -79,9 +79,14 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   
   items.forEach((item: any) => {
     const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 40)
-    const quantity = item.quantity_assembled || item.quantity_requested || 0
+    const quantity = Number(item.quantity_assembled || item.quantity_requested || 0)
     const price = (item.unit_price * quantity).toFixed(2)
-    
+    const byWeight = item.sale_unit === "peso"
+    const refKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
+    const qtyText = byWeight
+      ? `${quantity.toFixed(3)} kg`
+      : Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2)
+
     // Check page break
     if (yPos > 270) {
       doc.addPage()
@@ -89,8 +94,18 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
     }
 
     doc.text(productName, col1, yPos)
-    doc.text(quantity.toString(), col2 + 2, yPos, { align: "center" })
+    doc.text(qtyText, col2 + 2, yPos, { align: "center" })
     doc.text(`$${price}`, col3, yPos, { align: "right" })
+
+    // Peso real opcional como referencia para el cliente
+    if (refKg && refKg > 0) {
+      yPos += 4
+      doc.setFontSize(8)
+      doc.setTextColor(120)
+      doc.text(`  Peso real: ${refKg.toFixed(3)} kg`, col1, yPos)
+      doc.setFontSize(9)
+      doc.setTextColor(0)
+    }
     yPos += 6
   })
   
@@ -239,6 +254,8 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
   let assembledTotal = 0
   let totalWeightRequested = 0
   let totalWeightAssembled = 0
+  const fmtQty = (v: number, byWeight: boolean) =>
+    byWeight ? `${v.toFixed(3)} kg` : Number.isInteger(v) ? v.toString() : v.toFixed(2)
   items.forEach((item: any) => {
     const productName = `${item.products.name} ${item.products.brand || ""}`.substring(0, 35)
     const quantityRequested = Number(item.quantity_requested) || 0
@@ -248,12 +265,28 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
     assembledTotal += Math.max(0, lineTotal)
     const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
 
-    // Peso unitario del producto (excluye productos por kg, donde la cantidad ya es peso)
-    const allowsDecimal = item.products.allows_decimal_quantity === true
-    const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
-    if (unitWeight > 0) {
-      totalWeightRequested += quantityRequested * unitWeight
-      totalWeightAssembled += quantityAssembled * unitWeight
+    const saleUnit: "unidad" | "peso" = item.sale_unit || "unidad"
+    const byWeight = saleUnit === "peso"
+    const refWeightKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
+
+    // Acumular peso del pedido
+    if (byWeight) {
+      totalWeightRequested += quantityRequested
+      totalWeightAssembled += quantityAssembled
+    } else if (refWeightKg && refWeightKg > 0) {
+      // Peso real cargado por el armador para producto vendido por unidad
+      totalWeightAssembled += refWeightKg
+      const allowsDecimal = item.products.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      if (unitWeight > 0) totalWeightRequested += quantityRequested * unitWeight
+    } else {
+      // Fallback al peso unitario fijo del producto
+      const allowsDecimal = item.products.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      if (unitWeight > 0) {
+        totalWeightRequested += quantityRequested * unitWeight
+        totalWeightAssembled += quantityAssembled * unitWeight
+      }
     }
 
     if (yPos > 265) {
@@ -266,8 +299,8 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
     }
 
     doc.text(productName, col1, yPos)
-    doc.text(quantityRequested.toString(), col2 + 5, yPos, { align: "center" })
-    doc.text(quantityAssembled.toString(), col3 + 8, yPos, { align: "center" })
+    doc.text(fmtQty(quantityRequested, byWeight), col2 + 5, yPos, { align: "center" })
+    doc.text(fmtQty(quantityAssembled, byWeight), col3 + 8, yPos, { align: "center" })
     doc.text(`$${price}`, col4, yPos, { align: "right" })
 
     if (hasShortage) {
@@ -278,23 +311,35 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
       doc.setTextColor(150, 80, 0)
       const faltante = quantityRequested - quantityAssembled
       const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
-      doc.text(`  Faltante: ${faltante}${motivo}`, col1, yPos)
+      doc.text(`  Faltante: ${fmtQty(faltante, byWeight)}${motivo}`, col1, yPos)
       doc.setFontSize(9)
       doc.setTextColor(0)
     }
 
-    // Línea de peso aproximado (si el producto tiene peso configurado)
-    if (unitWeight > 0) {
+    // Línea de peso real (referencia opcional cargada por el armador)
+    if (refWeightKg && refWeightKg > 0) {
       yPos += 4
       doc.setFontSize(8)
       doc.setTextColor(120)
-      doc.text(
-        `  Peso aprox.: ${(quantityAssembled * unitWeight).toFixed(2)} kg (${unitWeight.toFixed(2)} kg c/u)`,
-        col1,
-        yPos,
-      )
+      doc.text(`  Peso real: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
       doc.setFontSize(9)
       doc.setTextColor(0)
+    } else if (!byWeight) {
+      // Fallback: peso aprox. en base al peso unitario del producto
+      const allowsDecimal = item.products.allows_decimal_quantity === true
+      const unitWeight = !allowsDecimal && item.products.weight ? Number(item.products.weight) : 0
+      if (unitWeight > 0) {
+        yPos += 4
+        doc.setFontSize(8)
+        doc.setTextColor(120)
+        doc.text(
+          `  Peso aprox.: ${(quantityAssembled * unitWeight).toFixed(2)} kg (${unitWeight.toFixed(2)} kg c/u)`,
+          col1,
+          yPos,
+        )
+        doc.setFontSize(9)
+        doc.setTextColor(0)
+      }
     }
     yPos += 6
   })

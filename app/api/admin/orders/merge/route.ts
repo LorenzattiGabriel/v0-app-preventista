@@ -121,6 +121,7 @@ export async function POST(request: Request) {
         unit_price: number
         discount: number
         subtotal: number
+        sale_unit: "unidad" | "peso"
       }
     >()
 
@@ -133,8 +134,12 @@ export async function POST(request: Request) {
       const qty = toNum(item.quantity_requested)
       const price = toNum(item.unit_price)
       const disc = toNum(item.discount)
+      const saleUnit: "unidad" | "peso" = item.sale_unit === "peso" ? "peso" : "unidad"
+      // Clave por producto + unidad de venta: no mezclar líneas vendidas por unidad
+      // con líneas del mismo producto vendidas por peso (kg ≠ unidades).
+      const key = `${item.product_id}::${saleUnit}`
 
-      const existing = consolidatedItems.get(item.product_id)
+      const existing = consolidatedItems.get(key)
       if (existing) {
         existing.quantity_requested += qty
         // Use lower unit price (decisión de negocio: favorecer al cliente)
@@ -142,12 +147,13 @@ export async function POST(request: Request) {
         // Sum discounts
         existing.discount += disc
       } else {
-        consolidatedItems.set(item.product_id, {
+        consolidatedItems.set(key, {
           product_id: item.product_id,
           quantity_requested: qty,
           unit_price: price,
           discount: disc,
           subtotal: 0, // se recalcula abajo
+          sale_unit: saleUnit,
         })
       }
     }
@@ -246,6 +252,7 @@ export async function POST(request: Request) {
       unit_price: item.unit_price,
       discount: item.discount,
       subtotal: item.subtotal,
+      sale_unit: item.sale_unit,
       is_shortage: false,
       is_substituted: false,
     }))

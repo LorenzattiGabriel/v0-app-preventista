@@ -41,9 +41,11 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
         unit_price,
         discount,
         subtotal,
+        sale_unit,
         products:products!order_items_product_id_fkey (
           name,
-          brand
+          brand,
+          unit_of_measure
         )
       )
     `
@@ -86,11 +88,14 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
     observations: order.observations,
     generalDiscount: order.general_discount,
     orderItems: order.order_items.map((item: any) => ({
-      productId: item.product_id,      productName: `${item.products?.name} ${item.products?.brand ? `- ${item.products?.brand}` : ""}`,
+      productId: item.product_id,
+      productName: `${item.products?.name} ${item.products?.brand ? `- ${item.products?.brand}` : ""}`,
       quantity: item.quantity_requested,
       unitPrice: item.unit_price,
       discount: item.discount,
       subtotal: item.subtotal,
+      saleUnit: item.sale_unit || "unidad",
+      unitOfMeasure: item.products?.unit_of_measure || "unidad",
     })),
   }
 

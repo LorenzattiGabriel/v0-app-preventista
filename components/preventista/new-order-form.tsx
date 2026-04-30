@@ -54,6 +54,7 @@ interface OrderItem {
   discount: number
   subtotal: number
   unitOfMeasure?: string // Unidad de medida (kg, unidad, litro, etc.)
+  saleUnit?: "unidad" | "peso" // Cómo se vende esta línea: por unidad o por peso (kg)
 }
 
 interface InitialOrderData {
@@ -118,12 +119,14 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [priceType, setPriceType] = useState<"mayorista" | "minorista" | "base" | "custom">("base")
   const [itemDiscount, setItemDiscount] = useState(0)
   const [itemDiscountType, setItemDiscountType] = useState<"fixed" | "percentage">("fixed")
+  const [saleUnit, setSaleUnit] = useState<"unidad" | "peso">("unidad")
 
   // Auto-cargar precio al seleccionar producto, según tipo de cliente
   useEffect(() => {
     if (!selectedProductId) {
       setCustomPrice(null)
       setPriceType("base")
+      setSaleUnit("unidad")
       return
     }
     const product = products.find((p) => p.id === selectedProductId)
@@ -138,6 +141,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       setCustomPrice(product.base_price)
       setPriceType("base")
     }
+    // Default: si admite decimales y la unidad de medida es kg, default a "peso"
+    const decimalKg = product.allows_decimal_quantity && product.unit_of_measure === "kg"
+    setSaleUnit(decimalKg ? "peso" : "unidad")
   }, [selectedProductId, selectedCustomer?.customer_type, products])
 
   // Cambiar tipo de precio: actualiza el valor del precio
@@ -325,6 +331,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       discount: discountAmount,
       subtotal,
       unitOfMeasure: product.unit_of_measure || "unidad",
+      saleUnit: product.allows_decimal_quantity ? saleUnit : "unidad",
     }
 
     setOrderItems([...orderItems, newItem])
@@ -776,14 +783,30 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
           {/* Información sobre cantidades decimales */}
           {selectedProduct && selectedProduct.allows_decimal_quantity && (
-            <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg space-y-3">
               <div className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
                 <Info className="h-5 w-5 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium">Este producto permite cantidades decimales</p>
-                  <p className="text-sm">Puedes ingresar cantidades con decimales (ej: 0.5, 1.75, 2.3 {selectedProduct.unit_of_measure || 'unidades'}).</p>
+                  <p className="font-medium">Vender por unidad o por peso</p>
+                  <p className="text-sm">
+                    Este producto puede venderse como unidad entera (ej: 1 horma) o por peso (ej: 0.500 kg).
+                  </p>
                 </div>
               </div>
+              <RadioGroup
+                value={saleUnit}
+                onValueChange={(v) => setSaleUnit(v as "unidad" | "peso")}
+                className="grid grid-cols-2 gap-2"
+              >
+                <Label className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer">
+                  <RadioGroupItem value="unidad" />
+                  <span className="text-sm">Por unidad</span>
+                </Label>
+                <Label className="flex items-center gap-2 p-2 rounded border bg-background cursor-pointer">
+                  <RadioGroupItem value="peso" />
+                  <span className="text-sm">Por peso (kg)</span>
+                </Label>
+              </RadioGroup>
             </div>
           )}
 
@@ -803,7 +826,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="quantity" className="text-sm font-medium">
-                Cantidad {selectedProduct?.unit_of_measure && `(${selectedProduct.unit_of_measure})`}
+                {selectedProduct?.allows_decimal_quantity && saleUnit === "peso"
+                  ? "Peso (kg)"
+                  : `Cantidad${selectedProduct?.unit_of_measure ? ` (${selectedProduct.unit_of_measure})` : ""}`}
               </Label>
               <Input
                 id="quantity"
@@ -970,8 +995,13 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                         <p className="font-medium text-sm truncate">{item.productName}</p>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
                           <span>
-                            Cant: {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
-                            {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && ` ${item.unitOfMeasure}`}
+                            {item.saleUnit === "peso" ? "Peso: " : "Cant: "}
+                            {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(3)}
+                            {item.saleUnit === "peso"
+                              ? " kg"
+                              : item.unitOfMeasure && item.unitOfMeasure !== "unidad"
+                                ? ` ${item.unitOfMeasure}`
+                                : ""}
                           </span>
                           <span>Precio: ${item.unitPrice.toFixed(2)}</span>
                           {item.discount > 0 && <span>Desc: -${item.discount.toFixed(2)}</span>}
@@ -1011,10 +1041,14 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                       <tr key={index} className="border-t">
                         <td className="p-2 text-sm">{item.productName}</td>
                         <td className="p-2 text-sm text-right">
-                          {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(2)}
-                          {item.unitOfMeasure && item.unitOfMeasure !== "unidad" && (
-                            <span className="text-xs text-muted-foreground ml-1">{item.unitOfMeasure}</span>
-                          )}
+                          {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(3)}
+                          <span className="text-xs text-muted-foreground ml-1">
+                            {item.saleUnit === "peso"
+                              ? "kg"
+                              : item.unitOfMeasure && item.unitOfMeasure !== "unidad"
+                                ? item.unitOfMeasure
+                                : ""}
+                          </span>
                         </td>
                         <td className="p-2 text-sm text-right">${item.unitPrice.toFixed(2)}</td>
                         <td className="p-2 text-sm text-right">${item.discount.toFixed(2)}</td>

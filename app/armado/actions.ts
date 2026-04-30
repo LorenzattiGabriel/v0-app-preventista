@@ -57,9 +57,10 @@ export async function releaseOrderAction(orderId: string) {
     change_reason: "Pedido liberado por el armador",
   })
 
-  // Invalidar cache del dashboard y de la página del pedido
+  // Invalidar sólo el dashboard. NO revalidar la página del pedido:
+  // el server component tiene auto-lock y volvería a tomarlo de inmediato.
+  // El cliente hace router.push al dashboard tras success.
   revalidatePath("/armado/dashboard")
-  revalidatePath(`/armado/orders/${orderId}`)
 
   return { success: true }
 }

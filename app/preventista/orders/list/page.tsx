@@ -71,9 +71,14 @@ const { data: pedidos, error } = await supabase
     items:order_items (
       id,
       quantity_requested,
+      quantity_assembled,
       unit_price,
       discount,
       subtotal,
+      sale_unit,
+      assembled_weight_kg,
+      is_shortage,
+      shortage_reason,
       product:products!order_items_product_id_fkey (
         id,
         code,
