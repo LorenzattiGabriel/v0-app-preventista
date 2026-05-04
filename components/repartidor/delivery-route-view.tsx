@@ -651,41 +651,43 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         return 'jpg' // Default to jpg
       }
 
-      // Upload delivery photo
-      try {
-        const fileExt = getFileExtension(deliveryPhoto)
-      const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
+      // Upload delivery photo (opcional — saltar si no se cargó)
+      if (deliveryPhoto) {
+        try {
+          const fileExt = getFileExtension(deliveryPhoto)
+          const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
 
-        const { error: uploadError } = await supabase.storage
-        .from('delivery')
-          .upload(fileName, deliveryPhoto, {
-          cacheControl: '3600',
-          upsert: false
-        })
-
-      if (uploadError) {
-        console.error("Error uploading photo:", uploadError)
-          // Si el bucket no existe, marcamos para continuar sin fotos
-          if (uploadError.message?.includes("Bucket not found") || uploadError.message?.includes("not found")) {
-            console.warn("[v0] Storage bucket 'delivery' not found - continuing without photos")
-            bucketNotFound = true
-          } else {
-            throw new Error(`Error al subir la foto de entrega: ${uploadError.message}`)
-          }
-        } else {
-          // Get public URL only if upload succeeded
-          const { data } = supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('delivery')
-            .getPublicUrl(fileName)
-          publicUrl = data.publicUrl
+            .upload(fileName, deliveryPhoto, {
+              cacheControl: '3600',
+              upsert: false
+            })
+
+          if (uploadError) {
+            console.error("Error uploading photo:", uploadError)
+            // Si el bucket no existe, marcamos para continuar sin fotos
+            if (uploadError.message?.includes("Bucket not found") || uploadError.message?.includes("not found")) {
+              console.warn("[v0] Storage bucket 'delivery' not found - continuing without photos")
+              bucketNotFound = true
+            } else {
+              throw new Error(`Error al subir la foto de entrega: ${uploadError.message}`)
+            }
+          } else {
+            // Get public URL only if upload succeeded
+            const { data } = supabase.storage
+              .from('delivery')
+              .getPublicUrl(fileName)
+            publicUrl = data.publicUrl
+          }
+        } catch (photoError: any) {
+          // Re-throw if it's not a bucket error - this is a real error
+          if (!photoError.message?.includes("Bucket not found")) {
+            throw photoError
+          }
+          console.warn("[v0] Storage error for delivery photo:", photoError)
+          bucketNotFound = true
         }
-      } catch (photoError: any) {
-        // Re-throw if it's not a bucket error - this is a real error
-        if (!photoError.message?.includes("Bucket not found")) {
-          throw photoError
-        }
-        console.warn("[v0] Storage error for delivery photo:", photoError)
-        bucketNotFound = true
       }
 
       // Upload transfer proofs para cada línea de pago con Transferencia
@@ -750,7 +752,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         status: "ENTREGADO",
         delivered_at: new Date().toISOString(),
         delivery_notes: deliveryNotes || null,
-        delivery_photo_url: publicUrl,
+        delivery_photo_url: publicUrl || null,
         received_by_name: receivedByName.trim(),
         amount_paid: collectedAmountNum,
         was_collected_on_delivery: wasCollected,

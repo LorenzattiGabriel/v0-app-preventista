@@ -138,7 +138,45 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
   // Calculate stats
   const totalOrders = sortedOrders.length
   const deliveredOrders = sortedOrders.filter((ro: any) => ro.orders.status === "ENTREGADO").length
+  const notDeliveredOrders = sortedOrders.filter((ro: any) => ro.orders.no_delivery_reason && ro.orders.status !== "ENTREGADO")
   const totalValue = sortedOrders.reduce((sum: number, ro: any) => sum + parseFloat(ro.orders.total), 0)
+
+  // 🆕 Métricas financieras y operativas del flujo de entrega
+  const totalCollected = sortedOrders.reduce(
+    (sum: number, ro: any) => sum + (ro.orders.was_collected_on_delivery ? parseFloat(ro.orders.amount_paid || 0) : 0),
+    0,
+  )
+  const totalExpectedDelivered = sortedOrders
+    .filter((ro: any) => ro.orders.status === "ENTREGADO")
+    .reduce((sum: number, ro: any) => sum + parseFloat(ro.orders.total || 0), 0)
+  const totalDebt = totalExpectedDelivered - totalCollected
+
+  // Desglose de pagos por método
+  const paymentBreakdown: Record<string, number> = {}
+  sortedOrders.forEach((ro: any) => {
+    const order = ro.orders
+    if (order.status !== "ENTREGADO" || !order.was_collected_on_delivery) return
+    if (Array.isArray(order.payment_methods_json) && order.payment_methods_json.length > 0) {
+      order.payment_methods_json.forEach((p: any) => {
+        const method = p.method || "Otro"
+        paymentBreakdown[method] = (paymentBreakdown[method] || 0) + Number(p.amount || 0)
+      })
+    } else if (order.payment_method) {
+      paymentBreakdown[order.payment_method] =
+        (paymentBreakdown[order.payment_method] || 0) + Number(order.amount_paid || 0)
+    }
+  })
+
+  // Duración real (si tenemos ambos timestamps)
+  const realDurationMin =
+    route.actual_start_time && route.actual_end_time
+      ? Math.round((new Date(route.actual_end_time).getTime() - new Date(route.actual_start_time).getTime()) / 60000)
+      : null
+  const formatDuration = (mins: number) => {
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    return h > 0 ? `${h}h ${m}min` : `${m} min`
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -225,15 +263,6 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Paradas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalOrders}</div>
-                <p className="text-xs text-muted-foreground">Pedidos en ruta</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Entregados</CardTitle>
               </CardHeader>
               <CardContent>
@@ -246,25 +275,77 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                 </p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className={notDeliveredOrders.length > 0 ? "border-red-200 bg-red-50/50 dark:bg-red-950/10" : ""}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Distancia</CardTitle>
+                <CardTitle className="text-sm font-medium">No Entregados</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{route.total_distance?.toFixed(1) || 0} km</div>
-                <p className="text-xs text-muted-foreground">Total estimado</p>
+                <div className={`text-2xl font-bold ${notDeliveredOrders.length > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                  {notDeliveredOrders.length}
+                </div>
+                <p className="text-xs text-muted-foreground">Con motivo registrado</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+                <CardTitle className="text-sm font-medium">Recaudado</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${totalValue.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Suma de pedidos</p>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">${totalCollected.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">de ${totalExpectedDelivered.toFixed(2)} esperado</p>
+              </CardContent>
+            </Card>
+            <Card className={totalDebt > 0 ? "border-amber-200 bg-amber-50/50 dark:bg-amber-950/10" : ""}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Deuda Generada</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${totalDebt > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                  ${totalDebt.toFixed(2)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {totalDebt > 0 ? "Pendiente de cobro" : "Sin deuda"}
+                </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Desglose por método de pago + duración */}
+          {(Object.keys(paymentBreakdown).length > 0 || realDurationMin !== null) && (
+            <div className="grid gap-4 md:grid-cols-3">
+              {Object.keys(paymentBreakdown).length > 0 && (
+                <Card className="md:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Desglose por Método de Pago</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                      {Object.entries(paymentBreakdown).map(([method, amount]) => (
+                        <div key={method} className="flex flex-col p-2 rounded-md bg-muted/50">
+                          <span className="text-xs text-muted-foreground">{method}</span>
+                          <span className="font-bold">${Number(amount).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {realDurationMin !== null && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Duración Real</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{formatDuration(realDurationMin)}</div>
+                    <p className="text-xs text-muted-foreground">
+                      vs {Math.floor((route.estimated_duration || 0) / 60)}h {(route.estimated_duration || 0) % 60}min estimado
+                      · {route.total_distance?.toFixed(1) || 0} km
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Map */}
@@ -295,28 +376,44 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                   {sortedOrders.map((routeOrder: any, index: number) => {
                     const order = routeOrder.orders
                     const isDelivered = order.status === "ENTREGADO"
+                    const isNotDelivered = !!order.no_delivery_reason && !isDelivered
+                    const collected = order.was_collected_on_delivery ? Number(order.amount_paid || 0) : 0
+                    const debt = isDelivered ? Number(order.total || 0) - collected : 0
 
                     return (
                       <div
                         key={routeOrder.id}
-                        className={`p-4 border rounded-lg ${isDelivered ? "bg-green-50 border-green-200" : "bg-background"}`}
+                        className={`p-4 border rounded-lg ${
+                          isDelivered
+                            ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
+                            : isNotDelivered
+                            ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800"
+                            : "bg-background"
+                        }`}
                       >
                         <div className="flex items-start gap-3">
                           <div
                             className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center font-bold ${
                               isDelivered
                                 ? "bg-green-500 text-white"
+                                : isNotDelivered
+                                ? "bg-red-500 text-white"
                                 : "bg-primary/10 text-primary"
                             }`}
                           >
-                            {isDelivered ? <CheckCircle className="h-5 w-5" /> : index + 1}
+                            {isDelivered ? <CheckCircle className="h-5 w-5" /> : isNotDelivered ? "✕" : index + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span className="font-semibold">{order.order_number}</span>
                               <Badge variant="outline" className="text-xs">
                                 {orderStatusLabels[order.status as keyof typeof orderStatusLabels]}
                               </Badge>
+                              {isNotDelivered && (
+                                <Badge variant="destructive" className="text-xs">
+                                  No entregado
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm font-medium">{order.customers.commercial_name}</p>
                             <div className="flex items-start gap-1 text-xs text-muted-foreground mt-1">
@@ -326,13 +423,77 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                                 {order.customers.locality}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3 mt-2 text-xs">
+                            <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
                               <span className="text-muted-foreground">
                                 Items: {order.order_items?.length || 0}
                               </span>
-                              <span className="font-medium">Total: ${order.total}</span>
+                              <span className="font-medium">Total: ${Number(order.total).toFixed(2)}</span>
                             </div>
-                            {routeOrder.estimated_arrival_time && (
+
+                            {/* Info de cobro si está entregado */}
+                            {isDelivered && (
+                              <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 space-y-1 text-xs">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-green-700 dark:text-green-400">
+                                    Cobrado: ${collected.toFixed(2)}
+                                  </span>
+                                  {order.payment_method && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {order.payment_method}
+                                    </Badge>
+                                  )}
+                                  {debt > 0 && (
+                                    <span className="text-amber-700 dark:text-amber-400 font-medium">
+                                      Deuda: ${debt.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                                {order.received_by_name && (
+                                  <p className="text-muted-foreground">
+                                    Recibido por: <span className="font-medium text-foreground">{order.received_by_name}</span>
+                                  </p>
+                                )}
+                                {order.delivered_at && (
+                                  <p className="text-muted-foreground">
+                                    {new Date(order.delivered_at).toLocaleString("es-AR")}
+                                  </p>
+                                )}
+                                {order.delivery_photo_url && (
+                                  <a
+                                    href={order.delivery_photo_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline inline-block"
+                                  >
+                                    📸 Ver foto de entrega
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Info de no entrega */}
+                            {isNotDelivered && (
+                              <div className="mt-2 pt-2 border-t border-red-200 dark:border-red-800 space-y-1 text-xs">
+                                <p className="font-medium text-red-700 dark:text-red-400">
+                                  Motivo: {order.no_delivery_reason?.replace(/_/g, " ")}
+                                </p>
+                                {order.no_delivery_notes && (
+                                  <p className="text-muted-foreground italic">"{order.no_delivery_notes}"</p>
+                                )}
+                                {order.no_delivery_photo_url && (
+                                  <a
+                                    href={order.no_delivery_photo_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline inline-block"
+                                  >
+                                    📸 Ver foto evidencia
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {routeOrder.estimated_arrival_time && !isDelivered && !isNotDelivered && (
                               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                                 <Clock className="h-3 w-3" />
                                 Llegada estimada:{" "}
