@@ -220,7 +220,7 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
         const response = await fetch(`/api/orders/${order.id}`)
         if (!response.ok) throw new Error("No se pudo obtener el pedido")
         const fullOrder = await response.json()
-        downloadAssemblyReceipt(fullOrder)
+        await downloadAssemblyReceipt(fullOrder)
         toast.success("Comprobante descargado")
       } catch (error) {
         toast.error("Error al descargar comprobante")
@@ -246,7 +246,7 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
         const response = await fetch(`/api/orders/${order.id}`)
         if (!response.ok) throw new Error()
         const fullOrder = await response.json()
-        const blob = getAssemblyReceiptBlob(fullOrder)
+        const blob = await getAssemblyReceiptBlob(fullOrder)
         result = await shareOnWhatsApp(phone, order.order_number, blob, message)
       } catch {
         result = await shareOnWhatsApp(phone, order.order_number, null, message)

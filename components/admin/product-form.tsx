@@ -355,7 +355,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="max_discount_percentage">Máximo Descuento (%)</Label>
+                <Label htmlFor="max_discount_percentage">Descuento máximo en porcentaje (%)</Label>
                 <Input
                   id="max_discount_percentage"
                   type="number"
@@ -369,7 +369,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max_discount_fixed">Máximo Descuento ($)</Label>
+                <Label htmlFor="max_discount_fixed">Descuento máximo en monto fijo ($)</Label>
                 <Input
                   id="max_discount_fixed"
                   type="number"

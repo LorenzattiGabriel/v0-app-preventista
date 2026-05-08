@@ -34,7 +34,7 @@ export function DownloadOrderReceiptButton({
         throw new Error(j.error || "No se pudo obtener el pedido")
       }
       const fullOrder = await response.json()
-      downloadAssemblyReceipt(fullOrder)
+      await downloadAssemblyReceipt(fullOrder)
       toast.success(`Comprobante de ${orderNumber} descargado`)
     } catch (e) {
       console.error("Error descargando comprobante:", e)

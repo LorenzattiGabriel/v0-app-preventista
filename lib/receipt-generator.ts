@@ -1,11 +1,30 @@
 import jsPDF from "jspdf"
 
+const ALEF_LOGO_URL =
+  "https://ojghwcbliucsntrbqvaw.supabase.co/storage/v1/object/public/logos/alef-logo.png"
+
+async function fetchLogoBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
 export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.width
   const margin = 15
   let yPos = 20
-  
+
   // Helper to center text
   const centerText = (text: string, y: number, fontSize = 12, font = "helvetica", style = "normal") => {
     doc.setFont(font, style)
@@ -21,7 +40,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   yPos += 5
   yPos = centerText("Reparto Preventista", yPos, 10, "helvetica", "normal")
   yPos += 10
-  
+
   // --- Order Info ---
   doc.setFontSize(10)
   doc.setFont("helvetica", "normal")
@@ -38,7 +57,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   // --- Customer Info ---
   doc.setDrawColor(200)
   doc.line(margin, yPos - 5, pageWidth - margin, yPos - 5) // separator
-  
+
   doc.setFont("helvetica", "bold")
   doc.text("DATOS DEL CLIENTE", margin, yPos)
   yPos += 6
@@ -58,12 +77,12 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   doc.setFont("helvetica", "bold")
   doc.text("DETALLE DEL PEDIDO", margin, yPos)
   yPos += 8
-  
+
   // Table Header
   const col1 = margin
   const col2 = margin + 80
   const col3 = pageWidth - margin - 20
-  
+
   doc.setFontSize(9)
   doc.setFont("helvetica", "bold")
   doc.text("Producto", col1, yPos)
@@ -72,11 +91,11 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   yPos += 4
   doc.line(col1, yPos - 1, pageWidth - margin, yPos - 1)
   yPos += 5
-  
+
   // Table Body
   doc.setFont("helvetica", "normal")
   const items = order.order_items || []
-  
+
   items.forEach((item: any) => {
     const p = item.products || {}
     const productName = `${p.name || "Producto"} ${p.brand || ""}`.substring(0, 40)
@@ -109,7 +128,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
     }
     yPos += 6
   })
-  
+
   yPos += 5
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 8
@@ -119,16 +138,16 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   doc.setFontSize(11)
   const total = order.total || 0
   const collected = order.was_collected ? (order.collected_amount || 0) : 0
-  
+
   doc.text(`TOTAL: $${total.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 8
-  
+
   // Payment Status
   doc.setFontSize(10)
   if (order.was_collected) {
       doc.setTextColor(0, 100, 0) // Green
       doc.text(`COBRADO: $${collected.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-      
+
       // Payment Method
       yPos += 5
       doc.setFontSize(9)
@@ -146,9 +165,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   if (order.received_by_name) {
       doc.text(`Recibido por: ${order.received_by_name}`, margin, yPos)
   }
-  
-  
-  
+
   // Return the doc instance so we can choose to save or get blob
   return doc
 }
@@ -163,211 +180,240 @@ export const getReceiptBlob = (order: any, repartidorName?: string): Blob => {
   return doc.output('blob')
 }
 
-// 🆕 Generar comprobante de armado (diferente al de entrega)
-export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
+// Comprobante de armado (REMITO)
+export const generateAssemblyReceipt = async (order: any, armadorName?: string) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.width
   const margin = 15
-  let yPos = 20
-  
-  // Helper to center text
-  const centerText = (text: string, y: number, fontSize = 12, font = "helvetica", style = "normal") => {
-    doc.setFont(font, style)
-    doc.setFontSize(fontSize)
-    const textWidth = doc.getStringUnitWidth(text) * fontSize / doc.internal.scaleFactor
-    const x = (pageWidth - textWidth) / 2
-    doc.text(text, x, y)
-    return y + (fontSize * 0.5)
+  let yPos = 10
+
+  // --- Logo + Header ---
+  const logoBase64 = await fetchLogoBase64(ALEF_LOGO_URL)
+  if (logoBase64) {
+    const fmt = logoBase64.startsWith("data:image/png") ? "PNG" : "JPEG"
+    doc.addImage(logoBase64, fmt, margin, yPos, 36, 18)
   }
 
-  // --- Header ---
-  yPos = centerText("COMPROBANTE DE ARMADO", yPos, 16, "helvetica", "bold")
-  yPos += 5
-  yPos = centerText("Pedido Listo para Despacho", yPos, 10, "helvetica", "normal")
-  yPos += 10
-  
-  // --- Order Info ---
-  doc.setFontSize(10)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(20)
+  doc.text("REMITO", pageWidth / 2, yPos + 10, { align: "center" })
+
+  const deliveryDate = order.delivery_date
+    ? new Date(order.delivery_date + "T00:00:00").toLocaleDateString("es-AR")
+    : new Date().toLocaleDateString("es-AR")
   doc.setFont("helvetica", "normal")
-  doc.text(`Fecha de Armado: ${new Date().toLocaleDateString("es-AR")} ${new Date().toLocaleTimeString("es-AR")}`, margin, yPos)
+  doc.setFontSize(9)
+  doc.text(`Fecha de entrega: ${deliveryDate}`, pageWidth - margin, yPos + 5, { align: "right" })
+  doc.text(`Pedido N°: ${order.order_number || "S/N"}`, pageWidth - margin, yPos + 11, { align: "right" })
+
+  yPos += 24
+
+  // Armado info
+  doc.setFontSize(8)
+  doc.setTextColor(120)
+  doc.text(
+    `Armado el ${new Date().toLocaleDateString("es-AR")}${armadorName ? ` por ${armadorName}` : ""}`,
+    margin,
+    yPos,
+  )
+  doc.setTextColor(0)
   yPos += 6
-  doc.text(`Pedido N°: ${order.order_number || "S/N"}`, margin, yPos)
-  yPos += 6
-  if (armadorName) {
-    doc.text(`Armado por: ${armadorName}`, margin, yPos)
-    yPos += 6
-  }
-  yPos += 4
+
+  // --- Separator ---
+  doc.setDrawColor(180)
+  doc.line(margin, yPos, pageWidth - margin, yPos)
+  yPos += 7
 
   // --- Customer Info ---
-  doc.setDrawColor(200)
-  doc.line(margin, yPos - 5, pageWidth - margin, yPos - 5)
-  
   doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
   doc.text("DATOS DEL CLIENTE", margin, yPos)
   yPos += 6
   doc.setFont("helvetica", "normal")
-  doc.text(`Cliente: ${order.customers.commercial_name}`, margin, yPos)
-  yPos += 6
-  doc.text(`Dirección: ${order.customers.street} ${order.customers.street_number || ""}`, margin, yPos)
-  yPos += 6
-  if (order.customers.locality) {
-    doc.text(`Localidad: ${order.customers.locality}, ${order.customers.province || ""}`, margin, yPos)
-    yPos += 6
+  doc.setFontSize(9)
+
+  const customers = order.customers || {}
+  doc.text(`Cliente: ${customers.commercial_name || "Sin nombre"}`, margin, yPos)
+  yPos += 5
+  if (customers.street) {
+    doc.text(`Dirección: ${customers.street} ${customers.street_number || ""}`, margin, yPos)
+    yPos += 5
   }
+  if (customers.locality) {
+    doc.text(
+      `Localidad: ${customers.locality}${customers.province ? `, ${customers.province}` : ""}`,
+      margin,
+      yPos,
+    )
+    yPos += 5
+  }
+
+  // Forma de pago
+  const paymentMethods = order.payment_methods_json as Array<{ method: string; amount: number }> | null
+  let paymentText = ""
+  if (paymentMethods && Array.isArray(paymentMethods) && paymentMethods.length > 0) {
+    paymentText = paymentMethods
+      .map((p) => `${p.method}: $${Number(p.amount).toFixed(2)}`)
+      .join(" + ")
+  } else if (order.payment_method) {
+    paymentText = order.payment_method
+  }
+  if (paymentText) {
+    doc.text(`Forma de pago: ${paymentText}`, margin, yPos)
+    yPos += 5
+  }
+
   yPos += 4
 
-  // --- Items ---
-  doc.line(margin, yPos - 5, pageWidth - margin, yPos - 5)
+  // --- Items Table ---
+  doc.setDrawColor(180)
+  doc.line(margin, yPos, pageWidth - margin, yPos)
+  yPos += 6
   doc.setFont("helvetica", "bold")
-  doc.text("DETALLE DEL PEDIDO ARMADO", margin, yPos)
+  doc.setFontSize(10)
+  doc.text("DETALLE DEL PEDIDO", margin, yPos)
   yPos += 8
-  
-  const col1 = margin
-  const col2 = margin + 70
-  const col3 = margin + 90
-  const col4 = pageWidth - margin - 20
-  
-  doc.setFontSize(9)
-  doc.setFont("helvetica", "bold")
+
+  // Column positions (A4 = 210mm, margins = 15mm each side → 180mm usable)
+  const col1 = margin            // Product (left-aligned)
+  const colPriceRight = 82       // Unit price (right-aligned)
+  const colSolic = 102           // Solicited (center)
+  const colAssembled = 128       // Assembled (center)
+  const colTotalRight = pageWidth - margin  // Total (right-aligned)
+
+  doc.setFontSize(8)
   doc.text("Producto", col1, yPos)
-  doc.text("Solic.", col2, yPos)
-  doc.text("Armado", col3, yPos)
-  doc.text("Total", col4, yPos, { align: "right" })
-  yPos += 4
-  doc.line(col1, yPos - 1, pageWidth - margin, yPos - 1)
+  doc.text("P. Unit.", colPriceRight, yPos, { align: "right" })
+  doc.text("Solic.", colSolic, yPos, { align: "center" })
+  doc.text("Armado", colAssembled, yPos, { align: "center" })
+  doc.text("Total", colTotalRight, yPos, { align: "right" })
+  yPos += 3
+  doc.line(col1, yPos, pageWidth - margin, yPos)
   yPos += 5
-  
+
   doc.setFont("helvetica", "normal")
   const items = order.order_items || []
 
-  // Resolver cantidad armada con shortage explícito: si is_shortage=true, fuerza 0
   const resolveAssembled = (item: any) => {
-    if (item.is_shortage === true) {
-      return item.quantity_assembled ?? 0
-    }
-    if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
-      return item.quantity_assembled
-    }
+    if (item.is_shortage === true) return item.quantity_assembled ?? 0
+    if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) return item.quantity_assembled
     return item.quantity_requested || 0
   }
+
+  const fmtQty = (v: number, byWeight: boolean) =>
+    byWeight ? `${v.toFixed(3)} kg` : Number.isInteger(v) ? v.toString() : v.toFixed(2)
 
   let assembledTotal = 0
   let totalWeightRequested = 0
   let totalWeightAssembled = 0
-  const fmtQty = (v: number, byWeight: boolean) =>
-    byWeight ? `${v.toFixed(3)} kg` : Number.isInteger(v) ? v.toString() : v.toFixed(2)
+
   items.forEach((item: any) => {
     const prod = item.products || {}
-    const productName = `${prod.name || "Producto"} ${prod.brand || ""}`.substring(0, 35)
+    const productName = `${prod.name || "Producto"} ${prod.brand || ""}`.trim().substring(0, 28)
     const quantityRequested = Number(item.quantity_requested) || 0
     const quantityAssembled = Number(resolveAssembled(item)) || 0
-    const lineTotal = item.unit_price * quantityAssembled - (item.discount || 0)
-    const price = Math.max(0, lineTotal).toFixed(2)
-    assembledTotal += Math.max(0, lineTotal)
+    const unitPrice = Number(item.unit_price) || 0
+    const discount = Number(item.discount) || 0
+    const lineTotal = Math.max(0, unitPrice * quantityAssembled - discount)
+    assembledTotal += lineTotal
     const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
 
-    const saleUnit: "unidad" | "peso" = item.sale_unit || "unidad"
-    const byWeight = saleUnit === "peso"
+    const byWeight = item.sale_unit === "peso"
     const refWeightKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
 
-    // Acumular peso del pedido
     if (byWeight) {
       totalWeightRequested += quantityRequested
       totalWeightAssembled += quantityAssembled
     } else if (refWeightKg && refWeightKg > 0) {
-      // Peso real cargado por el armador para producto vendido por unidad
       totalWeightAssembled += refWeightKg
-      const allowsDecimal = prod.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
+      const unitWeight = !prod.allows_decimal_quantity && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) totalWeightRequested += quantityRequested * unitWeight
     } else {
-      // Fallback al peso unitario fijo del producto
-      const allowsDecimal = prod.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
+      const unitWeight = !prod.allows_decimal_quantity && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) {
         totalWeightRequested += quantityRequested * unitWeight
         totalWeightAssembled += quantityAssembled * unitWeight
       }
     }
 
-    if (yPos > 265) {
+    if (yPos > 262) {
       doc.addPage()
       yPos = 20
     }
 
-    if (hasShortage) {
-      doc.setTextColor(200, 100, 0) // Orange for shortages
-    }
-
+    doc.setFontSize(8)
+    if (hasShortage) doc.setTextColor(200, 100, 0)
     doc.text(productName, col1, yPos)
-    doc.text(fmtQty(quantityRequested, byWeight), col2 + 5, yPos, { align: "center" })
-    doc.text(fmtQty(quantityAssembled, byWeight), col3 + 8, yPos, { align: "center" })
-    doc.text(`$${price}`, col4, yPos, { align: "right" })
+    doc.text(`$${unitPrice.toFixed(2)}`, colPriceRight, yPos, { align: "right" })
+    doc.text(fmtQty(quantityRequested, byWeight), colSolic, yPos, { align: "center" })
+    doc.text(fmtQty(quantityAssembled, byWeight), colAssembled, yPos, { align: "center" })
+    doc.text(`$${lineTotal.toFixed(2)}`, colTotalRight, yPos, { align: "right" })
+    if (hasShortage) doc.setTextColor(0)
 
     if (hasShortage) {
-      doc.setTextColor(0) // Reset
-      // Línea adicional con motivo del faltante
       yPos += 4
-      doc.setFontSize(8)
+      doc.setFontSize(7)
       doc.setTextColor(150, 80, 0)
       const faltante = quantityRequested - quantityAssembled
       const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
       doc.text(`  Faltante: ${fmtQty(faltante, byWeight)}${motivo}`, col1, yPos)
-      doc.setFontSize(9)
+      doc.setFontSize(8)
       doc.setTextColor(0)
     }
 
-    // Línea de peso real (referencia opcional cargada por el armador)
     if (refWeightKg && refWeightKg > 0) {
       yPos += 4
-      doc.setFontSize(8)
+      doc.setFontSize(7)
       doc.setTextColor(120)
       doc.text(`  Peso real: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
-      doc.setFontSize(9)
+      doc.setFontSize(8)
       doc.setTextColor(0)
     } else if (!byWeight) {
-      // Fallback: peso aprox. en base al peso unitario del producto
-      const allowsDecimal = prod.allows_decimal_quantity === true
-      const unitWeight = !allowsDecimal && prod.weight ? Number(prod.weight) : 0
+      const unitWeight = !prod.allows_decimal_quantity && prod.weight ? Number(prod.weight) : 0
       if (unitWeight > 0) {
         yPos += 4
-        doc.setFontSize(8)
+        doc.setFontSize(7)
         doc.setTextColor(120)
         doc.text(
           `  Peso aprox.: ${(quantityAssembled * unitWeight).toFixed(2)} kg (${unitWeight.toFixed(2)} kg c/u)`,
           col1,
           yPos,
         )
-        doc.setFontSize(9)
+        doc.setFontSize(8)
         doc.setTextColor(0)
       }
     }
     yPos += 6
   })
 
-  yPos += 5
+  yPos += 3
+  doc.setDrawColor(180)
   doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 8
+  yPos += 7
 
   // --- Totals ---
-  // Usar el total armado real, con fallback al total del pedido
-  const generalDiscount = order.general_discount || 0
-  const finalAssembledTotal = order.total ?? Math.max(0, assembledTotal - generalDiscount)
-  const originalTotal = order.original_total ?? order.total ?? 0
+  const generalDiscount = Number(order.general_discount) || 0
+  const finalAssembledTotal =
+    order.total != null ? Number(order.total) : Math.max(0, assembledTotal - generalDiscount)
+  const originalTotal =
+    order.original_total != null
+      ? Number(order.original_total)
+      : order.total != null
+      ? Number(order.total)
+      : 0
   const difference = originalTotal - finalAssembledTotal
   const hasDifference = Math.abs(difference) > 0.01
 
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(10)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
 
   if (hasDifference) {
     doc.setTextColor(80, 80, 80)
-    doc.text(`Total Original: $${originalTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 6
+    doc.text(`Total original: $${originalTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 5
     doc.setTextColor(0)
-    doc.text(`Total Armado: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 6
+    doc.text(`Total armado: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 5
     doc.setTextColor(200, 100, 0)
     const diffSign = difference > 0 ? "-" : "+"
     doc.text(
@@ -377,14 +423,15 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
       { align: "right" },
     )
     doc.setTextColor(0)
-    yPos += 8
+    yPos += 7
   }
 
-  doc.setFontSize(11)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(12)
   doc.text(`TOTAL: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-  yPos += 10
+  yPos += 8
 
-  // --- Peso del pedido (solo si hay productos con peso configurado) ---
+  // --- Peso del pedido ---
   if (totalWeightRequested > 0 || totalWeightAssembled > 0) {
     doc.setFontSize(9)
     doc.setFont("helvetica", "normal")
@@ -400,50 +447,68 @@ export const generateAssemblyReceipt = (order: any, armadorName?: string) => {
     }
     doc.setTextColor(0)
     doc.setFont("helvetica", "bold")
-    doc.text(
-      `Peso armado: ${totalWeightAssembled.toFixed(2)} kg`,
-      pageWidth - margin,
-      yPos,
-      { align: "right" },
-    )
+    doc.text(`Peso armado: ${totalWeightAssembled.toFixed(2)} kg`, pageWidth - margin, yPos, { align: "right" })
     yPos += 8
   }
 
   // --- Status ---
-  const hasShortages = order.has_shortages === true || items.some((item: any) => {
-    if (item.is_shortage === true) return true
-    if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
-      return item.quantity_assembled < item.quantity_requested
-    }
-    return false
-  })
-  
+  const hasShortages =
+    order.has_shortages === true ||
+    items.some((item: any) => {
+      if (item.is_shortage === true) return true
+      if (item.quantity_assembled !== null && item.quantity_assembled !== undefined) {
+        return Number(item.quantity_assembled) < Number(item.quantity_requested)
+      }
+      return false
+    })
+
   doc.setFontSize(10)
   if (hasShortages) {
-    doc.setTextColor(200, 100, 0) // Orange
+    doc.setTextColor(200, 100, 0)
     doc.text("⚠ PEDIDO CON FALTANTES", margin, yPos)
   } else {
-    doc.setTextColor(0, 100, 0) // Green
+    doc.setTextColor(0, 100, 0)
     doc.text("✓ PEDIDO COMPLETO", margin, yPos)
   }
   doc.setTextColor(0)
   yPos += 10
 
-  // --- Footer ---
-  doc.setFontSize(9)
-  doc.setTextColor(100)
-  yPos = centerText("Este pedido está listo para ser despachado", yPos + 10, 9)
+  // Asegurar espacio para disclaimer + firmas (necesita ~35mm)
+  if (yPos > 240) {
+    doc.addPage()
+    yPos = 20
+  }
+
+  // --- Disclaimer legal ---
+  doc.setFont("helvetica", "italic")
+  doc.setFontSize(8)
+  doc.setTextColor(90, 90, 90)
+  const disclaimer =
+    "Una vez verificado y firmado el presente documento, la distribuidora no aceptará reclamos por faltantes."
+  const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - margin * 2)
+  doc.text(splitDisclaimer, margin, yPos)
+  yPos += splitDisclaimer.length * 5 + 10
+
+  // --- Líneas de firma ---
   doc.setTextColor(0)
-  
+  doc.setFont("helvetica", "normal")
+  doc.setDrawColor(0)
+  const firmaY = yPos + 12
+  doc.line(margin, firmaY, margin + 68, firmaY)
+  doc.line(pageWidth - margin - 68, firmaY, pageWidth - margin, firmaY)
+  doc.setFontSize(9)
+  doc.text("Firma", margin + 34, firmaY + 5, { align: "center" })
+  doc.text("Aclaración", pageWidth - margin - 34, firmaY + 5, { align: "center" })
+
   return doc
 }
 
-export const getAssemblyReceiptBlob = (order: any, armadorName?: string): Blob => {
-  const doc = generateAssemblyReceipt(order, armadorName)
-  return doc.output('blob')
+export const getAssemblyReceiptBlob = async (order: any, armadorName?: string): Promise<Blob> => {
+  const doc = await generateAssemblyReceipt(order, armadorName)
+  return doc.output("blob")
 }
 
-export const downloadAssemblyReceipt = (order: any, armadorName?: string) => {
-  const doc = generateAssemblyReceipt(order, armadorName)
-  doc.save(`Comprobante_Armado_${order.order_number}.pdf`)
+export const downloadAssemblyReceipt = async (order: any, armadorName?: string) => {
+  const doc = await generateAssemblyReceipt(order, armadorName)
+  doc.save(`Remito_${order.order_number}.pdf`)
 }

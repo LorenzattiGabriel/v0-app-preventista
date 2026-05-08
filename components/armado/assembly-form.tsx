@@ -89,7 +89,8 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
       }),
     }
 
-    const blob = generateAssemblyReceipt(orderForReceipt).output('blob') as Blob
+    const receiptDoc = await generateAssemblyReceipt(orderForReceipt)
+    const blob = receiptDoc.output('blob') as Blob
     const result = await shareOnWhatsApp(phone, order.order_number, blob, message)
 
     if (result === "shared") {
@@ -103,7 +104,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
   }
 
   // 🆕 Descargar PDF - usar los items armados localmente (reflejan faltantes y total real)
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const orderForReceipt = {
       ...order,
       total: assembledOrder?.total ?? order.total,
@@ -120,7 +121,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
         }
       }),
     }
-    downloadAssemblyReceipt(orderForReceipt)
+    await downloadAssemblyReceipt(orderForReceipt)
   }
 
   // Initialize assembly items from order items
@@ -243,6 +244,16 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
     }
   }
 
+  // Items pesables por unidad (ej. hormas de queso) que requieren peso obligatorio
+  const itemsMissingWeight = assemblyItems.filter(
+    (item) =>
+      item.allowsDecimalQuantity &&
+      item.saleUnit !== "peso" &&
+      !item.isShortage &&
+      item.quantityAssembled > 0 &&
+      (item.assembledWeightKg === null || item.assembledWeightKg <= 0),
+  )
+
   const handleConfirmAssembly = async () => {
     setIsLoading(true)
     setError(null)
@@ -255,6 +266,14 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
       const allShortage = assemblyItems.every((item) => item.quantityAssembled === 0)
       if (allShortage) {
         setError("No se puede confirmar un pedido sin ningún producto armado")
+        setIsLoading(false)
+        return
+      }
+
+      // Validar peso obligatorio para productos pesables por unidad
+      if (itemsMissingWeight.length > 0) {
+        const names = itemsMissingWeight.map((i) => i.productName).join(", ")
+        setError(`Ingresá el peso real (kg) de: ${names}`)
         setIsLoading(false)
         return
       }
@@ -594,12 +613,24 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                   </div>
                 )}
 
-                {/* Peso real de referencia (opcional) para productos pesables */}
+                {/* Peso real para productos pesables */}
                 {isWeighable && (
                   <div className="space-y-1">
-                    <Label htmlFor={`weight-ref-${index}`} className="text-xs text-muted-foreground">
-                      Peso real (kg) — referencia opcional
-                    </Label>
+                    {isWeightBased ? (
+                      <Label htmlFor={`weight-ref-${index}`} className="text-xs text-muted-foreground">
+                        Peso real (kg) — referencia opcional
+                      </Label>
+                    ) : (
+                      <Label htmlFor={`weight-ref-${index}`} className="text-xs font-medium">
+                        Peso real (kg){" "}
+                        <span className="text-destructive">*</span>
+                        {item.assembledWeightKg === null || item.assembledWeightKg <= 0
+                          ? !item.isShortage && item.quantityAssembled > 0
+                            ? <span className="text-destructive ml-1 font-normal">— requerido</span>
+                            : null
+                          : null}
+                      </Label>
+                    )}
                     <Input
                       id={`weight-ref-${index}`}
                       type="number"
@@ -617,7 +648,14 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
                         handleItemChange(index, "assembledWeightKg", isNaN(v) ? null : Math.max(0, v))
                       }}
                       disabled={isLocked}
-                      className="max-w-[200px]"
+                      className={`max-w-[200px] ${
+                        !isWeightBased &&
+                        !item.isShortage &&
+                        item.quantityAssembled > 0 &&
+                        (item.assembledWeightKg === null || item.assembledWeightKg <= 0)
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }`}
                     />
                   </div>
                 )}
@@ -769,6 +807,16 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
             </div>
           )}
 
+          {itemsMissingWeight.length > 0 && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-md">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium">Faltan pesos obligatorios</p>
+                <p>{itemsMissingWeight.map((i) => i.productName).join(", ")}</p>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-4 pt-4 border-t">
             <Button
               variant="outline"
@@ -779,7 +827,7 @@ export function AssemblyForm({ order, products, userId, isLocked, lockedByUser }
             </Button>
             <Button
               onClick={() => setShowConfirmDialog(true)}
-              disabled={isLoading || isLocked}
+              disabled={isLoading || isLocked || itemsMissingWeight.length > 0}
               size="lg"
             >
               <CheckCircle className="mr-2 h-4 w-4" />

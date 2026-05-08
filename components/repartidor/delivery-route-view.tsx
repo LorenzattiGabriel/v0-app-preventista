@@ -2202,21 +2202,50 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
               </div>
 
               {/* Payment Breakdown */}
-              {routeSummary.paymentBreakdown && Object.keys(routeSummary.paymentBreakdown).length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Detalle por Método de Pago</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {Object.entries(routeSummary.paymentBreakdown).map(([method, amount]: [string, any]) => (
-                      <div key={method} className="flex justify-between text-sm">
-                        <span className="capitalize">{method}</span>
-                        <span className="font-medium">${Number(amount).toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
+              {routeSummary.paymentBreakdown && Object.keys(routeSummary.paymentBreakdown).length > 0 && (() => {
+                const paymentIcon = (method: string) => {
+                  const m = method.toLowerCase()
+                  if (m.includes("efectivo")) return { icon: "💵", color: "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-200" }
+                  if (m.includes("transferencia")) return { icon: "🏦", color: "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800", text: "text-blue-800 dark:text-blue-200" }
+                  if (m.includes("tarjeta")) return { icon: "💳", color: "bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800", text: "text-purple-800 dark:text-purple-200" }
+                  if (m.includes("cheque")) return { icon: "📝", color: "bg-yellow-50 dark:bg-yellow-950/40 border-yellow-200 dark:border-yellow-800", text: "text-yellow-800 dark:text-yellow-200" }
+                  if (m.includes("cuenta")) return { icon: "📋", color: "bg-gray-50 dark:bg-gray-950/40 border-gray-200 dark:border-gray-800", text: "text-gray-800 dark:text-gray-200" }
+                  return { icon: "💰", color: "bg-gray-50 dark:bg-gray-950/40 border-gray-200 dark:border-gray-800", text: "text-gray-800 dark:text-gray-200" }
+                }
+                const entries = Object.entries(routeSummary.paymentBreakdown)
+                const total = entries.reduce((s, [, v]) => s + Number(v), 0)
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium">Arqueo por Método de Pago</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {entries.map(([method, amount]: [string, any]) => {
+                        const { icon, color, text } = paymentIcon(method)
+                        return (
+                          <div key={method} className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${color}`}>
+                            <span className={`flex items-center gap-2 text-sm font-medium ${text}`}>
+                              <span className="text-base">{icon}</span>
+                              {method}
+                            </span>
+                            <span className={`text-base font-bold ${text}`}>
+                              ${Number(amount).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )
+                      })}
+                      {entries.length > 1 && (
+                        <div className="flex items-center justify-between px-3 py-2 border-t mt-1 pt-3">
+                          <span className="text-sm font-semibold">Total recaudado</span>
+                          <span className="text-base font-bold text-green-600">
+                            ${total.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
 
               {/* Difference Alert */}
               {routeSummary.difference !== 0 && (
@@ -2270,13 +2299,23 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                             </td>
                             <td className="p-2 text-right">
                               {order.wasCollected ? (
-                                <div>
+                                <div className="flex items-center gap-1 justify-end flex-wrap">
                                   <span className="text-xs text-green-600 font-medium">${order.collectedAmount.toFixed(2)}</span>
-                                  <span className="text-xs text-muted-foreground ml-1">
-                                    {order.paymentMethod === "efectivo" && "💵"}
-                                    {order.paymentMethod === "Transferencia" && "🏦"}
-                                    {order.paymentMethod === "tarjeta" && "💳"}
-                                  </span>
+                                  {order.paymentMethodsJson && order.paymentMethodsJson.length > 1 ? (
+                                    <span className="text-xs text-muted-foreground">split</span>
+                                  ) : (
+                                    <span className="text-xs">
+                                      {(() => {
+                                        const m = (order.paymentMethod || "").toLowerCase()
+                                        if (m.includes("efectivo")) return "💵"
+                                        if (m.includes("transferencia")) return "🏦"
+                                        if (m.includes("tarjeta")) return "💳"
+                                        if (m.includes("cheque")) return "📝"
+                                        if (m.includes("cuenta")) return "📋"
+                                        return ""
+                                      })()}
+                                    </span>
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs text-muted-foreground">-</span>

@@ -10,7 +10,7 @@ interface Props {
 
 export function DownloadAssemblyReceiptButton({ order }: Props) {
   return (
-    <Button variant="outline" onClick={() => downloadAssemblyReceipt(order)}>
+    <Button variant="outline" onClick={async () => { await downloadAssemblyReceipt(order) }}>
       <Download className="mr-2 h-4 w-4" />
       Descargar Comprobante
     </Button>
