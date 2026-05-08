@@ -9,6 +9,7 @@ import { ProductsFilters } from "@/components/admin/products-filters"
 import { ProductsList } from "@/components/admin/products-list"
 import { ProductsPagination } from "@/components/admin/products-pagination"
 import { BulkPriceUpdateButton } from "@/components/admin/bulk-price-update-button"
+import { PriceListButton } from "@/components/admin/price-list-button"
 
 export default async function ProductsPage({
   searchParams,
@@ -75,6 +76,7 @@ export default async function ProductsPage({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <PriceListButton />
           <BulkPriceUpdateButton />
           <Button variant="outline" asChild>
             <Link href="/admin/products/stock-history">
