@@ -62,26 +62,22 @@ export function AdminNewUserForm({ currentUserId }: AdminNewUserFormProps) {
     }
 
     try {
+      // Get current session token to pass in Authorization header
       const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
 
-      // Check if email already exists
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle()
-
-      if (existingUser) {
-        setError('Ya existe un usuario con ese email')
+      if (!session?.access_token) {
+        setError('Tu sesión expiró. Volvé a iniciar sesión.')
         setIsLoading(false)
         return
       }
 
-      // Create user using API route (to handle password hashing server-side)
+      // Create user using API route
       const response = await fetch('/api/admin/users/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           email,

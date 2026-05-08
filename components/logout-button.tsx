@@ -20,8 +20,7 @@ export function LogoutButton() {
       })
 
       if (response.ok) {
-        router.push("/auth/login")
-        router.refresh()
+        window.location.href = "/auth/login"
       } else {
         console.error("Error al cerrar sesión")
       }

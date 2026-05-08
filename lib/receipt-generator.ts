@@ -365,7 +365,10 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
       yPos += 4
       doc.setFontSize(7)
       doc.setTextColor(120)
-      doc.text(`  Peso real: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
+      // Para kg: mostrar "Peso en balanza" además de la cantidad armada
+      // Para unidad: mostrar el peso real cortado
+      const weightLabel = byWeight ? "Peso en balanza" : "Peso real"
+      doc.text(`  ${weightLabel}: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
       doc.setFontSize(8)
       doc.setTextColor(0)
     } else if (!byWeight) {

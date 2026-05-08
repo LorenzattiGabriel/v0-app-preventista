@@ -1,29 +1,41 @@
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 
+const getAdminClient = () =>
+  createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  )
+
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    // Verify the caller's JWT via Authorization header (reliable on Vercel)
+    const authHeader = request.headers.get('Authorization')
+    const token = authHeader?.replace('Bearer ', '')
 
-    // Authentication check
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    if (!token) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
 
-    if (!user) {
+    const supabaseAdmin = getAdminClient()
+
+    // Verify token and get user
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+
+    if (userError || !user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
     // Authorization check - only admins can create users
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
     if (!profile || profile.role !== 'administrativo') {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+      return NextResponse.json({ error: 'Sin permisos. Solo administradores pueden crear usuarios.' }, { status: 403 })
     }
 
     // Get request body
@@ -47,7 +59,7 @@ export async function POST(request: Request) {
     }
 
     // Check if email already exists in profiles
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('email', email)
@@ -55,22 +67,10 @@ export async function POST(request: Request) {
 
     if (existingProfile) {
       return NextResponse.json(
-        { error: 'Ya existe un usuario con ese email en profiles' },
+        { error: 'Ya existe un usuario con ese email' },
         { status: 400 }
       )
     }
-
-    // Create admin client with service role key to manage auth.users
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
 
     // 1. Create user in auth.users using admin API
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Create profile in profiles table with the same ID from auth.users
-    const { data: newProfile, error: profileError } = await supabase
+    const { data: newProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
         id: authUser.user.id, // Use the ID from auth.users

@@ -141,7 +141,7 @@ export function PriceListButton() {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Lista de Precios</DialogTitle>
             <DialogDescription>
@@ -149,7 +149,7 @@ export function PriceListButton() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
             {/* Filters */}
             <div className="grid grid-cols-2 gap-3">
               {/* Search */}
