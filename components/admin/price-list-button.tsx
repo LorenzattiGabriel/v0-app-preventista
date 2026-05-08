@@ -227,14 +227,19 @@ export function PriceListButton() {
                       {brands.map((b) => (
                         <div
                           key={b}
-                          className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted cursor-pointer"
-                          onClick={() => toggleBrand(b)}
+                          className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted"
                         >
                           <Checkbox
+                            id={`brand-${b}`}
                             checked={selectedBrands.includes(b)}
                             onCheckedChange={() => toggleBrand(b)}
                           />
-                          <span className="text-sm">{b}</span>
+                          <label
+                            htmlFor={`brand-${b}`}
+                            className="text-sm cursor-pointer flex-1 select-none"
+                          >
+                            {b}
+                          </label>
                         </div>
                       ))}
                     </div>

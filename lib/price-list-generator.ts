@@ -87,10 +87,11 @@ export async function generatePriceListPDF(
   doc.line(ml, y, pageW - mr, y)
   y += 2
 
-  // ---- TABLE HEADER ----
+  // ---- COLUMN POSITIONS ----
+  // Usable: 184mm. Two price cols of 32mm each on the right, rest is product name.
   const colProduct = ml
-  const colBase = pageW - mr - 28    // right section
-  const colWholesale = pageW - mr    // rightmost
+  const colBase = pageW - mr - 34       // right-align anchor for P.Base
+  const colWholesale = pageW - mr - 2   // right-align anchor for P.Mayor (2mm inner padding)
 
   const drawTableHeader = (yy: number) => {
     doc.setFillColor(50, 50, 50)
@@ -132,12 +133,12 @@ export async function generatePriceListPDF(
     // Category header — ensure it fits with at least 1 product below it
     checkPageBreak(7 + rowH)
 
-    doc.setFillColor(210, 210, 210)
+    doc.setFillColor(130, 130, 130)
     doc.rect(ml, y, usable, 6, "F")
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(7.5)
-    doc.setTextColor(30, 30, 30)
-    doc.text(category, pageW / 2, y + 4.2, { align: "center" })
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+    doc.text(category, pageW / 2, y + 4.3, { align: "center" })
     doc.setTextColor(0)
     y += 6.5
     rowIndex = 0  // reset alternating on each category
@@ -162,8 +163,8 @@ export async function generatePriceListPDF(
       doc.text(fmtPrice(p.base_price), colBase, y, { align: "right" })
 
       doc.setFont("helvetica", "normal")
-      doc.setTextColor(p.wholesale_price != null ? 0 : 160)
-      doc.text(fmtPrice(p.wholesale_price), colWholesale, y, { align: "right" })
+      doc.setTextColor(p.wholesale_price != null ? 60 : 160)
+      doc.text(p.wholesale_price != null ? fmtPrice(p.wholesale_price) : "-", colWholesale, y, { align: "right" })
       doc.setTextColor(0)
 
       y += rowH
