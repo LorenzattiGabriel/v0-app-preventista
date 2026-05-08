@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -14,13 +15,18 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileText, Download, Search, X, Loader2, FileSpreadsheet } from "lucide-react"
+import { FileText, Download, Search, X, Loader2, FileSpreadsheet, ChevronDown, Check } from "lucide-react"
 import { generatePriceListPDF, generatePriceListCSV, downloadCSV } from "@/lib/price-list-generator"
 import { toast } from "sonner"
 
@@ -45,14 +51,15 @@ export function PriceListButton() {
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [brandPopoverOpen, setBrandPopoverOpen] = useState(false)
 
   // Filters
   const [search, setSearch] = useState("")
-  const [brand, setBrand] = useState("all")
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [category, setCategory] = useState("all")
   const [onlyActive, setOnlyActive] = useState(true)
 
-  // Load all active products when dialog opens
+  // Load all products when dialog opens
   useEffect(() => {
     if (!open) return
     setLoading(true)
@@ -67,12 +74,21 @@ export function PriceListButton() {
       .finally(() => setLoading(false))
   }, [open])
 
-  // Client-side filtering (instant, no re-fetch)
+  const toggleBrand = (brand: string) => {
+    setSelectedBrands((prev) =>
+      prev.includes(brand) ? prev.filter((b) => b !== brand) : [...prev, brand]
+    )
+  }
+
+  const clearBrands = () => setSelectedBrands([])
+  const selectAllBrands = () => setSelectedBrands([...brands])
+
+  // Client-side filtering
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return allProducts.filter((p) => {
       if (onlyActive && !p.is_active) return false
-      if (brand !== "all" && p.brand !== brand) return false
+      if (selectedBrands.length > 0 && !selectedBrands.includes(p.brand || "")) return false
       if (category !== "all" && p.category !== category) return false
       if (q) {
         const match =
@@ -84,11 +100,12 @@ export function PriceListButton() {
       }
       return true
     })
-  }, [allProducts, search, brand, category, onlyActive])
+  }, [allProducts, search, selectedBrands, category, onlyActive])
 
   const filterLabel = () => {
     const parts: string[] = []
-    if (brand !== "all") parts.push(`Marca: ${brand}`)
+    if (selectedBrands.length === 1) parts.push(`Marca: ${selectedBrands[0]}`)
+    else if (selectedBrands.length > 1) parts.push(`${selectedBrands.length} marcas`)
     if (category !== "all") parts.push(`Categoría: ${category}`)
     if (search) parts.push(`Búsqueda: "${search}"`)
     if (onlyActive) parts.push("Solo activos")
@@ -126,12 +143,19 @@ export function PriceListButton() {
 
   const clearFilters = () => {
     setSearch("")
-    setBrand("all")
+    setSelectedBrands([])
     setCategory("all")
     setOnlyActive(true)
   }
 
-  const hasFilters = search || brand !== "all" || category !== "all" || !onlyActive
+  const hasFilters = search || selectedBrands.length > 0 || category !== "all" || !onlyActive
+
+  const brandButtonLabel =
+    selectedBrands.length === 0
+      ? "Todas las marcas"
+      : selectedBrands.length === 1
+      ? selectedBrands[0]
+      : `${selectedBrands.length} marcas seleccionadas`
 
   return (
     <>
@@ -145,51 +169,87 @@ export function PriceListButton() {
           <DialogHeader>
             <DialogTitle>Lista de Precios</DialogTitle>
             <DialogDescription>
-              Filtrá los productos y descargá la lista en PDF o CSV para enviar a clientes.
+              Filtrá los productos y descargá la lista en PDF o CSV. El PDF se agrupa por categoría.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
-            {/* Filters */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Search */}
-              <div className="col-span-2 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nombre, marca o código..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 pr-9"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, marca o código..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 pr-9"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
 
-              {/* Brand */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Multi-brand select */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Marca</Label>
-                <Select value={brand} onValueChange={setBrand}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas las marcas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las marcas</SelectItem>
-                    {brands.map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={brandPopoverOpen} onOpenChange={setBrandPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal h-9 text-sm"
+                    >
+                      <span className="truncate">{brandButtonLabel}</span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2" align="start">
+                    <div className="flex justify-between mb-2 pb-2 border-b">
+                      <button
+                        className="text-xs text-primary hover:underline"
+                        onClick={selectAllBrands}
+                      >
+                        Seleccionar todas
+                      </button>
+                      <button
+                        className="text-xs text-muted-foreground hover:underline"
+                        onClick={clearBrands}
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {brands.map((b) => (
+                        <div
+                          key={b}
+                          className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted cursor-pointer"
+                          onClick={() => toggleBrand(b)}
+                        >
+                          <Checkbox
+                            checked={selectedBrands.includes(b)}
+                            onCheckedChange={() => toggleBrand(b)}
+                          />
+                          <span className="text-sm">{b}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedBrands.length > 0 && (
+                      <div className="mt-2 pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          {selectedBrands.length} marca{selectedBrands.length !== 1 ? "s" : ""} seleccionada{selectedBrands.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
 
-              {/* Category */}
+              {/* Category select */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Categoría</Label>
                 <Select value={category} onValueChange={setCategory}>
@@ -207,6 +267,23 @@ export function PriceListButton() {
                 </Select>
               </div>
             </div>
+
+            {/* Selected brands tags */}
+            {selectedBrands.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {selectedBrands.map((b) => (
+                  <Badge key={b} variant="secondary" className="gap-1 pr-1">
+                    {b}
+                    <button
+                      onClick={() => toggleBrand(b)}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
 
             {/* Only active toggle */}
             <div className="flex items-center gap-2">
@@ -243,15 +320,15 @@ export function PriceListButton() {
               )}
             </div>
 
-            {/* Preview table (first 8 rows) */}
+            {/* Preview table */}
             {!loading && filtered.length > 0 && (
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-muted">
                     <tr>
                       <th className="text-left p-2 font-medium">Producto</th>
-                      <th className="text-left p-2 font-medium">Marca</th>
                       <th className="text-left p-2 font-medium hidden sm:table-cell">Categoría</th>
+                      <th className="text-left p-2 font-medium hidden sm:table-cell">Marca</th>
                       <th className="text-right p-2 font-medium">P. Base</th>
                       <th className="text-right p-2 font-medium">P. Mayor</th>
                     </tr>
@@ -263,17 +340,19 @@ export function PriceListButton() {
                           <p className="font-medium truncate max-w-[160px]">{p.name}</p>
                           {p.code && <p className="text-muted-foreground">{p.code}</p>}
                         </td>
-                        <td className="p-2 text-muted-foreground truncate max-w-[80px]">
-                          {p.brand || "-"}
-                        </td>
                         <td className="p-2 text-muted-foreground hidden sm:table-cell truncate max-w-[80px]">
                           {p.category || "-"}
                         </td>
+                        <td className="p-2 text-muted-foreground hidden sm:table-cell truncate max-w-[80px]">
+                          {p.brand || "-"}
+                        </td>
                         <td className="p-2 text-right font-medium">
-                          ${Number(p.base_price).toFixed(2)}
+                          ${Number(p.base_price).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="p-2 text-right text-muted-foreground">
-                          {p.wholesale_price != null ? `$${Number(p.wholesale_price).toFixed(2)}` : "-"}
+                          {p.wholesale_price != null
+                            ? `$${Number(p.wholesale_price).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+                            : "-"}
                         </td>
                       </tr>
                     ))}

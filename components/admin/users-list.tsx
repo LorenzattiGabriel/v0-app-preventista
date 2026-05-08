@@ -44,13 +44,14 @@ interface UserData {
 
 interface UsersListProps {
   users: UserData[]
+  currentUserId?: string
 }
 
 /**
  * Users List Component
  * Displays a list of users with their details and management actions
  */
-export function UsersList({ users }: UsersListProps) {
+export function UsersList({ users, currentUserId }: UsersListProps) {
   const router = useRouter()
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -124,7 +125,7 @@ export function UsersList({ users }: UsersListProps) {
       }
 
       toast.success(data.message)
-      router.refresh()
+      window.location.reload()
     } catch (error: any) {
       toast.error(error.message || "Error al eliminar el usuario")
     } finally {
@@ -155,6 +156,7 @@ export function UsersList({ users }: UsersListProps) {
             key={u.id}
             user={u}
             isLoading={loadingId === u.id}
+            isSelf={u.id === currentUserId}
             onToggleStatus={handleToggleStatus}
             onDelete={handleDeleteUser}
           />
@@ -228,11 +230,13 @@ function RoleIcon({ role }: { role: string }) {
 function UserCard({
   user,
   isLoading,
+  isSelf,
   onToggleStatus,
   onDelete,
 }: {
   user: UserData
   isLoading: boolean
+  isSelf?: boolean
   onToggleStatus: (userId: string, currentStatus: boolean, userName: string) => void
   onDelete: (userId: string, userName: string) => void
 }) {
@@ -333,14 +337,18 @@ function UserCard({
                 Activar
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => onDelete(user.id, user.full_name)}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar Permanentemente
-            </DropdownMenuItem>
+            {!isSelf && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => onDelete(user.id, user.full_name)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar Permanentemente
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

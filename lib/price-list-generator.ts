@@ -30,169 +30,186 @@ export interface PriceListProduct {
   retail_price?: number | null
 }
 
-const fmt = (n: number | null | undefined) =>
-  n != null ? `$${Number(n).toFixed(2)}` : "-"
+const fmtPrice = (n: number | null | undefined) =>
+  n != null ? `$ ${Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"
+
+function groupByCategory(products: PriceListProduct[]): Map<string, PriceListProduct[]> {
+  const map = new Map<string, PriceListProduct[]>()
+  for (const p of products) {
+    const cat = (p.category || "SIN CATEGORÍA").toUpperCase()
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat)!.push(p)
+  }
+  // Sort each category's products by name
+  for (const [, list] of map) {
+    list.sort((a, b) => a.name.localeCompare(b.name, "es"))
+  }
+  return new Map([...map.entries()].sort(([a], [b]) => a.localeCompare(b, "es")))
+}
 
 export async function generatePriceListPDF(
   products: PriceListProduct[],
   filterLabel?: string,
 ): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const pageWidth = doc.internal.pageSize.width
-  const pageHeight = doc.internal.pageSize.height
-  const margin = 12
-  let yPos = 12
+  const pageW = doc.internal.pageSize.width   // 210
+  const pageH = doc.internal.pageSize.height  // 297
+  const ml = 13  // left margin
+  const mr = 13  // right margin
+  const usable = pageW - ml - mr            // 184mm
+  let y = 12
 
   const logoBase64 = await fetchLogoBase64(ALEF_LOGO_URL)
 
-  // --- Header ---
+  // ---- HEADER ----
+  const headerH = 22
   if (logoBase64) {
     const fmt2 = logoBase64.startsWith("data:image/png") ? "PNG" : "JPEG"
-    doc.addImage(logoBase64, fmt2, margin, yPos, 32, 16)
+    doc.addImage(logoBase64, fmt2, ml, y, 20, 20)
   }
 
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(18)
-  doc.text("LISTA DE PRECIOS", pageWidth / 2, yPos + 8, { align: "center" })
+  doc.setFontSize(13)
+  doc.text("Listado de Precios", pageW / 2, y + 7, { align: "center" })
 
   doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.setTextColor(100)
-  doc.text(
-    `Fecha: ${new Date().toLocaleDateString("es-AR")}`,
-    pageWidth - margin,
-    yPos + 5,
-    { align: "right" },
-  )
-  doc.text(
-    `${products.length} producto${products.length !== 1 ? "s" : ""}`,
-    pageWidth - margin,
-    yPos + 11,
-    { align: "right" },
-  )
+  doc.setFontSize(8)
+  doc.setTextColor(80)
+  doc.text(`Impreso el ${new Date().toLocaleDateString("es-AR")}`, pageW / 2, y + 13, { align: "center" })
   if (filterLabel) {
-    doc.text(filterLabel, pageWidth - margin, yPos + 17, { align: "right" })
+    doc.text(filterLabel, pageW / 2, y + 18, { align: "center" })
   }
   doc.setTextColor(0)
 
-  yPos += 22
-  doc.setDrawColor(180)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 6
+  y += headerH
+  doc.setDrawColor(160)
+  doc.setLineWidth(0.3)
+  doc.line(ml, y, pageW - mr, y)
+  y += 2
 
-  // --- Column layout (portrait 210mm, margins 12mm each = 186mm usable) ---
-  // Código(15) | Producto(62) | Marca(32) | Categoría(28) | U.M.(12) | P.Base(18) | P.Mayor(19)
-  const cols = {
-    code:      margin,           // left-aligned
-    name:      margin + 15,      // left-aligned
-    brand:     margin + 77,      // left-aligned
-    category:  margin + 109,     // left-aligned
-    um:        margin + 137,     // center
-    base:      margin + 152,     // right-aligned → +18
-    wholesale: margin + 174,     // right-aligned → +12 = 186 → pageWidth-margin
-  }
+  // ---- TABLE HEADER ----
+  const colProduct = ml
+  const colBase = pageW - mr - 28    // right section
+  const colWholesale = pageW - mr    // rightmost
 
-  // Table header
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(7.5)
-  doc.setFillColor(240, 240, 240)
-  doc.rect(margin, yPos - 4, pageWidth - margin * 2, 7, "F")
-  doc.text("Código", cols.code, yPos)
-  doc.text("Producto", cols.name, yPos)
-  doc.text("Marca", cols.brand, yPos)
-  doc.text("Categoría", cols.category, yPos)
-  doc.text("U.M.", cols.um, yPos, { align: "center" })
-  doc.text("P. Base", cols.base + 9, yPos, { align: "right" })
-  doc.text("P. Mayor", cols.wholesale + 12, yPos, { align: "right" })
-  yPos += 4
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 4
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(7.5)
-
-  let rowIndex = 0
-  for (const product of products) {
-    // Page break
-    if (yPos > pageHeight - 20) {
-      doc.addPage()
-      yPos = 15
-
-      // Repeat header on new page
-      doc.setFont("helvetica", "bold")
-      doc.setFillColor(240, 240, 240)
-      doc.rect(margin, yPos - 4, pageWidth - margin * 2, 7, "F")
-      doc.text("Código", cols.code, yPos)
-      doc.text("Producto", cols.name, yPos)
-      doc.text("Marca", cols.brand, yPos)
-      doc.text("Categoría", cols.category, yPos)
-      doc.text("U.M.", cols.um, yPos, { align: "center" })
-      doc.text("P. Base", cols.base + 9, yPos, { align: "right" })
-      doc.text("P. Mayor", cols.wholesale + 12, yPos, { align: "right" })
-      yPos += 4
-      doc.line(margin, yPos, pageWidth - margin, yPos)
-      yPos += 4
-      doc.setFont("helvetica", "normal")
-    }
-
-    // Alternating row background
-    if (rowIndex % 2 === 0) {
-      doc.setFillColor(250, 250, 250)
-      doc.rect(margin, yPos - 3.5, pageWidth - margin * 2, 5.5, "F")
-    }
-
-    const name = (product.name || "").substring(0, 34)
-    const brand = (product.brand || "").substring(0, 16)
-    const category = (product.category || "").substring(0, 14)
-    const um = (product.unit_of_measure || "").substring(0, 6)
-
-    doc.setTextColor(80)
-    doc.text(product.code || "-", cols.code, yPos)
-    doc.setTextColor(0)
-    doc.text(name, cols.name, yPos)
-    doc.setTextColor(60)
-    doc.text(brand, cols.brand, yPos)
-    doc.text(category, cols.category, yPos)
-    doc.setTextColor(0)
-    doc.text(um, cols.um, yPos, { align: "center" })
+  const drawTableHeader = (yy: number) => {
+    doc.setFillColor(50, 50, 50)
+    doc.rect(ml, yy, usable, 6.5, "F")
     doc.setFont("helvetica", "bold")
-    doc.text(fmt(product.base_price), cols.base + 9, yPos, { align: "right" })
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(product.wholesale_price ? 0 : 150)
-    doc.text(fmt(product.wholesale_price), cols.wholesale + 12, yPos, { align: "right" })
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+    doc.text("Producto", colProduct + 2, yy + 4.5)
+    doc.text("P. Base", colBase, yy + 4.5, { align: "right" })
+    doc.text("P. Mayor", colWholesale, yy + 4.5, { align: "right" })
     doc.setTextColor(0)
-
-    yPos += 5.5
-    rowIndex++
+    return yy + 8
   }
 
-  // Footer line
-  doc.setDrawColor(180)
-  doc.line(margin, yPos + 2, pageWidth - margin, yPos + 2)
-  yPos += 7
-  doc.setFontSize(8)
-  doc.setTextColor(120)
-  doc.text(
-    `Lista de precios generada el ${new Date().toLocaleDateString("es-AR")} — ${products.length} productos`,
-    pageWidth / 2,
-    yPos,
-    { align: "center" },
-  )
+  y = drawTableHeader(y)
+
+  // ---- ROWS ----
+  const grouped = groupByCategory(products)
+  const rowH = 5.5
+  let rowIndex = 0
+
+  const checkPageBreak = (needed: number) => {
+    if (y + needed > pageH - 14) {
+      doc.addPage()
+      // page header repeat
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(7)
+      doc.setTextColor(120)
+      doc.text("Listado de Precios", pageW / 2, 8, { align: "center" })
+      doc.setTextColor(0)
+      doc.setLineWidth(0.3)
+      doc.line(ml, 10, pageW - mr, 10)
+      y = drawTableHeader(12)
+      rowIndex = 0
+    }
+  }
+
+  for (const [category, items] of grouped) {
+    // Category header — ensure it fits with at least 1 product below it
+    checkPageBreak(7 + rowH)
+
+    doc.setFillColor(210, 210, 210)
+    doc.rect(ml, y, usable, 6, "F")
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7.5)
+    doc.setTextColor(30, 30, 30)
+    doc.text(category, pageW / 2, y + 4.2, { align: "center" })
+    doc.setTextColor(0)
+    y += 6.5
+    rowIndex = 0  // reset alternating on each category
+
+    for (const p of items) {
+      checkPageBreak(rowH)
+
+      if (rowIndex % 2 === 0) {
+        doc.setFillColor(250, 250, 250)
+        doc.rect(ml, y - 3.5, usable, rowH, "F")
+      }
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(7.5)
+      doc.setTextColor(20, 20, 20)
+
+      const name = (p.name || "").substring(0, 58)
+      doc.text(name, colProduct + 2, y)
+
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(0)
+      doc.text(fmtPrice(p.base_price), colBase, y, { align: "right" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(p.wholesale_price != null ? 0 : 160)
+      doc.text(fmtPrice(p.wholesale_price), colWholesale, y, { align: "right" })
+      doc.setTextColor(0)
+
+      y += rowH
+      rowIndex++
+    }
+
+    y += 1  // small gap between categories
+  }
+
+  // ---- FOOTER ----
+  const totalPages = (doc as any).internal.getNumberOfPages()
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7)
+    doc.setTextColor(140)
+    doc.setLineWidth(0.2)
+    doc.line(ml, pageH - 10, pageW - mr, pageH - 10)
+    doc.text(
+      `${products.length} producto${products.length !== 1 ? "s" : ""} · Página ${i} / ${totalPages}`,
+      pageW / 2,
+      pageH - 6,
+      { align: "center" },
+    )
+  }
+  doc.setTextColor(0)
 
   return doc
 }
 
 export function generatePriceListCSV(products: PriceListProduct[]): string {
-  const headers = ["Código", "Nombre", "Marca", "Categoría", "Unidad", "Precio Base", "Precio Mayorista", "Precio Minorista"]
-  const rows = products.map((p) => [
-    p.code || "",
+  const sorted = [...products].sort((a, b) => {
+    const ca = (a.category || "").localeCompare(b.category || "", "es")
+    if (ca !== 0) return ca
+    return a.name.localeCompare(b.name, "es")
+  })
+
+  const headers = ["Categoría", "Nombre", "Marca", "Código", "Unidad", "Precio Base", "Precio Mayorista"]
+  const rows = sorted.map((p) => [
+    p.category || "",
     p.name,
     p.brand || "",
-    p.category || "",
+    p.code || "",
     p.unit_of_measure || "",
     Number(p.base_price).toFixed(2),
     p.wholesale_price != null ? Number(p.wholesale_price).toFixed(2) : "",
-    p.retail_price != null ? Number(p.retail_price).toFixed(2) : "",
   ])
 
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`

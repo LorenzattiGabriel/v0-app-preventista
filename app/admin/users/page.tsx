@@ -125,7 +125,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                 <UsersFilters />
 
                 {/* Users List */}
-                <UsersList users={users} />
+                <UsersList users={users} currentUserId={user.id} />
 
                 {/* Pagination */}
                 <UsersPagination
