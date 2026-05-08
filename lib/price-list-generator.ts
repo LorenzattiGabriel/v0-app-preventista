@@ -33,14 +33,17 @@ export interface PriceListProduct {
 const fmtPrice = (n: number | null | undefined) =>
   n != null ? `$ ${Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"
 
-function groupByCategory(products: PriceListProduct[]): Map<string, PriceListProduct[]> {
+export type GroupBy = "category" | "brand"
+
+function groupProducts(products: PriceListProduct[], groupBy: GroupBy): Map<string, PriceListProduct[]> {
   const map = new Map<string, PriceListProduct[]>()
   for (const p of products) {
-    const cat = (p.category || "SIN CATEGORÍA").toUpperCase()
-    if (!map.has(cat)) map.set(cat, [])
-    map.get(cat)!.push(p)
+    const key = groupBy === "brand"
+      ? (p.brand || "SIN MARCA").toUpperCase()
+      : (p.category || "SIN CATEGORÍA").toUpperCase()
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(p)
   }
-  // Sort each category's products by name
   for (const [, list] of map) {
     list.sort((a, b) => a.name.localeCompare(b.name, "es"))
   }
@@ -50,6 +53,7 @@ function groupByCategory(products: PriceListProduct[]): Map<string, PriceListPro
 export async function generatePriceListPDF(
   products: PriceListProduct[],
   filterLabel?: string,
+  groupBy: GroupBy = "category",
 ): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
   const pageW = doc.internal.pageSize.width   // 210
@@ -75,7 +79,8 @@ export async function generatePriceListPDF(
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(80)
-  doc.text(`Impreso el ${new Date().toLocaleDateString("es-AR")}`, pageW / 2, y + 13, { align: "center" })
+  const groupLabel = groupBy === "brand" ? "Agrupado por marca" : "Agrupado por categoría"
+  doc.text(`Impreso el ${new Date().toLocaleDateString("es-AR")} · ${groupLabel}`, pageW / 2, y + 13, { align: "center" })
   if (filterLabel) {
     doc.text(filterLabel, pageW / 2, y + 18, { align: "center" })
   }
@@ -109,9 +114,20 @@ export async function generatePriceListPDF(
   y = drawTableHeader(y)
 
   // ---- ROWS ----
-  const grouped = groupByCategory(products)
+  const grouped = groupProducts(products, groupBy)
   const rowH = 5.5
   let rowIndex = 0
+
+  // Trunca texto al ancho disponible (en mm) agregando "…" si no entra
+  const fitText = (text: string, maxWidthMm: number): string => {
+    const scale = doc.getFontSize() / doc.internal.scaleFactor
+    if (doc.getStringUnitWidth(text) * scale <= maxWidthMm) return text
+    let t = text
+    while (t.length > 0 && doc.getStringUnitWidth(t + "…") * scale > maxWidthMm) {
+      t = t.slice(0, -1)
+    }
+    return t + "…"
+  }
 
   const checkPageBreak = (needed: number) => {
     if (y + needed > pageH - 14) {
@@ -131,16 +147,16 @@ export async function generatePriceListPDF(
 
   for (const [category, items] of grouped) {
     // Category header — ensure it fits with at least 1 product below it
-    checkPageBreak(7 + rowH)
+    checkPageBreak(8 + rowH)
 
-    doc.setFillColor(130, 130, 130)
-    doc.rect(ml, y, usable, 6, "F")
+    doc.setFillColor(80, 80, 80)
+    doc.rect(ml, y, usable, 7, "F")
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(8)
+    doc.setFontSize(9)
     doc.setTextColor(255, 255, 255)
-    doc.text(category, pageW / 2, y + 4.3, { align: "center" })
+    doc.text(category, pageW / 2, y + 5, { align: "center" })
     doc.setTextColor(0)
-    y += 6.5
+    y += 8
     rowIndex = 0  // reset alternating on each category
 
     for (const p of items) {
@@ -155,7 +171,8 @@ export async function generatePriceListPDF(
       doc.setFontSize(7.5)
       doc.setTextColor(20, 20, 20)
 
-      const name = (p.name || "").substring(0, 58)
+      const maxNameWidth = colBase - 6 - (colProduct + 2)  // espacio hasta columna P.Base con padding
+      const name = fitText(p.name || "", maxNameWidth)
       doc.text(name, colProduct + 2, y)
 
       doc.setFont("helvetica", "bold")

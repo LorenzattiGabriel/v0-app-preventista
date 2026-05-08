@@ -26,8 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileText, Download, Search, X, Loader2, FileSpreadsheet, ChevronDown, Check } from "lucide-react"
-import { generatePriceListPDF, generatePriceListCSV, downloadCSV } from "@/lib/price-list-generator"
+import { FileText, Download, Search, X, Loader2, FileSpreadsheet, ChevronDown, LayoutList, Tag } from "lucide-react"
+import { generatePriceListPDF, generatePriceListCSV, downloadCSV, type GroupBy } from "@/lib/price-list-generator"
 import { toast } from "sonner"
 
 interface Product {
@@ -58,6 +58,7 @@ export function PriceListButton() {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [category, setCategory] = useState("all")
   const [onlyActive, setOnlyActive] = useState(true)
+  const [groupBy, setGroupBy] = useState<GroupBy>("category")
 
   // Load all products when dialog opens
   useEffect(() => {
@@ -119,7 +120,7 @@ export function PriceListButton() {
     }
     setDownloading(true)
     try {
-      const doc = await generatePriceListPDF(filtered, filterLabel())
+      const doc = await generatePriceListPDF(filtered, filterLabel(), groupBy)
       const date = new Date().toLocaleDateString("es-AR").replace(/\//g, "-")
       doc.save(`Lista_Precios_${date}.pdf`)
       toast.success(`PDF generado con ${filtered.length} productos`)
@@ -290,12 +291,42 @@ export function PriceListButton() {
               </div>
             )}
 
-            {/* Only active toggle */}
-            <div className="flex items-center gap-2">
-              <Switch id="onlyActive" checked={onlyActive} onCheckedChange={setOnlyActive} />
-              <Label htmlFor="onlyActive" className="text-sm">
-                Solo productos activos
-              </Label>
+            {/* Only active toggle + grouping */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Switch id="onlyActive" checked={onlyActive} onCheckedChange={setOnlyActive} />
+                <Label htmlFor="onlyActive" className="text-sm">
+                  Solo productos activos
+                </Label>
+              </div>
+
+              {/* Grouping toggle */}
+              <div className="flex items-center gap-1 rounded-md border p-0.5 bg-muted/40">
+                <button
+                  type="button"
+                  onClick={() => setGroupBy("category")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    groupBy === "category"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  Categoría
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupBy("brand")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    groupBy === "brand"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  Marca
+                </button>
+              </div>
             </div>
 
             {/* Result count + clear */}
