@@ -534,14 +534,12 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id={`quantity-${index}`}
-                    type="number"
-                    min="0"
-                    max={isWeightBased ? undefined : item.quantityRequested}
-                    step={isWeightBased ? "0.01" : "1"}
+                    type="text"
+                    inputMode={isWeightBased ? "decimal" : "numeric"}
                     value={item.quantityAssembled === 0 ? "" : item.quantityAssembled}
-                    placeholder={item.quantityAssembled === 0 ? "Faltante total" : ""}
+                    placeholder={item.quantityAssembled === 0 ? "Faltante total" : isWeightBased ? "0,000" : ""}
                     onChange={(e) => {
-                      const raw = e.target.value
+                      const raw = e.target.value.replace(",", ".")
                       if (raw === "" || raw === "0.") {
                         handleItemChange(index, "quantityAssembled", 0)
                         return
@@ -551,7 +549,6 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                       let final = isWeightBased
                         ? Math.max(0, value)
                         : Math.max(0, Math.round(value))
-                      // Para productos por unidad, no permitir más de lo solicitado
                       if (!isWeightBased && final > item.quantityRequested) {
                         final = item.quantityRequested
                       }
@@ -611,27 +608,32 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                   </div>
                 )}
 
-                {/* Peso de balanza obligatorio para todo producto pesable (kg badge o unidad con peso) */}
-                {(isWeightBased || isWeighable) && (
+                {/* Peso de balanza: requerido para pesables/decimales, opcional para unidades */}
+                {!item.isShortage && item.quantityAssembled > 0 && (
                   <div className="space-y-1">
                     <Label htmlFor={`weight-ref-${index}`} className="text-xs font-medium">
-                      Peso en balanza (kg){" "}
-                      <span className="text-destructive">*</span>
-                      {!item.isShortage &&
-                        item.quantityAssembled > 0 &&
-                        (item.assembledWeightKg === null || item.assembledWeightKg <= 0) && (
-                          <span className="text-destructive ml-1 font-normal">— requerido</span>
-                        )}
+                      {isWeightBased || isWeighable ? (
+                        <>
+                          Peso en balanza (kg){" "}
+                          <span className="text-destructive">*</span>
+                          {(item.assembledWeightKg === null || item.assembledWeightKg <= 0) && (
+                            <span className="text-destructive ml-1 font-normal">— requerido</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Peso real por unidad (kg) <span className="font-normal">— opcional, aparece en el remito</span>
+                        </span>
+                      )}
                     </Label>
                     <Input
                       id={`weight-ref-${index}`}
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      placeholder="Ej: 1.050"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Ej: 1,050"
                       value={item.assembledWeightKg ?? ""}
                       onChange={(e) => {
-                        const raw = e.target.value
+                        const raw = e.target.value.replace(",", ".")
                         if (raw === "") {
                           handleItemChange(index, "assembledWeightKg", null)
                           return
@@ -641,8 +643,7 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                       }}
                       disabled={isLocked}
                       className={`max-w-[200px] ${
-                        !item.isShortage &&
-                        item.quantityAssembled > 0 &&
+                        (isWeightBased || isWeighable) &&
                         (item.assembledWeightKg === null || item.assembledWeightKg <= 0)
                           ? "border-destructive focus-visible:ring-destructive"
                           : ""

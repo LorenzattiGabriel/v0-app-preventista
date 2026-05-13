@@ -108,26 +108,6 @@ export default function LoginPage() {
                 </Button>
               </div>
             </form>
-            <div className="mt-6 p-4 bg-muted rounded-lg">
-              <p className="text-xs font-semibold text-muted-foreground mb-2">Usuarios de prueba:</p>
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p>
-                  <strong>Admin:</strong> admin@distribuidora.com / admin123
-                </p>
-                <p>
-                  <strong>Preventista:</strong> preventista1@distribuidora.com / prev123
-                </p>
-                <p>
-                  <strong>Armado:</strong> armado1@distribuidora.com / armado123
-                </p>
-                <p>
-                  <strong>Repartidor:</strong> repartidor1@distribuidora.com / repar123
-                </p>
-                <p>
-                  <strong>Cliente:</strong> cliente1@email.com / cliente123
-                </p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

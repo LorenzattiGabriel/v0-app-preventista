@@ -73,8 +73,8 @@ export function OrdersList({ orders }: OrdersListProps) {
  */
 function OrderCard({ order }: { order: Order }) {
   return (
-    <div className="flex items-start justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-      <div className="flex-1 space-y-2">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors gap-3">
+      <div className="flex-1 min-w-0 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-lg">{order.order_number}</span>
           
@@ -146,8 +146,8 @@ function OrderCard({ order }: { order: Order }) {
         </div>
       </div>
       
-      <div className="flex flex-col gap-2 items-end shrink-0">
-        <Button asChild variant="outline">
+      <div className="flex flex-row sm:flex-col gap-2 sm:items-end shrink-0 flex-wrap">
+        <Button asChild variant="outline" size="sm" className="flex-1 sm:flex-none">
           <Link href={`/admin/orders/${order.id}`}>Ver Detalles</Link>
         </Button>
 

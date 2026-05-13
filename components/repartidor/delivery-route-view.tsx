@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil, Info } from "lucide-react"
 import {
   DndContext,
   closestCenter,
@@ -1034,6 +1034,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   // 🆕 Identificar el primer stop pendiente (no se puede reordenar a sí mismo)
   const firstPendingOrderId = pendingOrders.length > 0 ? pendingOrders[0].id : null
 
+  const stopsWithTimeRestriction = sortedOrders.filter((o: any) => o.has_time_restriction).length
+
   // 🆕 Handlers de modo edición de ruta (drag & drop)
   const enterEditMode = () => {
     // Inicializar con el orden actual de los pendientes
@@ -1250,7 +1252,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
               <p className="text-sm text-muted-foreground mb-3">
                 {isRouteSegmented() 
                   ? `Esta ruta tiene ${route.optimized_route?.totalWaypoints || totalOrders} puntos y está dividida en ${getRouteSegments().length} tramos. Usa el botón "Navegar" para abrir cada tramo en Google Maps.`
-                  : 'Gestiona tus entregas y marca cada pedido como entregado. Usa el botón "Abrir en Google Maps" para navegar entre direcciones.'
+                  : 'Gestioná tus entregas y marcá cada pedido como entregado. Si necesitás cambiar el orden, usá ⚡ Ir ahora en cualquier parada pendiente para visitarla primero.'
                 }
               </p>
               <div className="flex flex-wrap gap-4 text-sm">
@@ -1346,6 +1348,42 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 Esta ruta está programada para el{" "}
                 <strong>{new Date(route.scheduled_date).toLocaleDateString("es-AR", { dateStyle: "long" })}</strong>.
                 Solo podrás iniciarla cuando llegue ese día.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panel explicativo: ¿por qué este orden de paradas? */}
+      {route.status === "PLANIFICADO" && (
+        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900 shrink-0">
+              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">¿Por qué este orden de paradas?</p>
+              <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                El orden fue calculado automáticamente para{" "}
+                <strong>minimizar la distancia total del recorrido</strong>
+                {stopsWithTimeRestriction > 0 ? (
+                  <>, respetando las <strong>ventanas horarias de {stopsWithTimeRestriction} {stopsWithTimeRestriction === 1 ? "cliente" : "clientes"}</strong></>
+                ) : null}.
+              </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-blue-700 dark:text-blue-300">
+                {route.total_distance ? (
+                  <span>📍 {Number(route.total_distance).toFixed(1)} km estimados</span>
+                ) : null}
+                {route.estimated_duration ? (
+                  <span>⏱️ ~{Math.floor(route.estimated_duration / 60) > 0 ? `${Math.floor(route.estimated_duration / 60)}h ` : ""}{route.estimated_duration % 60 > 0 ? `${route.estimated_duration % 60}min` : ""}</span>
+                ) : null}
+                <span>📦 {totalOrders} paradas</span>
+                {stopsWithTimeRestriction > 0 && (
+                  <span>🕐 {stopsWithTimeRestriction} con restricción horaria</span>
+                )}
+              </div>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
+                💡 <strong>¿Querés cambiar el orden?</strong> Usá "Modificar orden de la ruta" y arrastrá los pedidos antes de iniciar. Una vez en ruta, podés usar <strong>⚡ Ir ahora</strong> en cualquier parada para visitarla primero.
               </p>
             </div>
           </div>

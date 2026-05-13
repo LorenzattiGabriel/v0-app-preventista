@@ -26,7 +26,16 @@ interface RecordPaymentParams {
   routeId?: string
   createdBy?: string
   notes?: string
-  proofUrl?: string // URL del comprobante de pago (opcional)
+  proofUrl?: string
+}
+
+interface RecordGeneralPaymentParams {
+  customerId: string
+  amount: number
+  paymentMethod: PaymentMethod
+  createdBy?: string
+  notes?: string
+  proofUrl?: string
 }
 
 interface UpdateOrderPaymentParams {
@@ -183,6 +192,32 @@ export class AccountMovementsService {
     })
 
     return payment!
+  }
+
+  /**
+   * Registra un pago a cuenta general sin asociarlo a un pedido específico.
+   * Reduce el current_balance del cliente (o genera saldo a favor si balance era 0).
+   */
+  async recordGeneralPayment(params: RecordGeneralPaymentParams): Promise<CustomerAccountMovement> {
+    const { customerId, amount, paymentMethod, createdBy, notes, proofUrl } = params
+
+    const method = paymentMethod.toLowerCase()
+    const movementType: AccountMovementType =
+      method === "efectivo" ? "PAGO_EFECTIVO"
+      : method === "transferencia" ? "PAGO_TRANSFERENCIA"
+      : method === "cheque" ? "PAGO_CHEQUE"
+      : "PAGO_TARJETA"
+
+    return this.createMovement({
+      customerId,
+      movementType,
+      description: "Pago a cuenta corriente (sin pedido específico)",
+      amount,
+      orderId: undefined,
+      createdBy,
+      notes,
+      proofUrl,
+    })
   }
 
   /**

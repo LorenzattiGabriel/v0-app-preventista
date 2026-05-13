@@ -6,13 +6,9 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Verificar autenticación
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-    }
+    if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    // Verificar que sea admin
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -24,24 +20,39 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { orderId, customerId, amount, paymentMethod, notes, proofUrl } = body
+    const { paymentScope, orderId, customerId, amount, paymentMethod, notes, proofUrl } = body
 
-    // Validaciones
-    if (!orderId || !customerId || !amount || !paymentMethod) {
-      return NextResponse.json(
-        { error: "Faltan campos requeridos" },
-        { status: 400 }
-      )
+    if (!customerId || !amount || !paymentMethod) {
+      return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 })
     }
-
     if (amount <= 0) {
-      return NextResponse.json(
-        { error: "El monto debe ser mayor a 0" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 })
     }
 
-    // Verificar que el pedido existe y pertenece al cliente
+    const accountService = createAccountMovementsService(supabase)
+
+    // ── PAGO A CUENTA GENERAL (sin pedido específico) ──────────────────────
+    if (paymentScope === "account") {
+      const movement = await accountService.recordGeneralPayment({
+        customerId,
+        amount,
+        paymentMethod,
+        createdBy: user.id,
+        notes,
+        proofUrl,
+      })
+      return NextResponse.json({
+        success: true,
+        movement,
+        message: `Pago a cuenta de $${amount.toFixed(2)} registrado exitosamente`,
+      })
+    }
+
+    // ── PAGO APLICADO A PEDIDO ESPECÍFICO ──────────────────────────────────
+    if (!orderId) {
+      return NextResponse.json({ error: "Debe indicar un pedido" }, { status: 400 })
+    }
+
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select("id, customer_id, total, order_number")
@@ -49,35 +60,25 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (orderError || !order) {
-      return NextResponse.json(
-        { error: "Pedido no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Pedido no encontrado" }, { status: 404 })
     }
-
     if (order.customer_id !== customerId) {
-      return NextResponse.json(
-        { error: "El pedido no pertenece a este cliente" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "El pedido no pertenece a este cliente" }, { status: 400 })
     }
 
-    // Registrar el pago usando el servicio
-    const accountService = createAccountMovementsService(supabase)
-    
     const payment = await accountService.recordDebtPayment({
       orderId,
       amount,
       paymentMethod,
       createdBy: user.id,
       notes,
-      proofUrl, // URL del comprobante (opcional)
+      proofUrl,
     })
 
     return NextResponse.json({
       success: true,
       payment,
-      message: `Pago de $${amount.toFixed(2)} registrado exitosamente para ${order.order_number}`,
+      message: `Pago de $${amount.toFixed(2)} registrado para ${order.order_number}`,
     })
 
   } catch (error: any) {
@@ -88,7 +89,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-
-
-

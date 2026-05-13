@@ -39,13 +39,15 @@ export default async function ReportsPage({
       </div>
 
       <Tabs defaultValue="orders" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="orders">Pedidos</TabsTrigger>
-          <TabsTrigger value="delivery">Entregas</TabsTrigger>
-          <TabsTrigger value="drivers">Repartidores</TabsTrigger>
-          <TabsTrigger value="performance">Rendimiento</TabsTrigger>
-          <TabsTrigger value="financial">Financiero</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+          <TabsList className="grid grid-cols-5 min-w-[480px] w-full">
+            <TabsTrigger value="orders" className="text-xs sm:text-sm">Pedidos</TabsTrigger>
+            <TabsTrigger value="delivery" className="text-xs sm:text-sm">Entregas</TabsTrigger>
+            <TabsTrigger value="drivers" className="text-xs sm:text-sm">Repartidores</TabsTrigger>
+            <TabsTrigger value="performance" className="text-xs sm:text-sm">Rendimiento</TabsTrigger>
+            <TabsTrigger value="financial" className="text-xs sm:text-sm">Financiero</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="orders" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>

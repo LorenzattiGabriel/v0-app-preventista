@@ -63,7 +63,7 @@ export default async function ProductsPage({
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/admin/dashboard">
@@ -75,22 +75,22 @@ export default async function ProductsPage({
             <p className="text-muted-foreground">Administra tu catálogo de productos</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <PriceListButton />
           <BulkPriceUpdateButton />
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/admin/products/stock-history">
               <History className="mr-2 h-4 w-4" />
               Historial
             </Link>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/admin/products/import-stock">
               <Upload className="mr-2 h-4 w-4" />
               Actualizar Masivo
             </Link>
           </Button>
-          <Button asChild>
+          <Button size="sm" asChild>
             <Link href="/admin/products/new">
               <Plus className="mr-2 h-4 w-4" />
               Nuevo Producto
