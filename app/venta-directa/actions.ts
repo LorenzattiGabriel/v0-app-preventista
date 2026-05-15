@@ -47,8 +47,9 @@ export async function confirmDirectSaleAction(
   const result = await service.confirmSale(parsed.data, user.id)
 
   if (result.success) {
-    revalidatePath("/venta-directa/dashboard")
-    revalidatePath("/venta-directa/ventas")
+    revalidatePath("/venta-directa/dashboard", "page")
+    revalidatePath("/venta-directa/ventas", "page")
+    revalidatePath(`/venta-directa/ventas/${result.data.orderId}`, "page")
   }
 
   return result

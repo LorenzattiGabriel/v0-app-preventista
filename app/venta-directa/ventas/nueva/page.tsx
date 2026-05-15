@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { DirectSaleForm } from "@/components/venta-directa/direct-sale-form"
 
 export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 export default async function NuevaVentaDirectaPage() {
   const supabase = await createClient()

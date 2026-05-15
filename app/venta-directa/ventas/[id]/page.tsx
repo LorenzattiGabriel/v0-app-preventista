@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react"
 import { DownloadSaleReceiptButton } from "@/components/venta-directa/download-sale-receipt-button"
 
 export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 interface PageProps {
   params: Promise<{ id: string }>
