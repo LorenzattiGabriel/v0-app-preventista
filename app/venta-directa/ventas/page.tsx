@@ -5,6 +5,7 @@ import { createDirectSalesService } from "@/lib/services/directSalesService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus } from "lucide-react"
+import { DownloadSaleReceiptButton } from "@/components/venta-directa/download-sale-receipt-button"
 
 export const dynamic = "force-dynamic"
 
@@ -63,12 +64,17 @@ export default async function VentasListPage() {
                       </td>
                       <td className="px-3 py-2">{s.payment_method || "—"}</td>
                       <td className="px-3 py-2">
-                        <Link
-                          href={`/venta-directa/ventas/${s.id}`}
-                          className="text-primary hover:underline"
-                        >
-                          Ver
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/venta-directa/ventas/${s.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            Ver
+                          </Link>
+                          <DownloadSaleReceiptButton sale={s} variant="ghost" size="icon">
+                            {null}
+                          </DownloadSaleReceiptButton>
+                        </div>
                       </td>
                     </tr>
                   ))}

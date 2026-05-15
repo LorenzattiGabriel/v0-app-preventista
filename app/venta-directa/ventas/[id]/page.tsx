@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft } from "lucide-react"
+import { DownloadSaleReceiptButton } from "@/components/venta-directa/download-sale-receipt-button"
 
 export const dynamic = "force-dynamic"
 
@@ -39,13 +40,14 @@ export default async function VentaDetallePage({ params }: PageProps) {
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         <Link href="/venta-directa/ventas">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Volver
           </Button>
         </Link>
+        <DownloadSaleReceiptButton sale={sale} />
       </div>
 
       <Card>

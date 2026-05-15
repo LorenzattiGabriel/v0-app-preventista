@@ -26,6 +26,14 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   ArrowLeft,
   CheckCircle,
   AlertCircle,
@@ -40,6 +48,7 @@ import type { CartLine } from "@/lib/types/venta-directa"
 import { CustomerSelector } from "@/components/preventista/customer-selector"
 import { ProductSelector } from "@/components/preventista/product-selector"
 import { PaymentMethodsInput } from "@/components/shared/payment-methods-input"
+import { DownloadSaleReceiptButton } from "@/components/venta-directa/download-sale-receipt-button"
 import { confirmDirectSaleAction } from "@/app/venta-directa/actions"
 import {
   calcCartTotals,
@@ -96,6 +105,8 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
   // Formulario "agregar item"
   const [selectedProductId, setSelectedProductId] = useState("")
   const [qty, setQty] = useState(1)
+  // Input crudo para cantidad cuando es por peso (mantiene la coma decimal mientras tipea)
+  const [rawQty, setRawQty] = useState<string>("1")
   const [unitPrice, setUnitPrice] = useState<number>(0)
   const [itemDiscount, setItemDiscount] = useState(0)
   const [itemDiscountType, setItemDiscountType] = useState<
@@ -106,6 +117,12 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
   const [idempotencyKey, setIdempotencyKey] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Resultado de la venta confirmada (para mostrar dialog con descarga de remito)
+  const [confirmed, setConfirmed] = useState<{
+    orderId: string
+    orderNumber: string
+  } | null>(null)
 
   // Generar idempotency key una sola vez (cliente)
   useEffect(() => {
@@ -160,6 +177,9 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
     const product = products.find((p) => p.id === selectedProductId)
     if (!product) return
     setUnitPrice(getDefaultPrice(product, customer?.customer_type))
+    // Reset de cantidad al elegir producto nuevo
+    setQty(1)
+    setRawQty("1")
   }, [selectedProductId, customer?.customer_type, products])
 
   const totals = useMemo(
@@ -201,6 +221,7 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
     // Reset
     setSelectedProductId("")
     setQty(1)
+    setRawQty("1")
     setUnitPrice(0)
     setItemDiscount(0)
     setItemDiscountType("fixed")
@@ -268,7 +289,29 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
         ? "Venta ya registrada previamente"
         : `Venta ${result.data.orderNumber} registrada`,
     )
-    router.push(`/venta-directa/ventas/${result.data.orderId}`)
+    setConfirmed({
+      orderId: result.data.orderId,
+      orderNumber: result.data.orderNumber,
+    })
+  }
+
+  const handleNuevaVenta = () => {
+    // Reset total del form para registrar otra venta sin recargar la página
+    setConfirmed(null)
+    setCustomer(null)
+    setLines([])
+    setObservations("")
+    setGeneralDiscount(0)
+    setGeneralDiscountType("fixed")
+    setPaymentLines([])
+    setSelectedProductId("")
+    setQty(1)
+    setRawQty("1")
+    setUnitPrice(0)
+    setItemDiscount(0)
+    setItemDiscountType("fixed")
+    setError(null)
+    setIdempotencyKey(newIdempotencyKey())
   }
 
   const selectedProduct = products.find((p) => p.id === selectedProductId)
@@ -328,14 +371,43 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
               customerType={customer?.customer_type}
             />
             <div>
-              <Label>Cantidad</Label>
-              <Input
-                type="number"
-                min={0}
-                step={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
-                value={qty}
-                onChange={(e) => setQty(toNum(e.target.value))}
-              />
+              <Label>
+                Cantidad
+                {selectedProduct?.allows_decimal_quantity && selectedProduct.unit_of_measure === "kg" && (
+                  <span className="ml-1 text-xs text-muted-foreground font-normal">(kg, usá coma decimal)</span>
+                )}
+              </Label>
+              {selectedProduct?.allows_decimal_quantity ? (
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ej: 1,250"
+                  value={rawQty}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    setRawQty(raw)
+                    const normalized = raw.replace(",", ".")
+                    if (normalized === "") {
+                      setQty(0)
+                      return
+                    }
+                    const v = Number.parseFloat(normalized)
+                    setQty(isNaN(v) ? 0 : Math.max(0, v))
+                  }}
+                />
+              ) : (
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={qty}
+                  onChange={(e) => {
+                    const v = toNum(e.target.value)
+                    setQty(v)
+                    setRawQty(String(v))
+                  }}
+                />
+              )}
               {selectedProduct && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Stock: {selectedProduct.current_stock} {selectedProduct.unit_of_measure}
@@ -417,7 +489,10 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
                         {l.productCode} — {l.productName}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {l.quantity} {l.unitOfMeasure}
+                        {l.allowsDecimal
+                          ? l.quantity.toLocaleString("es-AR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+                          : l.quantity}{" "}
+                        {l.unitOfMeasure}
                       </td>
                       <td className="px-3 py-2 text-right">
                         ${l.unitPrice.toLocaleString("es-AR")}
@@ -554,6 +629,60 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
           )}
         </Button>
       </div>
+
+      <Dialog
+        open={!!confirmed}
+        onOpenChange={(open) => {
+          if (!open) {
+            // Si cierra el dialog sin elegir, lo mandamos al detalle
+            const id = confirmed?.orderId
+            setConfirmed(null)
+            if (id) router.push(`/venta-directa/ventas/${id}`)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Venta confirmada
+            </DialogTitle>
+            <DialogDescription>
+              {confirmed && (
+                <>
+                  Se registr&oacute; la venta <strong>{confirmed.orderNumber}</strong>.
+                  Pod&eacute;s descargar el remito ahora o desde el detalle de la venta.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {confirmed && (
+              <DownloadSaleReceiptButton
+                saleId={confirmed.orderId}
+                variant="default"
+                size="default"
+              >
+                Descargar remito
+              </DownloadSaleReceiptButton>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const id = confirmed?.orderId
+                setConfirmed(null)
+                if (id) router.push(`/venta-directa/ventas/${id}`)
+              }}
+            >
+              Ver detalle
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleNuevaVenta}>
+              Nueva venta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
