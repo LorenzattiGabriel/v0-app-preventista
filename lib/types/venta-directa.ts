@@ -6,14 +6,35 @@ import type { Order, Customer, OrderItem, Product, PaymentMethod, PaymentLine } 
 
 // Venta directa = una orden ENTREGADA con order_type='local' creada por rol venta_directa.
 // Es Order extendida con relaciones útiles para listados/detalle.
+// Incluye los campos que necesita el remito (dirección, brand, peso).
 export interface DirectSale extends Order {
-  customer?: Pick<Customer, "id" | "code" | "commercial_name" | "contact_name" | "phone">
+  customer?: Pick<
+    Customer,
+    | "id"
+    | "code"
+    | "commercial_name"
+    | "contact_name"
+    | "phone"
+    | "street"
+    | "street_number"
+    | "locality"
+    | "province"
+  >
   items?: DirectSaleItem[]
   seller_name?: string
 }
 
 export interface DirectSaleItem extends OrderItem {
-  product?: Pick<Product, "id" | "code" | "name" | "unit_of_measure" | "allows_decimal_quantity">
+  product?: Pick<
+    Product,
+    | "id"
+    | "code"
+    | "name"
+    | "brand"
+    | "unit_of_measure"
+    | "allows_decimal_quantity"
+    | "weight"
+  >
 }
 
 // KPIs para el dashboard del rol y para reportes admin de canales

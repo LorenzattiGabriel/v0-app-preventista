@@ -98,10 +98,10 @@ export class DirectSalesService {
       .from("orders")
       .select(`
         *,
-        customer:customers ( id, code, commercial_name, contact_name, phone ),
+        customer:customers ( id, code, commercial_name, contact_name, phone, street, street_number, locality, province ),
         items:order_items (
           *,
-          product:products!order_items_product_id_fkey ( id, code, name, unit_of_measure, allows_decimal_quantity )
+          product:products!order_items_product_id_fkey ( id, code, name, brand, unit_of_measure, allows_decimal_quantity, weight )
         )
       `)
       .eq("id", saleId)
@@ -130,10 +130,10 @@ export class DirectSalesService {
       .from("orders")
       .select(`
         *,
-        customer:customers ( id, code, commercial_name, contact_name, phone ),
+        customer:customers ( id, code, commercial_name, contact_name, phone, street, street_number, locality, province ),
         items:order_items (
           *,
-          product:products!order_items_product_id_fkey ( id, code, name, unit_of_measure, allows_decimal_quantity )
+          product:products!order_items_product_id_fkey ( id, code, name, brand, unit_of_measure, allows_decimal_quantity, weight )
         )
       `)
       .eq("order_type", "local")

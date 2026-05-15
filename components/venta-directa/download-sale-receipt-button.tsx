@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Download, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { createDirectSalesService } from "@/lib/services/directSalesService"
-import { downloadOrderReceipt } from "@/lib/receipt-generator"
+import { downloadAssemblyReceipt } from "@/lib/receipt-generator"
 import { adaptSaleForReceipt } from "@/lib/utils/sale-to-receipt"
 import type { DirectSale } from "@/lib/types/venta-directa"
 import { toast } from "sonner"
@@ -34,7 +34,7 @@ export function DownloadSaleReceiptButton(props: Props) {
         toast.error("No se pudo cargar la venta")
         return
       }
-      downloadOrderReceipt(adaptSaleForReceipt(sale), sellerName)
+      await downloadAssemblyReceipt(adaptSaleForReceipt(sale), sellerName)
     } catch (e: any) {
       toast.error(`Error al generar el remito: ${e?.message || "desconocido"}`)
     } finally {
