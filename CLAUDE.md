@@ -185,6 +185,8 @@ Todas las tablas tienen `USING (true) WITH CHECK (true)` para `authenticated`. L
 - `downloadOrderReceipt(order, repartidorName)` — comprobante de entrega
 - Versiones `getXxxBlob` para WhatsApp Share API
 
+**⚠️ Al construir `orderForReceipt` en el armador** (PDF local antes de guardar): el mapeo DEBE incluir `assembled_weight_kg: assembled.assembledWeightKg` o no aparece el peso en el remito. Ver `handleDownloadPDF` y `handleSendWhatsAppAssembly` en `assembly-form.tsx`.
+
 ## Errores TS pre-existentes (ignorables)
 
 - `TS2786 'X cannot be used as a JSX component'` — async server components, es bug del compilador, runtime ok
@@ -229,6 +231,34 @@ git log --oneline -10                       # commits recientes
 git fetch origin main && git status         # ver si hay cambios remotos
 ```
 
+## Features implementados recientemente
+
+### Pagos del admin (`/admin/customers/[id]`)
+- `RegisterPaymentDialog` tiene toggle segmentado: **"Aplicar a pedido"** (reduce `balance_due` de un pedido específico) vs **"Pago a cuenta"** (reduce `current_balance` general sin asociar pedido)
+- `paymentScope: "account"` → `accountService.recordGeneralPayment()` → movimiento sin `order_id`
+- `paymentScope: "order"` → `accountService.recordDebtPayment()` → actualiza `order_payments`
+- El botón siempre visible (antes se ocultaba si `currentBalance <= 0`)
+
+### Lista de precios (`/admin/products`)
+- Multi-marca: Popover con Checkboxes (selección múltiple simultánea)
+- Toggle agrupado PDF: "Categoría" | "Marca" (segmented control)
+- `lib/price-list-generator.ts`: `GroupBy = "category" | "brand"`, `groupProducts()`, headers oscuros `(80,80,80)`, `fitText()` con `getStringUnitWidth()` para truncado preciso
+
+### Ruta propuesta — explicación al repartidor (`delivery-route-view.tsx`)
+- Estado PLANIFICADO: card azul "¿Por qué este orden de paradas?" con distancia, duración, cantidad de stops con restricción horaria, y tip de cómo modificar
+- Estado EN_CURSO: banner actualizado mencionando ⚡ Ir ahora
+- Admin: sección "Ruta Planificada vs Ejecutada" + log de cambios manuales ya estaban implementados
+
+### Armado — peso con coma decimal
+- Inputs de kg usan `type="text" inputMode="decimal"` (acepta coma, locale AR)
+- **Patrón raw string**: `rawWeightInputs` y `rawQtyInputs` (estados `Record<string, string>`) guardan el string crudo mientras se tipea, evitando que la coma se borre al convertir (problema con controlled inputs). El número parseado se guarda en `assembledWeightKg` / `quantityAssembled`
+- `markAsTotalShortage` y `resetToRequested` sincronizan `rawQtyInputs`
+- Input de peso visible para **todos** los items (no solo pesables): obligatorio para `isWeightBased || isWeighable`, opcional con label gris para unidades
+
+### Login
+- Eliminados los usuarios de prueba hardcodeados (`app/auth/login/page.tsx`)
+- Logout: `window.location.href = "/auth/login"` para redirect confiable; route handler devuelve `NextResponse.redirect()`
+
 ## Próximos features potenciales (mencionados pero no implementados)
 
 - Reportes con filtros por rango de fechas
@@ -236,3 +266,4 @@ git fetch origin main && git status         # ver si hay cambios remotos
 - Modo offline para repartidor
 - Histórico de precios por producto
 - Liquidación automática de comisiones por preventista
+- Mejora de TSP: pre-agrupar paradas por localidad antes de enviar al microservicio (evita zigzag entre localidades)

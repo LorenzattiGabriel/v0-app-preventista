@@ -84,6 +84,7 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
           quantity_assembled: assembled.quantityAssembled,
           is_shortage: assembled.isShortage,
           shortage_reason: assembled.shortageReason,
+          assembled_weight_kg: assembled.assembledWeightKg,
         }
       }),
     }
@@ -117,6 +118,7 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
           quantity_assembled: assembled.quantityAssembled,
           is_shortage: assembled.isShortage,
           shortage_reason: assembled.shortageReason,
+          assembled_weight_kg: assembled.assembledWeightKg,
         }
       }),
     }
@@ -145,6 +147,25 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
       assembledWeightKg: item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null,
     })),
   )
+
+  // Raw string state para inputs decimales (permite tipear coma sin que se borre)
+  const [rawWeightInputs, setRawWeightInputs] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    order.order_items.forEach((item: any) => {
+      if (item.assembled_weight_kg != null) map[item.id] = String(item.assembled_weight_kg)
+    })
+    return map
+  })
+  const [rawQtyInputs, setRawQtyInputs] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    order.order_items.forEach((item: any) => {
+      if ((item.sale_unit || "unidad") === "peso") {
+        const qty = item.quantity_assembled || item.quantity_requested
+        if (qty) map[item.id] = String(qty)
+      }
+    })
+    return map
+  })
 
   const [assemblyNotes, setAssemblyNotes] = useState(order.assembly_notes || "")
   const [startTime] = useState(order.assembly_started_at || new Date().toISOString())
@@ -193,11 +214,14 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
   // Botón "Faltante total" - pone la cantidad en 0 (auto-marca shortage)
   const markAsTotalShortage = (index: number) => {
     handleItemChange(index, "quantityAssembled", 0)
+    setRawQtyInputs(prev => ({ ...prev, [assemblyItems[index].id]: "" }))
   }
 
   // Botón "Restablecer" - vuelve a la cantidad solicitada (auto-desmarca shortage)
   const resetToRequested = (index: number) => {
-    handleItemChange(index, "quantityAssembled", assemblyItems[index].quantityRequested)
+    const qty = assemblyItems[index].quantityRequested
+    handleItemChange(index, "quantityAssembled", qty)
+    setRawQtyInputs(prev => ({ ...prev, [assemblyItems[index].id]: String(qty) }))
   }
 
   const calculateTotals = () => {
@@ -536,23 +560,30 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                     id={`quantity-${index}`}
                     type="text"
                     inputMode={isWeightBased ? "decimal" : "numeric"}
-                    value={item.quantityAssembled === 0 ? "" : item.quantityAssembled}
+                    value={
+                      isWeightBased
+                        ? (rawQtyInputs[item.id] ?? "")
+                        : item.quantityAssembled === 0 ? "" : item.quantityAssembled
+                    }
                     placeholder={item.quantityAssembled === 0 ? "Faltante total" : isWeightBased ? "0,000" : ""}
                     onChange={(e) => {
-                      const raw = e.target.value.replace(",", ".")
-                      if (raw === "" || raw === "0.") {
-                        handleItemChange(index, "quantityAssembled", 0)
-                        return
+                      const raw = e.target.value
+                      if (isWeightBased) {
+                        setRawQtyInputs(prev => ({ ...prev, [item.id]: raw }))
+                        const normalized = raw.replace(",", ".")
+                        if (normalized === "" || normalized === "0.") {
+                          handleItemChange(index, "quantityAssembled", 0)
+                          return
+                        }
+                        const value = Number.parseFloat(normalized)
+                        if (!isNaN(value)) handleItemChange(index, "quantityAssembled", Math.max(0, value))
+                      } else {
+                        const value = Number.parseFloat(raw)
+                        if (isNaN(value)) return
+                        let final = Math.max(0, Math.round(value))
+                        if (final > item.quantityRequested) final = item.quantityRequested
+                        handleItemChange(index, "quantityAssembled", final)
                       }
-                      const value = Number.parseFloat(raw)
-                      if (isNaN(value)) return
-                      let final = isWeightBased
-                        ? Math.max(0, value)
-                        : Math.max(0, Math.round(value))
-                      if (!isWeightBased && final > item.quantityRequested) {
-                        final = item.quantityRequested
-                      }
-                      handleItemChange(index, "quantityAssembled", final)
                     }}
                     disabled={isLocked}
                     className="flex-1"
@@ -631,14 +662,16 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                       type="text"
                       inputMode="decimal"
                       placeholder="Ej: 1,050"
-                      value={item.assembledWeightKg ?? ""}
+                      value={rawWeightInputs[item.id] ?? ""}
                       onChange={(e) => {
-                        const raw = e.target.value.replace(",", ".")
-                        if (raw === "") {
+                        const raw = e.target.value
+                        setRawWeightInputs(prev => ({ ...prev, [item.id]: raw }))
+                        const normalized = raw.replace(",", ".")
+                        if (normalized === "") {
                           handleItemChange(index, "assembledWeightKg", null)
                           return
                         }
-                        const v = Number.parseFloat(raw)
+                        const v = Number.parseFloat(normalized)
                         handleItemChange(index, "assembledWeightKg", isNaN(v) ? null : Math.max(0, v))
                       }}
                       disabled={isLocked}
