@@ -101,14 +101,18 @@ export class DirectSalesService {
         customer:customers ( id, code, commercial_name, contact_name, phone ),
         items:order_items (
           *,
-          product:products ( id, code, name, unit_of_measure, allows_decimal_quantity )
+          product:products!order_items_product_id_fkey ( id, code, name, unit_of_measure, allows_decimal_quantity )
         )
       `)
       .eq("id", saleId)
       .eq("order_type", "local")
       .single()
 
-    if (error || !data) return null
+    if (error) {
+      console.error("[DirectSalesService.getSaleById] error", error)
+      return null
+    }
+    if (!data) return null
     return this.mapSale(data)
   }
 
@@ -129,7 +133,7 @@ export class DirectSalesService {
         customer:customers ( id, code, commercial_name, contact_name, phone ),
         items:order_items (
           *,
-          product:products ( id, code, name, unit_of_measure, allows_decimal_quantity )
+          product:products!order_items_product_id_fkey ( id, code, name, unit_of_measure, allows_decimal_quantity )
         )
       `)
       .eq("order_type", "local")
@@ -141,7 +145,11 @@ export class DirectSalesService {
     if (opts.limit) q = q.limit(opts.limit)
 
     const { data, error } = await q
-    if (error || !data) return []
+    if (error) {
+      console.error("[DirectSalesService.listSales] error", error)
+      return []
+    }
+    if (!data) return []
     return data.map((row) => this.mapSale(row))
   }
 
