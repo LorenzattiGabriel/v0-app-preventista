@@ -52,6 +52,7 @@ export default function LoginPage() {
         repartidor: "/repartidor/dashboard",
         cliente: "/cliente/dashboard",
         administrativo: "/admin/dashboard",
+        venta_directa: "/venta-directa/dashboard",
       }
 
       router.push(roleRoutes[profile.role] || "/")

@@ -10,16 +10,31 @@ interface HeaderProps {
   };
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  preventista: "Preventista",
+  encargado_armado: "Armador",
+  repartidor: "Repartidor",
+  cliente: "Cliente",
+  administrativo: "Administrativo",
+  venta_directa: "Venta Directa",
+}
+
+const ROLE_PATHS: Record<string, string> = {
+  venta_directa: "/venta-directa/dashboard",
+}
+
 export function Header({ profile }: HeaderProps) {
+  const roleLabel = ROLE_LABELS[profile.role] || profile.role
+  const homePath = ROLE_PATHS[profile.role] || `/${profile.role}/dashboard`
 
   return (
 
       <header className="border-b bg-background">
         <div className="container flex h-16 items-center justify-between px-4">
-          <Link href={`/${profile.role}/dashboard`} className="flex items-center gap-2 text-foreground hover:text-foreground/80 transition-colors">
+          <Link href={homePath} className="flex items-center gap-2 text-foreground hover:text-foreground/80 transition-colors">
             <div className="flex items-center gap-2">
               <Package className="h-6 w-6" />
-              <h1 className="text-xl font-semibold">Sistema de Gestión - {profile.role.charAt(0).toUpperCase() + profile.role.slice(1).toLowerCase()}</h1>
+              <h1 className="text-xl font-semibold">Sistema de Gestión - {roleLabel}</h1>
             </div>
           </Link>
           <div className="flex items-center gap-4">

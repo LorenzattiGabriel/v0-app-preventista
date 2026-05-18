@@ -1,5 +1,11 @@
 // Database types for TypeScript
-export type UserRole = "preventista" | "encargado_armado" | "repartidor" | "cliente" | "administrativo"
+export type UserRole =
+  | "preventista"
+  | "encargado_armado"
+  | "repartidor"
+  | "cliente"
+  | "administrativo"
+  | "venta_directa"
 
 export type OrderStatus =
   | "BORRADOR"
