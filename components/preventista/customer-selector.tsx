@@ -14,9 +14,19 @@ interface CustomerSelectorProps {
   customers: Customer[]
   onSelect: (customer: Customer) => void
   selectedCustomer: Customer | null
+  // Path al que navega el botón "+ Nuevo cliente". Si no se pasa, va al alta del preventista.
+  newCustomerHref?: string
+  // Callback opcional ejecutado antes de navegar (ej: persistir el carrito).
+  onBeforeNewCustomer?: () => void
 }
 
-export function CustomerSelector({ customers, onSelect, selectedCustomer }: CustomerSelectorProps) {
+export function CustomerSelector({
+  customers,
+  onSelect,
+  selectedCustomer,
+  newCustomerHref = "/preventista/customers/new",
+  onBeforeNewCustomer,
+}: CustomerSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState("")
 
@@ -69,7 +79,7 @@ export function CustomerSelector({ customers, onSelect, selectedCustomer }: Cust
                   <div className="text-center py-6">
                     <p className="text-sm text-muted-foreground mb-4">No se encontró el cliente</p>
                     <Button asChild size="sm">
-                      <Link href="/preventista/customers/new">
+                      <Link href={newCustomerHref} onClick={onBeforeNewCustomer}>
                         <Plus className="mr-2 h-4 w-4" />
                         Crear Nuevo Cliente
                       </Link>
@@ -109,7 +119,7 @@ export function CustomerSelector({ customers, onSelect, selectedCustomer }: Cust
         </Popover>
 
         <Button asChild variant="outline">
-          <Link href="/preventista/customers/new">
+          <Link href={newCustomerHref} onClick={onBeforeNewCustomer}>
             <Plus className="h-4 w-4" />
           </Link>
         </Button>

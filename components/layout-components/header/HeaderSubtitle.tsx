@@ -15,7 +15,10 @@ function getSubtitle(pathname: string | null): string | undefined {
     "/preventista/customers/new": "Crear Nuevo Cliente",
     "/preventista/orders": "Mis Pedidos",
     "/preventista/orders/new": "Crear Nuevo Pedido",
-    "/preventista/orders/drafts": "Borradores de Nuevos Pedidos"
+    "/preventista/orders/drafts": "Borradores de Nuevos Pedidos",
+    "/venta-directa/dashboard": undefined,
+    "/venta-directa/ventas": "Mis Ventas",
+    "/venta-directa/ventas/nueva": "Nueva Venta",
   }
 
   if (subtitles[pathname]) {
