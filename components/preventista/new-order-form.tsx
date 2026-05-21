@@ -141,9 +141,14 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       setCustomPrice(product.base_price)
       setPriceType("base")
     }
-    // Default: si admite decimales y la unidad de medida es kg, default a "peso"
-    const decimalKg = product.allows_decimal_quantity && product.unit_of_measure === "kg"
-    setSaleUnit(decimalKg ? "peso" : "unidad")
+    // Productos con sale_unit="peso" en el producto: siempre "peso" (pieza pesada)
+    if ((product as any).sale_unit === "peso") {
+      setSaleUnit("peso")
+    } else {
+      // Default: si admite decimales y la unidad de medida es kg, default a "peso"
+      const decimalKg = product.allows_decimal_quantity && product.unit_of_measure === "kg"
+      setSaleUnit(decimalKg ? "peso" : "unidad")
+    }
   }, [selectedProductId, selectedCustomer?.customer_type, products])
 
   // Cambiar tipo de precio: actualiza el valor del precio
@@ -285,9 +290,11 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     if (!product) return
 
     // Validar cantidad según tipo de producto
-    const finalQuantity = product.allows_decimal_quantity
-      ? quantity
-      : Math.round(quantity) // Forzar entero si no permite decimales
+    // Productos por peso (pieza pesada) siempre son piezas enteras
+    const productIsPeso = (product as any).sale_unit === "peso"
+    const finalQuantity = (productIsPeso || !product.allows_decimal_quantity)
+      ? Math.round(quantity)
+      : quantity
 
     if (finalQuantity <= 0) return
 
@@ -300,7 +307,11 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     }
 
     const unitPrice = customPrice !== null ? customPrice : basePrice
-    const lineTotal = finalQuantity * unitPrice
+    // Para productos por peso: total estimado = piezas × peso_est/pieza × precio/kg
+    const estKg = productIsPeso ? Number((product as any).estimated_weight_kg || 0) : 0
+    const lineTotal = productIsPeso
+      ? finalQuantity * estKg * unitPrice
+      : finalQuantity * unitPrice
 
     // Validar límite de descuento del producto
     if (itemDiscount > 0) {
@@ -409,6 +420,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
   const { subtotal, total, discountAmount } = calculateTotals(orderItems, generalDiscount, discountType)
   const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null
+  // Producto de tipo "pieza pesada": se pide en piezas, se factura por kg de balanza
+  const isPesoProduct = !!(selectedProduct && (selectedProduct as any).sale_unit === "peso")
+  const estimatedWeightKg = isPesoProduct ? Number((selectedProduct as any).estimated_weight_kg || 0) : 0
 
   return (
     <div className="space-y-6">
@@ -782,7 +796,38 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           )}
 
           {/* Información sobre cantidades decimales */}
-          {selectedProduct && selectedProduct.allows_decimal_quantity && (
+          {/* Producto de pieza pesada: mostrar referencia, sin opción a cambiar */}
+          {isPesoProduct && (
+            <div className="p-3 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-lg">
+              <div className="flex items-start gap-2 text-orange-800 dark:text-orange-200">
+                <Info className="h-5 w-5 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">Pieza pesada — se factura por kg de balanza</p>
+                  <p className="text-sm">
+                    Ingresá la cantidad de piezas. El total final se determina al armar el pedido (peso real de balanza × ${(customPrice ?? 0).toFixed(2)}/kg).
+                  </p>
+                  <p className="text-xs font-medium">
+                    {estimatedWeightKg > 0 ? (
+                      <>
+                        Ref: ~{estimatedWeightKg.toFixed(3)} kg/pieza
+                        {quantity > 0 && (
+                          <>
+                            {" · "}Est. ~{(quantity * estimatedWeightKg).toFixed(2)} kg
+                            {" · "}Est. ${(quantity * estimatedWeightKg * (customPrice ?? 0)).toFixed(2)}
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-orange-600 dark:text-orange-400">Peso estimado por pieza no cargado — el admin debe completarlo en el producto.</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Radio unidad/peso para productos con decimal (que NO son pieza pesada) */}
+          {selectedProduct && selectedProduct.allows_decimal_quantity && !isPesoProduct && (
             <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg space-y-3">
               <div className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
                 <Info className="h-5 w-5 mt-0.5 shrink-0" />
@@ -826,30 +871,30 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
           <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="quantity" className="text-sm font-medium">
-                {selectedProduct?.allows_decimal_quantity && saleUnit === "peso"
-                  ? "Peso (kg)"
-                  : `Cantidad${selectedProduct?.unit_of_measure ? ` (${selectedProduct.unit_of_measure})` : ""}`}
+                {isPesoProduct
+                  ? "Piezas"
+                  : selectedProduct?.allows_decimal_quantity && saleUnit === "peso"
+                    ? "Peso (kg)"
+                    : `Cantidad${selectedProduct?.unit_of_measure ? ` (${selectedProduct.unit_of_measure})` : ""}`}
               </Label>
               <Input
                 id="quantity"
                 type="number"
-                min={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
-                step={selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
+                min={isPesoProduct ? "1" : selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
+                step={isPesoProduct ? "1" : selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
                 value={quantity || ""}
                 onChange={(e) => {
                   const rawValue = e.target.value
-                  // Permitir campo vacío temporalmente mientras el usuario escribe
                   if (rawValue === '' || rawValue === '0.') {
                     setQuantity(0)
                     return
                   }
                   const value = Number.parseFloat(rawValue)
                   if (isNaN(value)) return
-                  // Si no permite decimales, redondear a entero
-                  if (selectedProduct && !selectedProduct.allows_decimal_quantity) {
+                  // Productos por peso: siempre enteros
+                  if (isPesoProduct || (selectedProduct && !selectedProduct.allows_decimal_quantity)) {
                     setQuantity(Math.round(value) || 0)
                   } else {
-                    // Permitir valores desde 0.01 para decimales
                     setQuantity(value >= 0 ? value : 0)
                   }
                 }}
@@ -995,20 +1040,26 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                         <p className="font-medium text-sm truncate">{item.productName}</p>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
                           <span>
-                            {item.saleUnit === "peso" ? "Peso: " : "Cant: "}
+                            {item.saleUnit === "peso" ? "Piezas: " : "Cant: "}
                             {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(3)}
                             {item.saleUnit === "peso"
-                              ? " kg"
+                              ? ""
                               : item.unitOfMeasure && item.unitOfMeasure !== "unidad"
                                 ? ` ${item.unitOfMeasure}`
                                 : ""}
                           </span>
-                          <span>Precio: ${item.unitPrice.toFixed(2)}</span>
+                          <span>
+                            Precio: ${item.unitPrice.toFixed(2)}
+                            {item.saleUnit === "peso" ? "/kg" : ""}
+                          </span>
                           {item.discount > 0 && <span>Desc: -${item.discount.toFixed(2)}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">${item.subtotal.toFixed(2)}</span>
+                        <span className="font-semibold text-sm">
+                          ${item.subtotal.toFixed(2)}
+                          {item.saleUnit === "peso" && <span className="text-xs font-normal text-muted-foreground ml-1">(est.)</span>}
+                        </span>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1044,15 +1095,21 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                           {Number.isInteger(item.quantity) ? item.quantity : item.quantity.toFixed(3)}
                           <span className="text-xs text-muted-foreground ml-1">
                             {item.saleUnit === "peso"
-                              ? "kg"
+                              ? "pz"
                               : item.unitOfMeasure && item.unitOfMeasure !== "unidad"
                                 ? item.unitOfMeasure
                                 : ""}
                           </span>
                         </td>
-                        <td className="p-2 text-sm text-right">${item.unitPrice.toFixed(2)}</td>
+                        <td className="p-2 text-sm text-right">
+                          ${item.unitPrice.toFixed(2)}
+                          {item.saleUnit === "peso" && <span className="text-xs text-muted-foreground">/kg</span>}
+                        </td>
                         <td className="p-2 text-sm text-right">${item.discount.toFixed(2)}</td>
-                        <td className="p-2 text-sm text-right font-medium">${item.subtotal.toFixed(2)}</td>
+                        <td className="p-2 text-sm text-right font-medium">
+                          ${item.subtotal.toFixed(2)}
+                          {item.saleUnit === "peso" && <span className="text-xs font-normal text-muted-foreground ml-1">(est.)</span>}
+                        </td>
                         <td className="p-2">
                           <Button variant="ghost" size="sm" onClick={() => handleRemoveProduct(index)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
@@ -1137,6 +1194,11 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               <span>Total:</span>
               <span>${total.toFixed(2)}</span>
             </div>
+            {orderItems.some((i) => i.saleUnit === "peso") && (
+              <p className="text-xs text-muted-foreground">
+                * Los productos por peso muestran total estimado. El total final se determina al armar el pedido (peso real de balanza × precio/kg).
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

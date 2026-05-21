@@ -46,7 +46,8 @@ interface AssemblyItem {
   unitOfMeasure: string
   weight: number | null // peso unitario en kg (del producto)
   saleUnit: "unidad" | "peso" // cómo se vende esta línea
-  assembledWeightKg: number | null // peso real opcional al armar
+  assembledWeightKg: number | null // peso real de balanza al armar
+  estimatedWeightKg: number | null // peso estimado por pieza (referencia, del producto)
 }
 
 interface AssemblyFormProps {
@@ -145,6 +146,7 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
       weight: item.products.weight ? Number(item.products.weight) : null,
       saleUnit: (item.sale_unit as "unidad" | "peso") || "unidad",
       assembledWeightKg: item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null,
+      estimatedWeightKg: item.products.estimated_weight_kg != null ? Number(item.products.estimated_weight_kg) : null,
     })),
   )
 
@@ -213,8 +215,14 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
 
   // Botón "Faltante total" - pone la cantidad en 0 (auto-marca shortage)
   const markAsTotalShortage = (index: number) => {
+    const item = assemblyItems[index]
     handleItemChange(index, "quantityAssembled", 0)
-    setRawQtyInputs(prev => ({ ...prev, [assemblyItems[index].id]: "" }))
+    setRawQtyInputs(prev => ({ ...prev, [item.id]: "" }))
+    // Para items por peso: también limpiar el kg de balanza
+    if (item.saleUnit === "peso") {
+      handleItemChange(index, "assembledWeightKg", null)
+      setRawWeightInputs(prev => ({ ...prev, [item.id]: "" }))
+    }
   }
 
   // Botón "Restablecer" - vuelve a la cantidad solicitada (auto-desmarca shortage)
@@ -227,7 +235,9 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
   const calculateTotals = () => {
     const originalTotal = order.total
     const newSubtotal = assemblyItems.reduce((sum, item) => {
-      const itemSubtotal = item.quantityAssembled * item.unitPrice - item.discount
+      const itemSubtotal = item.saleUnit === "peso"
+        ? Math.max(0, (item.assembledWeightKg ?? 0) * Number(item.unitPrice) - Number(item.discount))
+        : Math.max(0, Number(item.quantityAssembled) * Number(item.unitPrice) - Number(item.discount))
       return sum + itemSubtotal
     }, 0)
     const newTotal = newSubtotal - order.general_discount
@@ -504,14 +514,19 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
             </div>
           )}
           {assemblyItems.map((item, index) => {
-            // saleUnit determina si esta línea se vendió por peso (kg) o por unidad
+            // saleUnit determina si esta línea se factura por kg de balanza o por cantidad
             const isWeightBased = item.saleUnit === "peso"
             // Productos pesables: pueden llevar peso de referencia opcional aunque
             // se vendan por unidad (ej: 1 horma → kg pesados como referencia)
             const isWeighable = item.allowsDecimalQuantity
             const qtyDiff = item.quantityAssembled - item.quantityRequested
-            const projectedSubtotal = item.quantityRequested * item.unitPrice - item.discount
-            const realSubtotal = item.quantityAssembled * item.unitPrice - item.discount
+            // Para items por peso: subtotales basados en kg de balanza, no en cantidad
+            const projectedSubtotal = isWeightBased
+              ? (item.quantityRequested * (item.estimatedWeightKg ?? 0) * Number(item.unitPrice)) - Number(item.discount)
+              : Number(item.quantityRequested) * Number(item.unitPrice) - Number(item.discount)
+            const realSubtotal = isWeightBased
+              ? Math.max(0, (item.assembledWeightKg ?? 0) * Number(item.unitPrice) - Number(item.discount))
+              : Math.max(0, Number(item.quantityAssembled) * Number(item.unitPrice) - Number(item.discount))
             const subtotalDiff = realSubtotal - projectedSubtotal
 
             return (
@@ -527,14 +542,33 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                     )}
                   </h4>
                   <p className="text-sm text-muted-foreground">
-                    Solicitado: {isWeightBased
-                      ? item.quantityRequested.toFixed(3)
-                      : Number.isInteger(item.quantityRequested)
-                        ? item.quantityRequested
-                        : item.quantityRequested.toFixed(2)}
-                    {isWeightBased ? " kg" : ""} | Precio: ${item.unitPrice.toFixed(2)}
-                    {isWeightBased ? "/kg" : ""}
+                    {isWeightBased ? (
+                      <>
+                        Solicitado: <strong>{item.quantityRequested} pieza{item.quantityRequested !== 1 ? "s" : ""}</strong>
+                        {" | "}Precio: ${Number(item.unitPrice).toFixed(2)}/kg
+                      </>
+                    ) : (
+                      <>
+                        Solicitado:{" "}
+                        {Number.isInteger(item.quantityRequested) ? item.quantityRequested : Number(item.quantityRequested).toFixed(2)}
+                        {" | "}Precio: ${Number(item.unitPrice).toFixed(2)}
+                      </>
+                    )}
                   </p>
+                  {/* Referencia de peso estimado para productos por pieza */}
+                  {isWeightBased && (
+                    <p className="text-xs text-muted-foreground italic">
+                      {item.estimatedWeightKg && item.estimatedWeightKg > 0 ? (
+                        <>
+                          Ref: ~{item.estimatedWeightKg.toFixed(3)} kg/pieza
+                          {" · "}est. {(item.quantityRequested * item.estimatedWeightKg).toFixed(2)} kg
+                          {" · "}est. ${(item.quantityRequested * item.estimatedWeightKg * Number(item.unitPrice)).toFixed(2)}
+                        </>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Peso estimado N/A — completar en el producto</span>
+                      )}
+                    </p>
+                  )}
                   {/* Referencia de peso para productos por unidad */}
                   {!isWeightBased && item.weight && item.weight > 0 && (
                     <p className="text-xs text-muted-foreground italic">
@@ -553,36 +587,24 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
 
               <div className="space-y-2">
                 <Label htmlFor={`quantity-${index}`}>
-                  {isWeightBased ? "Peso Real (kg)" : "Cantidad Armada"}
+                  {isWeightBased ? "Piezas armadas" : "Cantidad Armada"}
                 </Label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id={`quantity-${index}`}
                     type="text"
-                    inputMode={isWeightBased ? "decimal" : "numeric"}
-                    value={
-                      isWeightBased
-                        ? (rawQtyInputs[item.id] ?? "")
-                        : item.quantityAssembled === 0 ? "" : item.quantityAssembled
-                    }
-                    placeholder={item.quantityAssembled === 0 ? "Faltante total" : isWeightBased ? "0,000" : ""}
+                    inputMode="numeric"
+                    value={item.quantityAssembled === 0 ? "" : item.quantityAssembled}
+                    placeholder={item.quantityAssembled === 0 ? "Faltante total" : ""}
                     onChange={(e) => {
                       const raw = e.target.value
+                      const value = Number.parseFloat(raw)
+                      if (isNaN(value)) return
+                      let final = Math.max(0, Math.round(value))
+                      if (final > item.quantityRequested) final = item.quantityRequested
+                      handleItemChange(index, "quantityAssembled", final)
                       if (isWeightBased) {
-                        setRawQtyInputs(prev => ({ ...prev, [item.id]: raw }))
-                        const normalized = raw.replace(",", ".")
-                        if (normalized === "" || normalized === "0.") {
-                          handleItemChange(index, "quantityAssembled", 0)
-                          return
-                        }
-                        const value = Number.parseFloat(normalized)
-                        if (!isNaN(value)) handleItemChange(index, "quantityAssembled", Math.max(0, value))
-                      } else {
-                        const value = Number.parseFloat(raw)
-                        if (isNaN(value)) return
-                        let final = Math.max(0, Math.round(value))
-                        if (final > item.quantityRequested) final = item.quantityRequested
-                        handleItemChange(index, "quantityAssembled", final)
+                        setRawQtyInputs(prev => ({ ...prev, [item.id]: String(final) }))
                       }
                     }}
                     disabled={isLocked}
@@ -639,11 +661,19 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                   </div>
                 )}
 
-                {/* Peso de balanza: requerido para pesables/decimales, opcional para unidades */}
+                {/* Peso de balanza: obligatorio para items por peso, requerido para pesables, opcional para unidades */}
                 {!item.isShortage && item.quantityAssembled > 0 && (
                   <div className="space-y-1">
-                    <Label htmlFor={`weight-ref-${index}`} className="text-xs font-medium">
-                      {isWeightBased || isWeighable ? (
+                    <Label htmlFor={`weight-ref-${index}`} className={`text-xs font-medium ${isWeightBased ? "text-base font-semibold" : ""}`}>
+                      {isWeightBased ? (
+                        <>
+                          Kg reales de balanza{" "}
+                          <span className="text-destructive">*</span>
+                          {(item.assembledWeightKg === null || item.assembledWeightKg <= 0) && (
+                            <span className="text-destructive ml-1 font-normal">— requerido para facturar</span>
+                          )}
+                        </>
+                      ) : isWeighable ? (
                         <>
                           Peso en balanza (kg){" "}
                           <span className="text-destructive">*</span>
@@ -686,24 +716,31 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                 )}
               </div>
 
-              {/* Diferencia peso/cantidad para productos pesables */}
-              {isWeightBased && item.quantityAssembled > 0 && Math.abs(qtyDiff) > 0.001 && (
+              {/* Diferencia para productos por pieza/peso */}
+              {isWeightBased && item.quantityAssembled > 0 && item.assembledWeightKg !== null && item.assembledWeightKg > 0 && (
                 <div className={`text-xs p-2 rounded-md ${
-                  qtyDiff > 0
+                  Math.abs(subtotalDiff) > 0.01
                     ? "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                    : "bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    : "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800"
                 }`}>
                   <div className="flex justify-between">
                     <span>
-                      Pedido: {item.quantityRequested.toFixed(3)} kg → Pesado: {item.quantityAssembled.toFixed(3)} kg
-                      <strong className="ml-1">
-                        ({qtyDiff > 0 ? "+" : ""}{qtyDiff.toFixed(3)} kg)
-                      </strong>
+                      {item.estimatedWeightKg && item.estimatedWeightKg > 0
+                        ? <>Est: ~{(item.quantityRequested * item.estimatedWeightKg).toFixed(3)} kg{" → "}Real: </>
+                        : "Real: "
+                      }
+                      <strong>{item.assembledWeightKg.toFixed(3)} kg</strong>
+                      {item.estimatedWeightKg && item.estimatedWeightKg > 0 && (
+                        <strong className="ml-1">
+                          ({(item.assembledWeightKg - item.quantityRequested * item.estimatedWeightKg) > 0 ? "+" : ""}
+                          {(item.assembledWeightKg - item.quantityRequested * item.estimatedWeightKg).toFixed(3)} kg)
+                        </strong>
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between mt-1">
                     <span>
-                      Proyectado: ${projectedSubtotal.toFixed(2)} → Real: ${realSubtotal.toFixed(2)}
+                      Est: ${projectedSubtotal.toFixed(2)} → Real: ${realSubtotal.toFixed(2)}
                       <strong className="ml-1">
                         ({subtotalDiff > 0 ? "+" : ""}${subtotalDiff.toFixed(2)})
                       </strong>

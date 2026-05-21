@@ -145,6 +145,8 @@ export interface Product {
   supplier?: string
   max_discount_percentage?: number | null
   max_discount_fixed?: number | null
+  sale_unit?: "unidad" | "peso" // 'peso' = pedido en piezas, facturado por kg de balanza
+  estimated_weight_kg?: number | null // Peso estimado por pieza (solo cuando sale_unit='peso')
 }
 
 export type PaymentMethod = 
@@ -272,6 +274,8 @@ export interface OrderItem {
   shortage_notes?: string
   is_substituted: boolean
   substituted_product_id?: string
+  sale_unit?: "unidad" | "peso"
+  assembled_weight_kg?: number | null
   created_at: string
   updated_at: string
 }

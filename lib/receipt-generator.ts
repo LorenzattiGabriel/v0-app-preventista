@@ -314,16 +314,23 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
     const quantityAssembled = Number(resolveAssembled(item)) || 0
     const unitPrice = Number(item.unit_price) || 0
     const discount = Number(item.discount) || 0
-    const lineTotal = Math.max(0, unitPrice * quantityAssembled - discount)
-    assembledTotal += lineTotal
-    const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
-
     const byWeight = item.sale_unit === "peso"
     const refWeightKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
 
+    // Para items por peso: total = kg_balanza × precio/kg (no cantidad × precio)
+    const lineTotal = byWeight
+      ? Math.max(0, unitPrice * (refWeightKg ?? 0) - discount)
+      : Math.max(0, unitPrice * quantityAssembled - discount)
+    assembledTotal += lineTotal
+
+    // Faltante: para items peso, comparar piezas; para unidad, comparar cantidades
+    const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
+
+    // Acumulado de pesos para footer
     if (byWeight) {
-      totalWeightRequested += quantityRequested
-      totalWeightAssembled += quantityAssembled
+      const estKg = prod.estimated_weight_kg ? Number(prod.estimated_weight_kg) : 0
+      totalWeightRequested += quantityRequested * estKg
+      totalWeightAssembled += refWeightKg ?? 0
     } else if (refWeightKg && refWeightKg > 0) {
       totalWeightAssembled += refWeightKg
       const unitWeight = !prod.allows_decimal_quantity && prod.weight ? Number(prod.weight) : 0
@@ -344,9 +351,12 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
     doc.setFontSize(8)
     if (hasShortage) doc.setTextColor(200, 100, 0)
     doc.text(productName, col1, yPos)
-    doc.text(`$${unitPrice.toFixed(2)}`, colPriceRight, yPos, { align: "right" })
-    doc.text(fmtQty(quantityRequested, byWeight), colSolic, yPos, { align: "center" })
-    doc.text(fmtQty(quantityAssembled, byWeight), colAssembled, yPos, { align: "center" })
+    // Para items por peso: precio/kg; para unidad: precio/unidad
+    doc.text(`$${unitPrice.toFixed(2)}${byWeight ? "/kg" : ""}`, colPriceRight, yPos, { align: "right" })
+    // "Solic.": para items peso muestra piezas; para unidad muestra cantidad
+    doc.text(byWeight ? `${quantityRequested}pz` : fmtQty(quantityRequested, false), colSolic, yPos, { align: "center" })
+    // "Armado": para items peso muestra kg de balanza; para unidad muestra cantidad armada
+    doc.text(byWeight ? (refWeightKg != null ? `${refWeightKg.toFixed(3)}kg` : "-") : fmtQty(quantityAssembled, false), colAssembled, yPos, { align: "center" })
     doc.text(`$${lineTotal.toFixed(2)}`, colTotalRight, yPos, { align: "right" })
     if (hasShortage) doc.setTextColor(0)
 
@@ -354,21 +364,37 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
       yPos += 4
       doc.setFontSize(7)
       doc.setTextColor(150, 80, 0)
-      const faltante = quantityRequested - quantityAssembled
       const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
-      doc.text(`  Faltante: ${fmtQty(faltante, byWeight)}${motivo}`, col1, yPos)
+      if (byWeight) {
+        doc.text(`  Faltante: ${quantityRequested - quantityAssembled} pieza(s)${motivo}`, col1, yPos)
+      } else {
+        const faltante = quantityRequested - quantityAssembled
+        doc.text(`  Faltante: ${fmtQty(faltante, false)}${motivo}`, col1, yPos)
+      }
       doc.setFontSize(8)
       doc.setTextColor(0)
     }
 
-    if (refWeightKg && refWeightKg > 0) {
+    // Sub-línea de peso para items por peso
+    if (byWeight && refWeightKg && refWeightKg > 0) {
+      const estKg = prod.estimated_weight_kg ? Number(prod.estimated_weight_kg) : null
       yPos += 4
       doc.setFontSize(7)
       doc.setTextColor(120)
-      // Para kg: mostrar "Peso en balanza" además de la cantidad armada
-      // Para unidad: mostrar el peso real cortado
-      const weightLabel = byWeight ? "Peso en balanza" : "Peso real"
-      doc.text(`  ${weightLabel}: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
+      let weightLine = `  Balanza: ${refWeightKg.toFixed(3)} kg`
+      if (estKg && estKg > 0) {
+        weightLine += ` (est. ${(quantityAssembled * estKg).toFixed(3)} kg)`
+      } else {
+        weightLine += ` (est. N/A)`
+      }
+      doc.text(weightLine, col1, yPos)
+      doc.setFontSize(8)
+      doc.setTextColor(0)
+    } else if (!byWeight && refWeightKg && refWeightKg > 0) {
+      yPos += 4
+      doc.setFontSize(7)
+      doc.setTextColor(120)
+      doc.text(`  Peso real: ${refWeightKg.toFixed(3)} kg`, col1, yPos)
       doc.setFontSize(8)
       doc.setTextColor(0)
     } else if (!byWeight) {

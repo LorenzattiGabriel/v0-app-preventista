@@ -38,6 +38,8 @@ interface ProductFormProps {
     unit_of_measure?: string
     max_discount_percentage?: number | null
     max_discount_fixed?: number | null
+    sale_unit?: "unidad" | "peso"
+    estimated_weight_kg?: number | null
   }
   initialCode: string
 }
@@ -69,6 +71,8 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
     unit_of_measure: product?.unit_of_measure || "unidad",
     max_discount_percentage: product?.max_discount_percentage?.toString() || "",
     max_discount_fixed: product?.max_discount_fixed?.toString() || "",
+    sale_unit: product?.sale_unit || "unidad",
+    estimated_weight_kg: product?.estimated_weight_kg?.toString() || "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,6 +106,10 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
         unit_of_measure: formData.unit_of_measure || "unidad",
         max_discount_percentage: formData.max_discount_percentage ? parseFloat(formData.max_discount_percentage as string) : null,
         max_discount_fixed: formData.max_discount_fixed ? parseFloat(formData.max_discount_fixed as string) : null,
+        sale_unit: formData.sale_unit,
+        estimated_weight_kg: formData.sale_unit === "peso" && formData.estimated_weight_kg
+          ? parseFloat(formData.estimated_weight_kg as string)
+          : null,
       }
 
       if (product) {
@@ -319,27 +327,85 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="allows_decimal_quantity">Permite Cantidades Decimales</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Activa para productos vendidos por peso (ej: 1.5 kg de queso)
+              {/* Modo de venta: por unidad o por pieza pesada */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Modo de facturación</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${formData.sale_unit === "unidad" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/40"}`}>
+                    <input
+                      type="radio"
+                      name="sale_unit"
+                      value="unidad"
+                      checked={formData.sale_unit === "unidad"}
+                      onChange={() => setFormData({ ...formData, sale_unit: "unidad", estimated_weight_kg: "" })}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">Por unidad</p>
+                      <p className="text-xs text-muted-foreground">Se factura por cantidad × precio</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${formData.sale_unit === "peso" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/40"}`}>
+                    <input
+                      type="radio"
+                      name="sale_unit"
+                      value="peso"
+                      checked={formData.sale_unit === "peso"}
+                      onChange={() => setFormData({ ...formData, sale_unit: "peso" })}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">Pieza pesada <span className="text-xs bg-muted px-1.5 py-0.5 rounded ml-1">kg</span></p>
+                      <p className="text-xs text-muted-foreground">Pedido en piezas, facturado por peso de balanza × precio/kg</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Peso estimado por pieza (solo cuando sale_unit=peso) */}
+              {formData.sale_unit === "peso" && (
+                <div className="space-y-2">
+                  <Label htmlFor="estimated_weight_kg">
+                    Peso estimado por pieza (kg) <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="estimated_weight_kg"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    value={formData.estimated_weight_kg}
+                    onChange={(e) => setFormData({ ...formData, estimated_weight_kg: e.target.value })}
+                    placeholder="Ej: 4.500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Referencia para el preventista. Ej: una horma de queso pesa ~4.5 kg. El total final lo determina el peso real de balanza al armar.
                   </p>
                 </div>
-                <Switch
-                  id="allows_decimal_quantity"
-                  checked={formData.allows_decimal_quantity}
-                  onCheckedChange={(checked) => setFormData({ ...formData, allows_decimal_quantity: checked })}
-                />
-              </div>
-              
-              {formData.allows_decimal_quantity && (
+              )}
+
+              {formData.sale_unit === "unidad" && (
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="allows_decimal_quantity">Permite Cantidades Decimales</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Activa para productos vendidos por peso (ej: 1.5 kg de queso)
+                    </p>
+                  </div>
+                  <Switch
+                    id="allows_decimal_quantity"
+                    checked={formData.allows_decimal_quantity}
+                    onCheckedChange={(checked) => setFormData({ ...formData, allows_decimal_quantity: checked })}
+                  />
+                </div>
+              )}
+
+              {formData.sale_unit === "unidad" && formData.allows_decimal_quantity && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg text-sm text-blue-700 dark:text-blue-300">
                   ✓ Los preventistas podrán pedir cantidades como 1.5, 2.25, etc.
                 </div>
               )}
-              
-              {!formData.allows_decimal_quantity && (
+
+              {formData.sale_unit === "unidad" && !formData.allows_decimal_quantity && (
                 <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
                   Solo se permiten cantidades enteras (1, 2, 3...)
                 </div>
