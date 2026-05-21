@@ -9,6 +9,7 @@ export const USER_ROLES = {
   REPARTIDOR: 'repartidor',
   CLIENTE: 'cliente',
   ADMINISTRATIVO: 'administrativo',
+  VENTA_DIRECTA: 'venta_directa',
 } as const
 
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES]
@@ -19,6 +20,7 @@ export const USER_ROLES_LIST: UserRole[] = [
   'preventista',
   'encargado_armado',
   'repartidor',
+  'venta_directa',
 ]
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -27,6 +29,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   repartidor: 'Repartidor',
   cliente: 'Cliente',
   administrativo: 'Administrativo',
+  venta_directa: 'Venta Directa',
 }
 
 export const ROLE_COLORS: Record<UserRole, 'default' | 'secondary' | 'outline' | 'destructive'> = {
@@ -35,6 +38,7 @@ export const ROLE_COLORS: Record<UserRole, 'default' | 'secondary' | 'outline' |
   repartidor: 'secondary',
   cliente: 'outline',
   administrativo: 'default',
+  venta_directa: 'secondary',
 }
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
@@ -43,10 +47,10 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   repartidor: 'Entrega pedidos a clientes',
   cliente: 'Cliente final del sistema',
   administrativo: 'Acceso completo al sistema',
+  venta_directa: 'Vende en el local con armado inmediato',
 }
 
 /**
  * Pagination constants
  */
 export const USERS_PER_PAGE = 15
-
