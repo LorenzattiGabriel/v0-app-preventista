@@ -61,35 +61,6 @@ El sistema utiliza Supabase con PostgreSQL. La estructura incluye:
 
 Para prototipado, el sistema usa autenticación simple con contraseñas en texto plano.
 
-### Usuarios de Prueba
-
-**Administrativos:**
-- admin@distribuidora.com / admin123
-- admin2@distribuidora.com / admin123
-
-**Preventistas:**
-- preventista1@distribuidora.com / prev123
-- preventista2@distribuidora.com / prev123
-- preventista3@distribuidora.com / prev123
-
-**Encargados de Armado:**
-- armado1@distribuidora.com / armado123
-- armado2@distribuidora.com / armado123
-- armado3@distribuidora.com / armado123
-
-**Repartidores:**
-- repartidor1@distribuidora.com / repar123
-- repartidor2@distribuidora.com / repar123
-- repartidor3@distribuidora.com / repar123
-- repartidor4@distribuidora.com / repar123
-
-**Clientes:**
-- cliente1@email.com / cliente123
-- cliente2@email.com / cliente123
-- cliente3@email.com / cliente123
-- cliente4@email.com / cliente123
-- cliente5@email.com / cliente123
-
 ## 🛠️ Instalación y Configuración
 
 ### 1. Ejecutar Scripts SQL
