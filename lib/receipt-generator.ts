@@ -424,36 +424,6 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
   const generalDiscount = Number(order.general_discount) || 0
   const finalAssembledTotal =
     order.total != null ? Number(order.total) : Math.max(0, assembledTotal - generalDiscount)
-  const originalTotal =
-    order.original_total != null
-      ? Number(order.original_total)
-      : order.total != null
-      ? Number(order.total)
-      : 0
-  const difference = originalTotal - finalAssembledTotal
-  const hasDifference = Math.abs(difference) > 0.01
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-
-  if (hasDifference) {
-    doc.setTextColor(80, 80, 80)
-    doc.text(`Total original: $${originalTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 5
-    doc.setTextColor(0)
-    doc.text(`Total armado: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 5
-    doc.setTextColor(200, 100, 0)
-    const diffSign = difference > 0 ? "-" : "+"
-    doc.text(
-      `Diferencia: ${diffSign}$${Math.abs(difference).toFixed(2)}`,
-      pageWidth - margin,
-      yPos,
-      { align: "right" },
-    )
-    doc.setTextColor(0)
-    yPos += 7
-  }
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(12)
@@ -461,21 +431,10 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
   yPos += 8
 
   // --- Peso del pedido ---
-  if (totalWeightRequested > 0 || totalWeightAssembled > 0) {
+  if (totalWeightAssembled > 0) {
     doc.setFontSize(9)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(80, 80, 80)
-    if (Math.abs(totalWeightRequested - totalWeightAssembled) > 0.01) {
-      doc.text(
-        `Peso solicitado: ${totalWeightRequested.toFixed(2)} kg`,
-        pageWidth - margin,
-        yPos,
-        { align: "right" },
-      )
-      yPos += 5
-    }
-    doc.setTextColor(0)
     doc.setFont("helvetica", "bold")
+    doc.setTextColor(0)
     doc.text(`Peso armado: ${totalWeightAssembled.toFixed(2)} kg`, pageWidth - margin, yPos, { align: "right" })
     yPos += 8
   }
