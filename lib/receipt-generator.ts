@@ -100,11 +100,16 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
     const p = item.products || {}
     const productName = `${p.name || "Producto"} ${p.brand || ""}`.substring(0, 40)
     const quantity = Number(item.quantity_assembled || item.quantity_requested || 0)
-    const price = (item.unit_price * quantity).toFixed(2)
+    const unitPrice = Number(item.unit_price) || 0
     const byWeight = item.sale_unit === "peso"
     const refKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
+
+    // Para items por peso: precio = kg_balanza × precio/kg; para unidad: cantidad × precio
+    const linePrice = byWeight
+      ? (refKg ?? 0) * unitPrice
+      : quantity * unitPrice
     const qtyText = byWeight
-      ? `${quantity.toFixed(3)} kg`
+      ? `${quantity}pz · ${refKg != null ? refKg.toFixed(3) + "kg" : "N/A"}`
       : Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2)
 
     // Check page break
@@ -115,17 +120,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
 
     doc.text(productName, col1, yPos)
     doc.text(qtyText, col2 + 2, yPos, { align: "center" })
-    doc.text(`$${price}`, col3, yPos, { align: "right" })
-
-    // Peso real opcional como referencia para el cliente
-    if (refKg && refKg > 0) {
-      yPos += 4
-      doc.setFontSize(8)
-      doc.setTextColor(120)
-      doc.text(`  Peso real: ${refKg.toFixed(3)} kg`, col1, yPos)
-      doc.setFontSize(9)
-      doc.setTextColor(0)
-    }
+    doc.text(`$${linePrice.toFixed(2)}`, col3, yPos, { align: "right" })
     yPos += 6
   })
 
@@ -136,8 +131,8 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   // --- Totals ---
   doc.setFont("helvetica", "bold")
   doc.setFontSize(11)
-  const total = order.total || 0
-  const collected = order.was_collected ? (order.collected_amount || 0) : 0
+  const total = Number(order.total) || 0
+  const collected = order.was_collected ? (Number(order.collected_amount) || 0) : 0
 
   doc.text(`TOTAL: $${total.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 8

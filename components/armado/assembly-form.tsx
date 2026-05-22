@@ -233,7 +233,7 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
   }
 
   const calculateTotals = () => {
-    const originalTotal = order.total
+    const originalTotal = Number(order.total) || 0
     const newSubtotal = assemblyItems.reduce((sum, item) => {
       const itemSubtotal = item.saleUnit === "peso"
         ? Math.max(0, (item.assembledWeightKg ?? 0) * Number(item.unitPrice) - Number(item.discount))
