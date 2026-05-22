@@ -28,9 +28,22 @@ import {
   Pencil,
 } from "lucide-react"
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
+import { AccountsPagination } from "@/components/admin/accounts-pagination"
 
-export default async function AdminCustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const MOVEMENTS_PER_PAGE = 20
+
+export default async function AdminCustomerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ movPage?: string }>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const movPage = Math.max(1, parseInt(sp.movPage || "1") || 1)
+  const movFrom = (movPage - 1) * MOVEMENTS_PER_PAGE
+  const movTo = movFrom + MOVEMENTS_PER_PAGE - 1
   const supabase = await createClient()
   const {
     data: { user },
@@ -100,13 +113,16 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
 
-  // Get customer account movements (cuenta corriente)
-  const { data: accountMovements } = await supabase
+  // Get customer account movements (cuenta corriente) — paginado
+  const { data: accountMovements, count: movementsCount } = await supabase
     .from("customer_account_movements")
-    .select("*, orders(order_number)")
+    .select("*, orders(order_number)", { count: "exact" })
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
-    .limit(20)
+    .range(movFrom, movTo)
+
+  const totalMovements = movementsCount || 0
+  const totalMovementsPages = Math.max(1, Math.ceil(totalMovements / MOVEMENTS_PER_PAGE))
 
   // Get orders with pending debt (for payment registration)
   const { data: ordersWithDebt } = await supabase
@@ -419,7 +435,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
 
               {/* Movimientos de Cuenta Corriente */}
               {accountMovements && accountMovements.length > 0 && (
-                <Card>
+                <Card id="movimientos">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
@@ -427,7 +443,9 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                           <Wallet className="h-5 w-5" />
                           Movimientos de Cuenta Corriente
                         </CardTitle>
-                        <CardDescription>Últimos 20 movimientos</CardDescription>
+                        <CardDescription>
+                          {totalMovements} {totalMovements === 1 ? "movimiento registrado" : "movimientos registrados"}
+                        </CardDescription>
                       </div>
                     </div>
                   </CardHeader>
@@ -492,6 +510,15 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                         )
                       })}
                     </div>
+                    <AccountsPagination
+                      currentPage={movPage}
+                      totalPages={totalMovementsPages}
+                      totalCount={totalMovements}
+                      perPage={MOVEMENTS_PER_PAGE}
+                      paramName="movPage"
+                      itemLabel="movimientos"
+                      scrollToId="movimientos"
+                    />
                   </CardContent>
                 </Card>
               )}

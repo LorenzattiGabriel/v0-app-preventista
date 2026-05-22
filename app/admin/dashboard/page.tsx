@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
 import { LogoutButton } from "@/components/logout-button"
@@ -313,6 +313,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/customers">Ver Clientes</Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/cuentas-corrientes">
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Cuentas Corrientes
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
