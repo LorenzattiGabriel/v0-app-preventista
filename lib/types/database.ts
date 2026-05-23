@@ -406,3 +406,55 @@ export interface StockMovementWithUser extends StockMovement {
   user_name: string
   user_email: string
 }
+
+// =====================================================
+// MÓDULO DE EGRESOS
+// =====================================================
+
+export type ExpenseType = "fijo" | "variable"
+
+export interface ExpenseCategory {
+  id: string
+  name: string
+  description?: string
+  expense_type: ExpenseType
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Supplier {
+  id: string
+  name: string
+  tax_id?: string
+  phone?: string
+  email?: string
+  notes?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Expense {
+  id: string
+  expense_date: string
+  description: string
+  category_id: string
+  supplier_id?: string | null
+  amount: number
+  payment_method?: PaymentMethod | null
+  proof_url?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+  // joins opcionales (cuando el service los trae)
+  category?: ExpenseCategory | null
+  supplier?: Supplier | null
+}
+
+export interface ExpenseWithRelations extends Expense {
+  category_name?: string
+  category_type?: ExpenseType
+  supplier_name?: string | null
+}

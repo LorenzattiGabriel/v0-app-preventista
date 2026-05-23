@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 
 export async function POST(request: NextRequest) {
@@ -23,9 +22,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { customerId, direction, amount, reason, password, proofUrl } = body
+    const { customerId, direction, amount, reason, confirmText, proofUrl } = body
 
-    if (!customerId || !direction || !amount || !reason || !password) {
+    if (!customerId || !direction || !amount || !reason || !confirmText) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 })
     }
 
@@ -42,27 +41,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El motivo debe tener al menos 10 caracteres" }, { status: 400 })
     }
 
-    // ── Doble verificación de contraseña ──────────────────────────────────
-    // Usamos un cliente Supabase efímero sin persistir sesión ni cookies,
-    // así no tocamos la sesión activa del admin en el navegador.
-    const verifyClient = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    )
-
-    const { error: pwdError } = await verifyClient.auth.signInWithPassword({
-      email: user.email,
-      password,
-    })
-
-    if (pwdError) {
-      return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 })
+    if (typeof confirmText !== "string" || confirmText.trim().toUpperCase() !== "CONFIRMAR") {
+      return NextResponse.json({ error: 'Debés escribir "CONFIRMAR" para autorizar el ajuste' }, { status: 400 })
     }
-
-    // Cerramos la sesión efímera por las dudas (no comparte cookies con el request,
-    // pero la liberamos explícitamente).
-    await verifyClient.auth.signOut()
 
     // ── Validar cliente existente ─────────────────────────────────────────
     const { data: customer, error: custError } = await supabase

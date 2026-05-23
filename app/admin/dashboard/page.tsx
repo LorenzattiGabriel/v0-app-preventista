@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2 } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
 import { LogoutButton } from "@/components/logout-button"
@@ -318,6 +318,36 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   <Link href="/admin/cuentas-corrientes">
                     <Wallet className="mr-2 h-4 w-4" />
                     Cuentas Corrientes
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <ArrowDownRight className="h-5 w-5 text-red-600" />
+                  Egresos
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">Gestión de egresos y proveedores</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/egresos">
+                    <ArrowDownRight className="mr-2 h-4 w-4" />
+                    Ver Egresos
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/egresos/proveedores">
+                    <Users2 className="mr-2 h-4 w-4" />
+                    Proveedores
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/egresos/categorias">
+                    <Tags className="mr-2 h-4 w-4" />
+                    Categorías
                   </Link>
                 </Button>
               </CardContent>

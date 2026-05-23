@@ -53,7 +53,7 @@ export function AdjustBalanceDialog({
   const [direction, setDirection] = useState<AdjustmentDirection>("debit")
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
-  const [password, setPassword] = useState("")
+  const [confirmText, setConfirmText] = useState("")
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreview, setProofPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -121,8 +121,8 @@ export function AdjustBalanceDialog({
 
   const handleSubmit = async () => {
     setError(null)
-    if (!password) {
-      setError("Ingresá tu contraseña para confirmar")
+    if (confirmText.trim().toUpperCase() !== "CONFIRMAR") {
+      setError('Escribí "CONFIRMAR" para autorizar el ajuste')
       return
     }
 
@@ -138,7 +138,7 @@ export function AdjustBalanceDialog({
           direction,
           amount: amountNum,
           reason: reason.trim(),
-          password,
+          confirmText: confirmText.trim(),
           proofUrl,
         }),
       })
@@ -164,7 +164,7 @@ export function AdjustBalanceDialog({
     setDirection("debit")
     setAmount("")
     setReason("")
-    setPassword("")
+    setConfirmText("")
     setProofFile(null)
     setProofPreview(null)
     setError(null)
@@ -437,17 +437,19 @@ export function AdjustBalanceDialog({
 
             <div className="space-y-2">
               <Label>
-                Confirmá con tu contraseña <span className="text-destructive">*</span>
+                Escribí <span className="font-mono font-semibold">CONFIRMAR</span> para autorizar{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Tu contraseña de administrador"
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="CONFIRMAR"
                 autoFocus
+                autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                Por seguridad, reingresá tu contraseña para autorizar el ajuste.
+                Esta confirmación evita ajustes accidentales. La operación queda registrada con tu usuario.
               </p>
             </div>
           </div>
@@ -470,7 +472,7 @@ export function AdjustBalanceDialog({
                   variant="outline"
                   onClick={() => {
                     setStep("form")
-                    setPassword("")
+                    setConfirmText("")
                     setError(null)
                   }}
                   disabled={isLoading}
@@ -478,7 +480,10 @@ export function AdjustBalanceDialog({
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Volver
                 </Button>
-                <Button onClick={handleSubmit} disabled={isLoading || !password}>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isLoading || confirmText.trim().toUpperCase() !== "CONFIRMAR"}
+                >
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />

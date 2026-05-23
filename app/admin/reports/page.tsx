@@ -7,6 +7,7 @@ import { PerformanceReport } from "@/components/admin/performance-report"
 import { FinancialReport } from "@/components/admin/financial-report"
 import { DriverStats } from "@/components/admin/driver-stats"
 import { ChannelsReport } from "@/components/admin/channels-report"
+import { ExpensesReport } from "@/components/admin/expenses-report"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -41,12 +42,13 @@ export default async function ReportsPage({
 
       <Tabs defaultValue="orders" className="space-y-6">
         <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-          <TabsList className="grid grid-cols-6 min-w-[580px] w-full">
+          <TabsList className="grid grid-cols-7 min-w-[680px] w-full">
             <TabsTrigger value="orders" className="text-xs sm:text-sm">Pedidos</TabsTrigger>
             <TabsTrigger value="delivery" className="text-xs sm:text-sm">Entregas</TabsTrigger>
             <TabsTrigger value="drivers" className="text-xs sm:text-sm">Repartidores</TabsTrigger>
             <TabsTrigger value="performance" className="text-xs sm:text-sm">Rendimiento</TabsTrigger>
             <TabsTrigger value="financial" className="text-xs sm:text-sm">Financiero</TabsTrigger>
+            <TabsTrigger value="expenses" className="text-xs sm:text-sm">Egresos</TabsTrigger>
             <TabsTrigger value="channels" className="text-xs sm:text-sm">Canales</TabsTrigger>
           </TabsList>
         </div>
@@ -78,6 +80,12 @@ export default async function ReportsPage({
         <TabsContent value="financial" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
             <FinancialReport startDate={fromDate} endDate={toDate} />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="expenses" className="space-y-6">
+          <Suspense fallback={<ReportSkeleton />}>
+            <ExpensesReport startDate={fromDate} endDate={toDate} />
           </Suspense>
         </TabsContent>
 

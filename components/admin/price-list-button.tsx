@@ -26,8 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileText, Download, Search, X, Loader2, FileSpreadsheet, ChevronDown, LayoutList, Tag } from "lucide-react"
-import { generatePriceListPDF, generatePriceListCSV, downloadCSV, type GroupBy } from "@/lib/price-list-generator"
+import { FileText, Download, Search, X, Loader2, FileSpreadsheet, ChevronDown, LayoutList, Tag, DollarSign } from "lucide-react"
+import { generatePriceListPDF, generatePriceListCSV, downloadCSV, type GroupBy, type PriceMode } from "@/lib/price-list-generator"
 import { toast } from "sonner"
 
 interface Product {
@@ -59,6 +59,8 @@ export function PriceListButton() {
   const [category, setCategory] = useState("all")
   const [onlyActive, setOnlyActive] = useState(true)
   const [groupBy, setGroupBy] = useState<GroupBy>("category")
+  const [priceMode, setPriceMode] = useState<PriceMode>("both")
+  const [discountPercent, setDiscountPercent] = useState<string>("10")
 
   // Load all products when dialog opens
   useEffect(() => {
@@ -113,16 +115,39 @@ export function PriceListButton() {
     return parts.length ? parts.join(" · ") : undefined
   }
 
+  const parsedDiscount = (() => {
+    const n = parseFloat(discountPercent.replace(",", "."))
+    return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0
+  })()
+
+  const priceModeSuffix = () => {
+    switch (priceMode) {
+      case "base": return "Base"
+      case "wholesale": return "Mayorista"
+      case "retail": return "Minorista"
+      case "discount": return `Base-${parsedDiscount}pct`
+      case "both":
+      default: return "Completa"
+    }
+  }
+
   const handleDownloadPDF = async () => {
     if (filtered.length === 0) {
       toast.error("No hay productos para descargar")
       return
     }
+    if (priceMode === "discount" && parsedDiscount <= 0) {
+      toast.error("Ingresá un descuento mayor a 0")
+      return
+    }
     setDownloading(true)
     try {
-      const doc = await generatePriceListPDF(filtered, filterLabel(), groupBy)
+      const doc = await generatePriceListPDF(filtered, filterLabel(), groupBy, {
+        mode: priceMode,
+        discountPercent: priceMode === "discount" ? parsedDiscount : undefined,
+      })
       const date = new Date().toLocaleDateString("es-AR").replace(/\//g, "-")
-      doc.save(`Lista_Precios_${date}.pdf`)
+      doc.save(`Lista_Precios_${priceModeSuffix()}_${date}.pdf`)
       toast.success(`PDF generado con ${filtered.length} productos`)
     } catch {
       toast.error("Error al generar el PDF")
@@ -170,7 +195,7 @@ export function PriceListButton() {
           <DialogHeader>
             <DialogTitle>Lista de Precios</DialogTitle>
             <DialogDescription>
-              Filtrá los productos y descargá la lista en PDF o CSV. El PDF se agrupa por categoría.
+              Filtrá los productos, elegí el precio a mostrar y descargá la lista en PDF o CSV.
             </DialogDescription>
           </DialogHeader>
 
@@ -290,6 +315,52 @@ export function PriceListButton() {
                 ))}
               </div>
             )}
+
+            {/* Modo de precio */}
+            <div className="space-y-2 rounded-lg border p-3 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Precio a mostrar en el PDF</Label>
+              </div>
+              <Select value={priceMode} onValueChange={(v) => setPriceMode(v as PriceMode)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">Base + Mayorista (2 columnas)</SelectItem>
+                  <SelectItem value="base">Solo Precio Base</SelectItem>
+                  <SelectItem value="wholesale">Solo Precio Mayorista</SelectItem>
+                  <SelectItem value="retail">Solo Precio Minorista</SelectItem>
+                  <SelectItem value="discount">Base con descuento %</SelectItem>
+                </SelectContent>
+              </Select>
+              {priceMode === "discount" && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Label htmlFor="discount" className="text-xs text-muted-foreground whitespace-nowrap">
+                    % descuento sobre Base:
+                  </Label>
+                  <div className="relative flex-1 max-w-[120px]">
+                    <Input
+                      id="discount"
+                      type="text"
+                      inputMode="decimal"
+                      value={discountPercent}
+                      onChange={(e) => setDiscountPercent(e.target.value)}
+                      className="h-8 pr-7 text-right"
+                      placeholder="10"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                  {parsedDiscount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      Ej: $1.000 → ${(1000 * (1 - parsedDiscount / 100)).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Only active toggle + grouping */}
             <div className="flex items-center justify-between">

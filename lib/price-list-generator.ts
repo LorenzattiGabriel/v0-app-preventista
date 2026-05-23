@@ -7,13 +7,19 @@ async function fetchLogoBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
     if (!res.ok) return null
-    const blob = await res.blob()
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    // En browser usamos FileReader; en Node (tests/SSR) caemos a Buffer.
+    if (typeof FileReader !== "undefined") {
+      const blob = await res.blob()
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    }
+    const buf = Buffer.from(await res.arrayBuffer())
+    const ct = res.headers.get("content-type") || "image/png"
+    return `data:${ct};base64,${buf.toString("base64")}`
   } catch {
     return null
   }
@@ -34,6 +40,40 @@ const fmtPrice = (n: number | null | undefined) =>
   n != null ? `$ ${Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"
 
 export type GroupBy = "category" | "brand"
+export type PriceMode = "both" | "base" | "wholesale" | "retail" | "discount"
+
+export interface PriceModeConfig {
+  mode: PriceMode
+  discountPercent?: number  // solo para mode === "discount"
+}
+
+const clampPct = (n: number | undefined): number =>
+  Math.max(0, Math.min(100, n ?? 0))
+
+const priceModeLabel = (cfg: PriceModeConfig): string => {
+  switch (cfg.mode) {
+    case "base": return "Precio Base"
+    case "wholesale": return "Precio Mayorista"
+    case "retail": return "Precio Minorista"
+    case "discount": return `Base con ${clampPct(cfg.discountPercent)}% de descuento`
+    case "both":
+    default: return "Base y Mayorista"
+  }
+}
+
+const resolvePrice = (p: PriceListProduct, cfg: PriceModeConfig): number | null => {
+  switch (cfg.mode) {
+    case "base": return p.base_price ?? null
+    case "wholesale": return p.wholesale_price ?? null
+    case "retail": return p.retail_price ?? null
+    case "discount": {
+      const base = p.base_price
+      if (base == null) return null
+      return Number(base) * (1 - clampPct(cfg.discountPercent) / 100)
+    }
+    default: return null
+  }
+}
 
 function groupProducts(products: PriceListProduct[], groupBy: GroupBy): Map<string, PriceListProduct[]> {
   const map = new Map<string, PriceListProduct[]>()
@@ -54,6 +94,7 @@ export async function generatePriceListPDF(
   products: PriceListProduct[],
   filterLabel?: string,
   groupBy: GroupBy = "category",
+  priceConfig: PriceModeConfig = { mode: "both" },
 ): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
   const pageW = doc.internal.pageSize.width   // 210
@@ -64,9 +105,10 @@ export async function generatePriceListPDF(
   let y = 12
 
   const logoBase64 = await fetchLogoBase64(ALEF_LOGO_URL)
+  const isTwoCol = priceConfig.mode === "both"
 
   // ---- HEADER ----
-  const headerH = 22
+  const headerH = filterLabel ? 27 : 22
   if (logoBase64) {
     const fmt2 = logoBase64.startsWith("data:image/png") ? "PNG" : "JPEG"
     doc.addImage(logoBase64, fmt2, ml, y, 20, 20)
@@ -74,15 +116,25 @@ export async function generatePriceListPDF(
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
-  doc.text("Listado de Precios", pageW / 2, y + 7, { align: "center" })
+  doc.text("Listado de Precios", pageW / 2, y + 6, { align: "center" })
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
   doc.setTextColor(80)
   const groupLabel = groupBy === "brand" ? "Agrupado por marca" : "Agrupado por categoría"
-  doc.text(`Impreso el ${new Date().toLocaleDateString("es-AR")} · ${groupLabel}`, pageW / 2, y + 13, { align: "center" })
+  doc.text(`Impreso el ${new Date().toLocaleDateString("es-AR")} · ${groupLabel}`, pageW / 2, y + 11, { align: "center" })
+
+  // Subtítulo con el modo de precio (resaltado)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(9)
+  doc.setTextColor(40)
+  doc.text(priceModeLabel(priceConfig), pageW / 2, y + 17, { align: "center" })
+
   if (filterLabel) {
-    doc.text(filterLabel, pageW / 2, y + 18, { align: "center" })
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7.5)
+    doc.setTextColor(110)
+    doc.text(filterLabel, pageW / 2, y + 22, { align: "center" })
   }
   doc.setTextColor(0)
 
@@ -93,10 +145,19 @@ export async function generatePriceListPDF(
   y += 2
 
   // ---- COLUMN POSITIONS ----
-  // Usable: 184mm. Two price cols of 32mm each on the right, rest is product name.
   const colProduct = ml
-  const colBase = pageW - mr - 34       // right-align anchor for P.Base
-  const colWholesale = pageW - mr - 2   // right-align anchor for P.Mayor (2mm inner padding)
+  // En 2 columnas: P.Base y P.Mayor a la derecha. En 1 columna: solo "Precio" pegado al borde derecho.
+  const colBase = pageW - mr - 34       // right-align anchor para P.Base / izquierda en 2-col
+  const colWholesale = pageW - mr - 2   // right-align anchor para P.Mayor o Precio único
+  const colSingle = colWholesale        // alias para la única columna de precio en modo 1-col
+
+  const singleColHeader = priceConfig.mode === "discount"
+    ? `Precio (-${clampPct(priceConfig.discountPercent)}%)`
+    : priceConfig.mode === "wholesale"
+    ? "P. Mayorista"
+    : priceConfig.mode === "retail"
+    ? "P. Minorista"
+    : "P. Base"
 
   const drawTableHeader = (yy: number) => {
     doc.setFillColor(50, 50, 50)
@@ -105,8 +166,12 @@ export async function generatePriceListPDF(
     doc.setFontSize(8)
     doc.setTextColor(255, 255, 255)
     doc.text("Producto", colProduct + 2, yy + 4.5)
-    doc.text("P. Base", colBase, yy + 4.5, { align: "right" })
-    doc.text("P. Mayor", colWholesale, yy + 4.5, { align: "right" })
+    if (isTwoCol) {
+      doc.text("P. Base", colBase, yy + 4.5, { align: "right" })
+      doc.text("P. Mayor", colWholesale, yy + 4.5, { align: "right" })
+    } else {
+      doc.text(singleColHeader, colSingle, yy + 4.5, { align: "right" })
+    }
     doc.setTextColor(0)
     return yy + 8
   }
@@ -136,7 +201,7 @@ export async function generatePriceListPDF(
       doc.setFont("helvetica", "normal")
       doc.setFontSize(7)
       doc.setTextColor(120)
-      doc.text("Listado de Precios", pageW / 2, 8, { align: "center" })
+      doc.text(`Listado de Precios · ${priceModeLabel(priceConfig)}`, pageW / 2, 8, { align: "center" })
       doc.setTextColor(0)
       doc.setLineWidth(0.3)
       doc.line(ml, 10, pageW - mr, 10)
@@ -154,9 +219,9 @@ export async function generatePriceListPDF(
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.setTextColor(255, 255, 255)
-    doc.text(category, pageW / 2, y + 5, { align: "center" })
+    doc.text(category, pageW / 2, y + 4.7, { align: "center", baseline: "middle" })
     doc.setTextColor(0)
-    y += 8
+    y += 11  // 7mm bar + 4mm clearance so row zebra (y-3.5) no pisa el cabezal
     rowIndex = 0  // reset alternating on each category
 
     for (const p of items) {
@@ -171,17 +236,26 @@ export async function generatePriceListPDF(
       doc.setFontSize(7.5)
       doc.setTextColor(20, 20, 20)
 
-      const maxNameWidth = colBase - 6 - (colProduct + 2)  // espacio hasta columna P.Base con padding
+      // En 1-col el nombre tiene más ancho (no necesita reservar espacio para 2 columnas)
+      const priceColLeft = isTwoCol ? colBase : colSingle
+      const maxNameWidth = priceColLeft - 6 - (colProduct + 2) - (isTwoCol ? 0 : 32)
       const name = fitText(p.name || "", maxNameWidth)
       doc.text(name, colProduct + 2, y)
 
-      doc.setFont("helvetica", "bold")
-      doc.setTextColor(0)
-      doc.text(fmtPrice(p.base_price), colBase, y, { align: "right" })
+      if (isTwoCol) {
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0)
+        doc.text(fmtPrice(p.base_price), colBase, y, { align: "right" })
 
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(p.wholesale_price != null ? 60 : 160)
-      doc.text(p.wholesale_price != null ? fmtPrice(p.wholesale_price) : "-", colWholesale, y, { align: "right" })
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(p.wholesale_price != null ? 60 : 160)
+        doc.text(p.wholesale_price != null ? fmtPrice(p.wholesale_price) : "-", colWholesale, y, { align: "right" })
+      } else {
+        const price = resolvePrice(p, priceConfig)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(price != null ? 0 : 160)
+        doc.text(price != null ? fmtPrice(price) : "-", colSingle, y, { align: "right" })
+      }
       doc.setTextColor(0)
 
       y += rowH
