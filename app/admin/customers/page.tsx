@@ -76,20 +76,30 @@ export default async function AdminCustomersPage({
     }
   }
 
-  const { data: customers } = await query.eq("is_active", true).order("commercial_name", { ascending: true }).limit(100)
+  const LIST_LIMIT = 100
+  const { data: customers } = await query.eq("is_active", true).order("commercial_name", { ascending: true }).limit(LIST_LIMIT)
 
-  // Calcular totales de deuda
-  const totalDebt = customers?.reduce((sum, c) => sum + (c.current_balance > 0 ? c.current_balance : 0), 0) || 0
-  const customersWithDebt = customers?.filter(c => c.current_balance > 0).length || 0
+  // Stats globales (no afectados por filtros del listado) — counts exactos sobre toda la tabla
+  const baseStats = () => supabase.from("customers").select("*", { count: "exact", head: true }).eq("is_active", true)
+  const [
+    { count: totalActive },
+    { count: totalMayoristas },
+    { count: totalMinoristas },
+    { data: debtRows },
+  ] = await Promise.all([
+    baseStats(),
+    baseStats().eq("customer_type", "mayorista"),
+    baseStats().eq("customer_type", "minorista"),
+    supabase.from("customers").select("current_balance").eq("is_active", true).gt("current_balance", 0),
+  ])
 
-  // Count by type for stats
-  const typeCounts = customers?.reduce(
-    (acc, customer) => {
-      acc[customer.customer_type] = (acc[customer.customer_type] || 0) + 1
-      return acc
-    },
-    {} as Record<string, number>,
-  )
+  const customersWithDebt = debtRows?.length || 0
+  const totalDebt = debtRows?.reduce((sum, c) => sum + Number(c.current_balance || 0), 0) || 0
+
+  const typeCounts = {
+    mayorista: totalMayoristas || 0,
+    minorista: totalMinoristas || 0,
+  }
 
   const customerTypeLabels = {
     minorista: "Minorista",
@@ -151,7 +161,7 @@ export default async function AdminCustomersPage({
                 <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{customers?.length || 0}</div>
+                <div className="text-2xl font-bold">{totalActive || 0}</div>
                 <p className="text-xs text-muted-foreground">Activos en el sistema</p>
               </CardContent>
             </Card>
@@ -160,7 +170,7 @@ export default async function AdminCustomersPage({
                 <CardTitle className="text-sm font-medium">Mayoristas</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{typeCounts?.mayorista || 0}</div>
+                <div className="text-2xl font-bold">{typeCounts.mayorista}</div>
                 <p className="text-xs text-muted-foreground">Clientes mayoristas</p>
               </CardContent>
             </Card>
@@ -169,7 +179,7 @@ export default async function AdminCustomersPage({
                 <CardTitle className="text-sm font-medium">Minoristas</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{typeCounts?.minorista || 0}</div>
+                <div className="text-2xl font-bold">{typeCounts.minorista}</div>
                 <p className="text-xs text-muted-foreground">Clientes minoristas</p>
               </CardContent>
             </Card>
@@ -212,6 +222,11 @@ export default async function AdminCustomersPage({
                 {params.type && params.type !== "all" && ` - Tipo: ${customerTypeLabels[params.type as keyof typeof customerTypeLabels] || params.type}`}
                 {params.debt === "with_debt" && " - 🔴 Solo con deuda"}
                 {params.debt === "no_debt" && " - 🟢 Solo sin deuda"}
+                {customers && customers.length >= LIST_LIMIT && (totalActive || 0) > LIST_LIMIT && (
+                  <span className="block text-xs mt-1">
+                    Mostrando {LIST_LIMIT} de {totalActive} clientes — refiná con los filtros para ver más.
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
