@@ -49,6 +49,7 @@ export default function LoginPage() {
       const roleRoutes: Record<string, string> = {
         preventista: "/preventista/dashboard",
         encargado_armado: "/armado/dashboard",
+        supervisor_armado: "/supervisor-armado/dashboard",
         repartidor: "/repartidor/dashboard",
         cliente: "/cliente/dashboard",
         administrativo: "/admin/dashboard",

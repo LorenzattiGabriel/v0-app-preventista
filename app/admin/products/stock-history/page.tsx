@@ -25,7 +25,7 @@ export default async function StockHistoryPage() {
   const { data: users } = await supabase
     .from("profiles")
     .select("id, full_name")
-    .in("role", ["administrativo", "encargado_armado"])
+    .in("role", ["administrativo", "encargado_armado", "supervisor_armado"])
     .order("full_name")
 
   // Get products for filter dropdown

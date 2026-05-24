@@ -9,6 +9,8 @@ interface OrdersPaginationProps {
   currentPage: number
   totalPages: number
   totalCount: number
+  /** Ruta base donde se aplican los filtros. Default: /admin/orders */
+  basePath?: string
 }
 
 /**
@@ -19,6 +21,7 @@ export function OrdersPagination({
   currentPage,
   totalPages,
   totalCount,
+  basePath = '/admin/orders',
 }: OrdersPaginationProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -29,7 +32,7 @@ export function OrdersPagination({
     params.set('page', newPage.toString())
 
     startTransition(() => {
-      router.push(`/admin/orders?${params.toString()}`)
+      router.push(`${basePath}?${params.toString()}`)
     })
   }
 

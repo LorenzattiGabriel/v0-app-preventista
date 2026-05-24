@@ -34,12 +34,14 @@ export async function releaseOrderAction(orderId: string) {
     return { error: "Este pedido lo está armando otro usuario" }
   }
 
-  // Liberar: vuelve a PENDIENTE_ARMADO sin asignación
+  // Liberar: vuelve a PENDIENTE_ARMADO sin asignación.
+  // Resetamos assigned_by para que aparezca como sin asignar en el dashboard.
   const { error: releaseError } = await supabase
     .from("orders")
     .update({
       status: "PENDIENTE_ARMADO",
       assembled_by: null,
+      assigned_by: null,
       assembly_started_at: null,
     })
     .eq("id", orderId)

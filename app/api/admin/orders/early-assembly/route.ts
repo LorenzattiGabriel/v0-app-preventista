@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-const ALLOWED_ROLES = ["administrativo"]
+const ALLOWED_ROLES = ["administrativo", "supervisor_armado"]
 
 /**
  * POST /api/admin/orders/early-assembly
@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     }
 
     revalidatePath("/admin/orders/assign")
+    revalidatePath("/supervisor-armado/asignar")
     revalidatePath("/armado/dashboard")
 
     return NextResponse.json({

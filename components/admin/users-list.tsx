@@ -24,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Users, MoreVertical, Pencil, UserX, UserCheck, Shield, Truck, Package, User, Trash2 } from "lucide-react"
+import { Users, MoreVertical, Pencil, UserX, UserCheck, Shield, ShieldCheck, Truck, Package, User, Trash2 } from "lucide-react"
 import {
   ROLE_LABELS,
   ROLE_COLORS,
@@ -212,6 +212,8 @@ function RoleIcon({ role }: { role: string }) {
   switch (role) {
     case "administrativo":
       return <Shield className="h-4 w-4" />
+    case "supervisor_armado":
+      return <ShieldCheck className="h-4 w-4" />
     case "repartidor":
       return <Truck className="h-4 w-4" />
     case "encargado_armado":

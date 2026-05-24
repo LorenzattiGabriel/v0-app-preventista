@@ -14,11 +14,16 @@ import {
 import { Search, X } from 'lucide-react'
 import { ORDER_STATUS, ORDER_PRIORITY, STATUS_LABELS, PRIORITY_LABELS } from '@/lib/constants/order-status'
 
+interface OrdersFiltersProps {
+  /** Ruta base donde se aplican los filtros. Default: /admin/orders */
+  basePath?: string
+}
+
 /**
  * Orders Filters Component
  * Client-side component for filtering orders
  */
-export function OrdersFilters() {
+export function OrdersFilters({ basePath = '/admin/orders' }: OrdersFiltersProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
@@ -29,16 +34,16 @@ export function OrdersFilters() {
 
   const handleFilter = () => {
     const params = new URLSearchParams()
-    
+
     if (search.trim()) params.set('search', search.trim())
     if (status && status !== 'all') params.set('status', status)
     if (priority && priority !== 'all') params.set('priority', priority)
-    
+
     // Reset to page 1 when filtering
     params.set('page', '1')
 
     startTransition(() => {
-      router.push(`/admin/orders?${params.toString()}`)
+      router.push(`${basePath}?${params.toString()}`)
     })
   }
 
@@ -46,9 +51,9 @@ export function OrdersFilters() {
     setSearch('')
     setStatus('all')
     setPriority('all')
-    
+
     startTransition(() => {
-      router.push('/admin/orders')
+      router.push(basePath)
     })
   }
 

@@ -15,7 +15,10 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-  if (!profile || profile.role !== "encargado_armado") {
+  if (
+    !profile ||
+    (profile.role !== "encargado_armado" && profile.role !== "supervisor_armado")
+  ) {
     redirect("/auth/login")
   }
 

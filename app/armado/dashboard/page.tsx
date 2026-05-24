@@ -19,11 +19,14 @@ export default async function ArmadoDashboardPage() {
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-  if (!profile || profile.role !== "encargado_armado") {
+  if (
+    !profile ||
+    (profile.role !== "encargado_armado" && profile.role !== "supervisor_armado")
+  ) {
     redirect("/auth/login")
   }
 
-  // Get pending orders with customer info
+  // Get pending orders with customer info + quien asignó el pedido (si aplica)
   const { data: orders } = await supabase
     .from("orders")
     .select(
@@ -32,6 +35,9 @@ export default async function ArmadoDashboardPage() {
       customers (
         commercial_name,
         locality
+      ),
+      assigned_by_profile:assigned_by (
+        full_name
       )
     `,
     )

@@ -2,6 +2,7 @@
 export type UserRole =
   | "preventista"
   | "encargado_armado"
+  | "supervisor_armado"
   | "repartidor"
   | "cliente"
   | "administrativo"

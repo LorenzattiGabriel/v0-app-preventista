@@ -13,6 +13,7 @@ interface HeaderProps {
 const ROLE_LABELS: Record<string, string> = {
   preventista: "Preventista",
   encargado_armado: "Armador",
+  supervisor_armado: "Supervisor de Armado",
   repartidor: "Repartidor",
   cliente: "Cliente",
   administrativo: "Administrativo",
@@ -21,6 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_PATHS: Record<string, string> = {
   venta_directa: "/venta-directa/dashboard",
+  supervisor_armado: "/supervisor-armado/dashboard",
 }
 
 export function Header({ profile }: HeaderProps) {

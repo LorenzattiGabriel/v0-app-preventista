@@ -37,13 +37,21 @@ interface Order {
 
 interface OrdersListProps {
   orders: Order[]
+  /** Ruta base para "Ver Detalles". Default: /admin/orders */
+  detailsBasePath?: string
+  /** Sufijo opcional para "Ver Detalles" (ej: "/detalle"). Default: "" */
+  detailsSuffix?: string
 }
 
 /**
  * Orders List Component
  * Displays a list of orders with their details
  */
-export function OrdersList({ orders }: OrdersListProps) {
+export function OrdersList({
+  orders,
+  detailsBasePath = '/admin/orders',
+  detailsSuffix = '',
+}: OrdersListProps) {
   if (!orders || orders.length === 0) {
     return (
       <div className="text-center py-12">
@@ -61,7 +69,12 @@ export function OrdersList({ orders }: OrdersListProps) {
   return (
     <div className="space-y-3">
       {orders.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <OrderCard
+          key={order.id}
+          order={order}
+          detailsBasePath={detailsBasePath}
+          detailsSuffix={detailsSuffix}
+        />
       ))}
     </div>
   )
@@ -71,7 +84,15 @@ export function OrdersList({ orders }: OrdersListProps) {
  * Order Card Component
  * Individual order card display
  */
-function OrderCard({ order }: { order: Order }) {
+function OrderCard({
+  order,
+  detailsBasePath,
+  detailsSuffix,
+}: {
+  order: Order
+  detailsBasePath: string
+  detailsSuffix: string
+}) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors gap-3">
       <div className="flex-1 min-w-0 space-y-2">
@@ -148,7 +169,7 @@ function OrderCard({ order }: { order: Order }) {
       
       <div className="flex flex-row sm:flex-col gap-2 sm:items-end shrink-0 flex-wrap">
         <Button asChild variant="outline" size="sm" className="flex-1 sm:flex-none">
-          <Link href={`/admin/orders/${order.id}`}>Ver Detalles</Link>
+          <Link href={`${detailsBasePath}/${order.id}${detailsSuffix}`}>Ver Detalles</Link>
         </Button>
 
         {order.requires_invoice && !order.is_invoiced && (

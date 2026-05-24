@@ -309,6 +309,11 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
   const actionLabel = isAssignedToMe ? "Continuar" : isTakenByOther ? "En armado" : "Armar"
   const actionVariant = isTakenByOther ? "secondary" : "default"
 
+  // Origen de la asignación: si assigned_by viene poblado, fue un admin/supervisor;
+  // si está vacío y hay assembled_by, el armador se lo auto-asignó.
+  const assignedByName: string | null = order.assigned_by_profile?.full_name ?? null
+  const hasAssembler = Boolean(order.assembled_by)
+
   return (
     <div
       className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg bg-white ${borderClass} ${
@@ -342,6 +347,18 @@ function OrderCard({ order, userId, variant }: { order: any; userId: string; var
         <p className="text-xs text-muted-foreground">
           {order.customers?.locality} · Entrega: {new Date(order.delivery_date).toLocaleDateString("es-AR")}
         </p>
+
+        {hasAssembler && (
+          assignedByName ? (
+            <p className="text-xs text-blue-700 font-medium">
+              📋 Asignado por {assignedByName}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              ✋ Auto-asignado
+            </p>
+          )
+        )}
 
         {isTakenByOther && (
           <p className="text-xs text-red-600 font-medium">Otro armador está trabajando en este pedido</p>

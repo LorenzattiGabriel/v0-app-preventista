@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 const MERGEABLE_STATUSES = ["BORRADOR", "PENDIENTE_ARMADO"]
-const ALLOWED_ROLES = ["administrativo", "encargado_armado"]
+const ALLOWED_ROLES = ["administrativo", "encargado_armado", "supervisor_armado"]
 
 const PRIORITY_ORDER: Record<string, number> = {
   urgente: 5,

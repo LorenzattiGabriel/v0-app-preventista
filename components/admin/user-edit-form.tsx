@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Save, AlertTriangle, Shield, Truck, Package, User, Key, Eye, EyeOff } from "lucide-react"
+import { Loader2, Save, AlertTriangle, Shield, ShieldCheck, Truck, Package, User, Key, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import { ROLE_LABELS, USER_ROLES_LIST, type UserRole } from "@/lib/constants/user-roles"
 
@@ -138,6 +138,8 @@ export function UserEditForm({ user, isSelf }: UserEditFormProps) {
     switch (roleValue) {
       case "administrativo":
         return <Shield className="h-4 w-4" />
+      case "supervisor_armado":
+        return <ShieldCheck className="h-4 w-4" />
       case "repartidor":
         return <Truck className="h-4 w-4" />
       case "encargado_armado":
@@ -390,6 +392,15 @@ export function UserEditForm({ user, isSelf }: UserEditFormProps) {
                 <p className="font-medium">Preventista</p>
                 <p className="text-muted-foreground">
                   Crea pedidos, gestiona clientes asignados, consulta productos y stock
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+              <ShieldCheck className="h-5 w-5 text-cyan-600 mt-0.5" />
+              <div>
+                <p className="font-medium">Supervisor de Armado</p>
+                <p className="text-muted-foreground">
+                  Asigna pedidos a armadores, arma pedidos él mismo y supervisa el estado del depósito
                 </p>
               </div>
             </div>

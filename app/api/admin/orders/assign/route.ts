@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-const ALLOWED_ROLES = ["administrativo"]
+const ALLOWED_ROLES = ["administrativo", "supervisor_armado"]
 
 /**
  * POST /api/admin/orders/assign
@@ -59,7 +59,10 @@ export async function POST(request: Request) {
           { status: 400 }
         )
       }
-      if (armadorProfile.role !== "encargado_armado") {
+      if (
+        armadorProfile.role !== "encargado_armado" &&
+        armadorProfile.role !== "supervisor_armado"
+      ) {
         return NextResponse.json(
           { error: "El usuario seleccionado no es un armador" },
           { status: 400 }
@@ -95,10 +98,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // Aplicar la asignación
+    // Aplicar la asignación. Guardamos assigned_by para distinguir
+    // pedidos auto-tomados (assigned_by = NULL) de pedidos asignados
+    // por un admin / supervisor (assigned_by = quien hizo la asignación).
     const { error: updateError } = await supabase
       .from("orders")
-      .update({ assembled_by: armador_id })
+      .update({
+        assembled_by: armador_id,
+        assigned_by: armador_id ? user.id : null,
+      })
       .in("id", order_ids)
 
     if (updateError) {
@@ -122,6 +130,7 @@ export async function POST(request: Request) {
     await supabase.from("order_history").insert(historyEntries)
 
     revalidatePath("/admin/orders/assign")
+    revalidatePath("/supervisor-armado/asignar")
     revalidatePath("/armado/dashboard")
 
     return NextResponse.json({
