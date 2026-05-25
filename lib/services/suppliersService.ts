@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js"
-import type { Supplier } from "@/lib/types/database"
+import type { Supplier, FiscalCondition } from "@/lib/types/database"
 
 export const SUPPLIERS_PER_PAGE = 15
 
@@ -20,6 +20,24 @@ export interface SupplierWithStats extends Supplier {
   total_amount?: number
 }
 
+export interface SupplierInput {
+  name: string
+  tax_id?: string | null
+  phone?: string | null
+  email?: string | null
+  notes?: string | null
+  is_active?: boolean
+  external_id?: string | null
+  fiscal_condition?: FiscalCondition | null
+  address?: string | null
+  locality?: string | null
+  province?: string | null
+  mobile?: string | null
+  credit_limit?: number | null
+  category?: string | null
+  siap_concept?: string | null
+}
+
 const toNum = (v: any) => {
   const n = typeof v === "number" ? v : parseFloat(v)
   return Number.isFinite(n) ? n : 0
@@ -37,7 +55,7 @@ class SuppliersService {
 
     if (filters.search) {
       query = query.or(
-        `name.ilike.%${filters.search}%,tax_id.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`,
+        `name.ilike.%${filters.search}%,tax_id.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,mobile.ilike.%${filters.search}%,external_id.ilike.%${filters.search}%,locality.ilike.%${filters.search}%`,
       )
     }
 
@@ -131,14 +149,7 @@ class SuppliersService {
     }
   }
 
-  async create(input: {
-    name: string
-    tax_id?: string
-    phone?: string
-    email?: string
-    notes?: string
-    is_active?: boolean
-  }): Promise<Supplier> {
+  async create(input: SupplierInput): Promise<Supplier> {
     const { data, error } = await this.supabase
       .from("suppliers")
       .insert({
@@ -148,6 +159,15 @@ class SuppliersService {
         email: input.email || null,
         notes: input.notes || null,
         is_active: input.is_active ?? true,
+        external_id: input.external_id || null,
+        fiscal_condition: input.fiscal_condition || null,
+        address: input.address || null,
+        locality: input.locality || null,
+        province: input.province || null,
+        mobile: input.mobile || null,
+        credit_limit: input.credit_limit ?? null,
+        category: input.category || null,
+        siap_concept: input.siap_concept || null,
       })
       .select()
       .single()
@@ -156,17 +176,7 @@ class SuppliersService {
     return data as Supplier
   }
 
-  async update(
-    id: string,
-    input: Partial<{
-      name: string
-      tax_id: string | null
-      phone: string | null
-      email: string | null
-      notes: string | null
-      is_active: boolean
-    }>,
-  ): Promise<Supplier> {
+  async update(id: string, input: Partial<SupplierInput>): Promise<Supplier> {
     const { data, error } = await this.supabase
       .from("suppliers")
       .update(input)

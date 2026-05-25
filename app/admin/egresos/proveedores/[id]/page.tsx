@@ -44,11 +44,19 @@ export default async function SupplierDetailPage({
             <Link href="/admin/egresos/proveedores"><ArrowLeft className="h-5 w-5" /></Link>
           </Button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-3xl font-bold">{supplier.name}</h1>
+              {supplier.fiscal_condition && (
+                <Badge variant="outline" className="font-mono">
+                  {supplier.fiscal_condition}
+                </Badge>
+              )}
               {!supplier.is_active && <Badge variant="outline" className="border-gray-300 text-gray-500">Inactivo</Badge>}
             </div>
-            {supplier.tax_id && <p className="text-muted-foreground">CUIT: {supplier.tax_id}</p>}
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              {supplier.tax_id && <span>CUIT: {supplier.tax_id}</span>}
+              {supplier.external_id && <span>· ID: {supplier.external_id}</span>}
+            </div>
           </div>
         </div>
         <Button asChild variant="outline">
@@ -58,7 +66,7 @@ export default async function SupplierDetailPage({
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Egresos</CardTitle>
@@ -77,15 +85,34 @@ export default async function SupplierDetailPage({
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Teléfono</CardTitle></CardHeader>
-          <CardContent><div className="text-sm">{supplier.phone || "—"}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Email</CardTitle></CardHeader>
-          <CardContent><div className="text-sm truncate">{supplier.email || "—"}</div></CardContent>
-        </Card>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Información</CardTitle></CardHeader>
+        <CardContent>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <InfoItem label="Teléfono fijo" value={supplier.phone} />
+            <InfoItem label="Celular" value={supplier.mobile} />
+            <InfoItem label="Email" value={supplier.email} />
+            <InfoItem label="Domicilio" value={supplier.address} />
+            <InfoItem label="Localidad" value={supplier.locality} />
+            <InfoItem label="Provincia" value={supplier.province} />
+            <InfoItem
+              label="Límite cta. corriente"
+              value={
+                supplier.credit_limit != null
+                  ? `$${supplier.credit_limit.toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`
+                  : null
+              }
+            />
+            <InfoItem label="Categoría" value={supplier.category} />
+            <InfoItem label="Concepto SIAP" value={supplier.siap_concept} />
+          </dl>
+        </CardContent>
+      </Card>
 
       {supplier.notes && (
         <Card>
@@ -105,6 +132,15 @@ export default async function SupplierDetailPage({
           itemLabel="egresos"
         />
       </div>
+    </div>
+  )
+}
+
+function InfoItem({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-1">{value || <span className="text-muted-foreground">—</span>}</dd>
     </div>
   )
 }

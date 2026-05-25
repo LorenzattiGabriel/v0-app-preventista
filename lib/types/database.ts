@@ -424,16 +424,28 @@ export interface ExpenseCategory {
   updated_at: string
 }
 
+export type FiscalCondition = "MT" | "RI" | "CF" | "EXE"
+
 export interface Supplier {
   id: string
   name: string
-  tax_id?: string
-  phone?: string
-  email?: string
-  notes?: string
+  tax_id?: string | null
+  phone?: string | null
+  email?: string | null
+  notes?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+  // Campos extendidos (ver migration expand_suppliers_schema.sql)
+  external_id?: string | null
+  fiscal_condition?: FiscalCondition | null
+  address?: string | null
+  locality?: string | null
+  province?: string | null
+  mobile?: string | null
+  credit_limit?: number | null
+  category?: string | null
+  siap_concept?: string | null
 }
 
 export interface Expense {

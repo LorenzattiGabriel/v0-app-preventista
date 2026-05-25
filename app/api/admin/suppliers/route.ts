@@ -61,6 +61,15 @@ export async function POST(request: NextRequest) {
       email: body.email,
       notes: body.notes,
       is_active: body.is_active,
+      external_id: body.external_id,
+      fiscal_condition: body.fiscal_condition,
+      address: body.address,
+      locality: body.locality,
+      province: body.province,
+      mobile: body.mobile,
+      credit_limit: body.credit_limit,
+      category: body.category,
+      siap_concept: body.siap_concept,
     })
     return NextResponse.json({ success: true, supplier })
   } catch (error: any) {

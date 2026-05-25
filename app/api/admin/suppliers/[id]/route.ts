@@ -31,8 +31,29 @@ export async function PATCH(
 
   try {
     const body = await request.json()
+    const allowed = [
+      "name",
+      "tax_id",
+      "phone",
+      "email",
+      "notes",
+      "is_active",
+      "external_id",
+      "fiscal_condition",
+      "address",
+      "locality",
+      "province",
+      "mobile",
+      "credit_limit",
+      "category",
+      "siap_concept",
+    ] as const
+    const patch: Record<string, unknown> = {}
+    for (const k of allowed) {
+      if (k in body) patch[k] = body[k]
+    }
     const service = createSuppliersService(auth.supabase)
-    const supplier = await service.update(id, body)
+    const supplier = await service.update(id, patch)
     return NextResponse.json({ success: true, supplier })
   } catch (error: any) {
     return NextResponse.json(

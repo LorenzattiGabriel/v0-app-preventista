@@ -62,7 +62,9 @@ export function SuppliersList({ suppliers }: Props) {
             <thead className="bg-muted/50">
               <tr className="text-left">
                 <th className="px-4 py-3 font-medium">Nombre</th>
+                <th className="px-4 py-3 font-medium">Cond.</th>
                 <th className="px-4 py-3 font-medium">CUIT</th>
+                <th className="px-4 py-3 font-medium">Ubicación</th>
                 <th className="px-4 py-3 font-medium">Contacto</th>
                 <th className="px-4 py-3 font-medium text-right">Egresos</th>
                 <th className="px-4 py-3 font-medium text-right">Total $</th>
@@ -78,12 +80,29 @@ export function SuppliersList({ suppliers }: Props) {
                       {s.name} <ExternalLink className="h-3 w-3 text-muted-foreground" />
                     </Link>
                   </td>
+                  <td className="px-4 py-3">
+                    {s.fiscal_condition ? (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {s.fiscal_condition}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{s.tax_id || "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <div className="space-y-0.5 text-xs">
+                      {s.locality && <div>{s.locality}</div>}
+                      {s.province && <div className="text-muted-foreground/70">{s.province}</div>}
+                      {!s.locality && !s.province && "—"}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     <div className="space-y-0.5">
                       {s.phone && <div className="text-xs">{s.phone}</div>}
+                      {s.mobile && <div className="text-xs">{s.mobile}</div>}
                       {s.email && <div className="text-xs">{s.email}</div>}
-                      {!s.phone && !s.email && "—"}
+                      {!s.phone && !s.mobile && !s.email && "—"}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">{s.expense_count || 0}</td>
