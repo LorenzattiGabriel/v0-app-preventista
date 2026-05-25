@@ -11,7 +11,13 @@ import { ExpensesPagination } from "@/components/admin/expenses/expenses-paginat
 export default async function SuppliersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; is_active?: string; page?: string }>
+  searchParams: Promise<{
+    search?: string
+    is_active?: string
+    province?: string
+    locality?: string
+    page?: string
+  }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -28,6 +34,8 @@ export default async function SuppliersPage({
     {
       search: params.search,
       is_active: params.is_active,
+      province: params.province,
+      locality: params.locality,
     },
     page,
   )

@@ -6,6 +6,8 @@ export const SUPPLIERS_PER_PAGE = 15
 export interface SupplierFilters {
   search?: string
   is_active?: string // "true" | "false" | "all"
+  province?: string // valor exacto (match canónico de ARGENTINA_PROVINCES)
+  locality?: string // ilike parcial
 }
 
 export interface PaginatedSuppliers {
@@ -61,6 +63,14 @@ class SuppliersService {
 
     if (filters.is_active && filters.is_active !== "all") {
       query = query.eq("is_active", filters.is_active === "true")
+    }
+
+    if (filters.province && filters.province !== "all") {
+      query = query.eq("province", filters.province)
+    }
+
+    if (filters.locality) {
+      query = query.ilike("locality", `%${filters.locality}%`)
     }
 
     const from = (page - 1) * perPage

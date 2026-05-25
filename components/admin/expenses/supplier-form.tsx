@@ -17,6 +17,9 @@ import {
 } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
 import type { FiscalCondition, Supplier } from "@/lib/types/database"
+import { ARGENTINA_PROVINCES } from "@/lib/constants/argentina"
+
+const PROVINCE_NONE = "__none__"
 
 interface Props {
   supplier?: Supplier
@@ -51,7 +54,7 @@ export function SupplierForm({ supplier }: Props) {
   // Dirección
   const [address, setAddress] = useState(supplier?.address || "")
   const [locality, setLocality] = useState(supplier?.locality || "")
-  const [province, setProvince] = useState(supplier?.province || "")
+  const [province, setProvince] = useState<string>(supplier?.province || PROVINCE_NONE)
 
   // Comercial
   const [creditLimit, setCreditLimit] = useState<string>(
@@ -101,7 +104,7 @@ export function SupplierForm({ supplier }: Props) {
           email: email.trim().toLowerCase() || null,
           address: address.trim() || null,
           locality: locality.trim() || null,
-          province: province.trim() || null,
+          province: province === PROVINCE_NONE ? null : province,
           credit_limit: creditLimitNum,
           category: category.trim() || null,
           siap_concept: siapConcept.trim() || null,
@@ -222,11 +225,19 @@ export function SupplierForm({ supplier }: Props) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="province">Provincia</Label>
-                <Input
-                  id="province"
-                  value={province}
-                  onChange={(e) => setProvince(e.target.value)}
-                />
+                <Select value={province} onValueChange={setProvince}>
+                  <SelectTrigger id="province">
+                    <SelectValue placeholder="Sin especificar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PROVINCE_NONE}>Sin especificar</SelectItem>
+                    {ARGENTINA_PROVINCES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </section>
