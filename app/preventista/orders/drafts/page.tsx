@@ -78,7 +78,7 @@ export default async function OrdersPage({
 
   // Apply filtering
   if (q) {
-    query = query.or(`commercial_name.ilike.%${q}%,code.ilike.%${q}%)`, {referencedTable: "customers"});
+    query = query.or(`commercial_name.ilike.%${q}%,code.ilike.%${q}%`, {referencedTable: "customers"});
     query = query.not('customers', 'is', null);
   }
 
@@ -116,14 +116,8 @@ export default async function OrdersPage({
   }
   // Apply sorting
   if (sortBy.includes('.')) {
-      // Apply sorting
-  if (sortBy.includes('.')) {
     const [foreignTable, foreignColumn] = sortBy.split('.');
-    query = query.order(`${foreignTable}(${foreignColumn})`, { ascending: validSortOrder === 'asc' });
-  } else {
-    query = query.order(sortBy, { ascending: validSortOrder === 'asc' });
-  }
-
+    query = query.order(foreignColumn, { referencedTable: foreignTable, ascending: validSortOrder === 'asc' });
   } else {
     query = query.order(sortBy, { ascending: validSortOrder === 'asc' });
   }

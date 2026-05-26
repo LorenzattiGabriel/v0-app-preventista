@@ -37,6 +37,19 @@ export class OrdersService {
     const from = (page - 1) * ORDERS_PER_PAGE
     const to = from + ORDERS_PER_PAGE - 1
 
+    // Pre-resolve customer IDs whose commercial_name matches the search term.
+    // PostgREST's top-level .or() can't filter on embedded/related tables, so
+    // we resolve those IDs first and then OR by order_number/customer_id.
+    let matchingCustomerIds: string[] | null = null
+    if (search && search.trim()) {
+      const escaped = search.replace(/[%_,]/g, (m) => `\\${m}`)
+      const { data: customerMatches } = await this.supabase
+        .from('customers')
+        .select('id')
+        .ilike('commercial_name', `%${escaped}%`)
+      matchingCustomerIds = (customerMatches || []).map((c: any) => c.id)
+    }
+
     // Build base query
     let query = this.supabase
       .from('orders')
@@ -56,7 +69,7 @@ export class OrdersService {
       )
 
     // Apply filters
-    query = this.applyFilters(query, { status, priority, search, requires_invoice })
+    query = this.applyFilters(query, { status, priority, search, requires_invoice }, matchingCustomerIds)
 
     // Execute query with pagination
     const { data: orders, error, count } = await query
@@ -98,7 +111,11 @@ export class OrdersService {
   /**
    * Apply filters to query
    */
-  private applyFilters(query: any, filters: Omit<OrderFilters, 'page'>) {
+  private applyFilters(
+    query: any,
+    filters: Omit<OrderFilters, 'page'>,
+    matchingCustomerIds: string[] | null = null
+  ) {
     const { status, priority, search, requires_invoice } = filters
 
     if (status && status !== 'all') {
@@ -118,10 +135,12 @@ export class OrdersService {
     }
 
     if (search && search.trim()) {
-      // Search in order_number or customer name
-      query = query.or(
-        `order_number.ilike.%${search}%,customers.commercial_name.ilike.%${search}%`
-      )
+      const escaped = search.replace(/[%_,]/g, (m) => `\\${m}`)
+      const orParts = [`order_number.ilike.%${escaped}%`]
+      if (matchingCustomerIds && matchingCustomerIds.length > 0) {
+        orParts.push(`customer_id.in.(${matchingCustomerIds.join(',')})`)
+      }
+      query = query.or(orParts.join(','))
     }
 
     return query
