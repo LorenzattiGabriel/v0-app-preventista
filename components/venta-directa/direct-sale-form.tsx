@@ -199,7 +199,7 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
     }
     if (qty > toNum(product.current_stock)) {
       setError(
-        `Stock insuficiente. Disponible: ${product.current_stock} ${product.unit_of_measure}`,
+        `Stock insuficiente. Disponible: ${toNum(product.current_stock)} ${product.unit_of_measure}`,
       )
       return
     }
@@ -410,7 +410,7 @@ export function DirectSaleForm({ customers, products }: DirectSaleFormProps) {
               )}
               {selectedProduct && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stock: {selectedProduct.current_stock} {selectedProduct.unit_of_measure}
+                  Stock: {toNum(selectedProduct.current_stock)} {selectedProduct.unit_of_measure}
                 </p>
               )}
             </div>

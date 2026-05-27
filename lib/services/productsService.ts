@@ -57,9 +57,9 @@ class ProductsService {
         throw error
       }
 
-      // Filter products where current_stock <= min_stock
+      // Filter products where current_stock <= min_stock (DECIMAL → string desde supabase)
       const lowStockProducts = (allProducts || []).filter(
-        (product) => product.current_stock <= product.min_stock
+        (product) => Number(product.current_stock) <= Number(product.min_stock)
       )
 
       // Manual pagination
@@ -114,8 +114,9 @@ class ProductsService {
 
     const totalProducts = products?.length || 0
     const activeProducts = products?.filter((p) => p.is_active).length || 0
-    const lowStockProducts = products?.filter((p) => p.current_stock <= p.min_stock && p.current_stock > 0).length || 0
-    const outOfStockProducts = products?.filter((p) => p.current_stock === 0).length || 0
+    // DECIMAL viene como string — coercer para comparar numéricamente
+    const lowStockProducts = products?.filter((p) => Number(p.current_stock) <= Number(p.min_stock) && Number(p.current_stock) > 0).length || 0
+    const outOfStockProducts = products?.filter((p) => Number(p.current_stock) === 0).length || 0
     const categories = new Set(products?.map((p) => p.category).filter(Boolean))
     const totalCategories = categories.size
 

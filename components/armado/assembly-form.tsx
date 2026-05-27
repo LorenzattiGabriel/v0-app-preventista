@@ -360,8 +360,8 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
             continue // Don't fail the whole operation if stock update fails
           }
 
-          // Update stock
-          const newStock = Math.max(0, (product?.current_stock || 0) - item.quantityAssembled)
+          // Update stock — current_stock es DECIMAL (string desde supabase)
+          const newStock = Math.max(0, (Number(product?.current_stock) || 0) - item.quantityAssembled)
           const { error: stockError } = await supabase
             .from("products")
             .update({ current_stock: newStock })
@@ -593,19 +593,36 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
                   <Input
                     id={`quantity-${index}`}
                     type="text"
-                    inputMode="numeric"
-                    value={item.quantityAssembled === 0 ? "" : item.quantityAssembled}
+                    inputMode={isWeightBased ? "decimal" : "numeric"}
+                    value={
+                      isWeightBased
+                        ? (rawQtyInputs[item.id] ?? (item.quantityAssembled === 0 ? "" : String(item.quantityAssembled)))
+                        : (item.quantityAssembled === 0 ? "" : item.quantityAssembled)
+                    }
                     placeholder={item.quantityAssembled === 0 ? "Faltante total" : ""}
                     onChange={(e) => {
                       const raw = e.target.value
+                      if (isWeightBased) {
+                        // Pieza pesada admite fracciones (ej: 0.5, 1.5). Patrón raw string para
+                        // soportar coma decimal sin que se borre al tipear.
+                        setRawQtyInputs(prev => ({ ...prev, [item.id]: raw }))
+                        const normalized = raw.replace(",", ".")
+                        if (normalized === "" || normalized === "0.") {
+                          handleItemChange(index, "quantityAssembled", 0)
+                          return
+                        }
+                        const value = Number.parseFloat(normalized)
+                        if (isNaN(value)) return
+                        let final = Math.max(0, value)
+                        if (final > item.quantityRequested) final = item.quantityRequested
+                        handleItemChange(index, "quantityAssembled", final)
+                        return
+                      }
                       const value = Number.parseFloat(raw)
                       if (isNaN(value)) return
                       let final = Math.max(0, Math.round(value))
                       if (final > item.quantityRequested) final = item.quantityRequested
                       handleItemChange(index, "quantityAssembled", final)
-                      if (isWeightBased) {
-                        setRawQtyInputs(prev => ({ ...prev, [item.id]: String(final) }))
-                      }
                     }}
                     disabled={isLocked}
                     className="flex-1"

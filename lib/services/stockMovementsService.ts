@@ -119,7 +119,8 @@ export class StockMovementsService {
       throw new Error(`Producto no encontrado: ${productId}`)
     }
 
-    const previousStock = product.current_stock
+    // current_stock es DECIMAL (string desde supabase) — coercer para auditoría numérica
+    const previousStock = Number(product.current_stock) || 0
 
     // 2. Actualizar stock del producto
     const { error: updateError } = await this.supabase

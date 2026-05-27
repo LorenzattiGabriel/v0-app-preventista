@@ -152,22 +152,23 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
           }
         }
 
-        // Detectar cambios
-        const stockChanged = p.currentStock !== dbProduct.current_stock
-        const basePriceChanged = p.basePrice !== null && p.basePrice !== dbProduct.base_price
-        const wholesalePriceChanged = p.wholesalePrice !== null && p.wholesalePrice !== dbProduct.wholesale_price
-        const retailPriceChanged = p.retailPrice !== null && p.retailPrice !== dbProduct.retail_price
-        
+        // Detectar cambios — current_stock viene como string (DECIMAL), coercer a number
+        const dbStockNum = Number(dbProduct.current_stock) || 0
+        const stockChanged = p.currentStock !== dbStockNum
+        const basePriceChanged = p.basePrice !== null && p.basePrice !== Number(dbProduct.base_price)
+        const wholesalePriceChanged = p.wholesalePrice !== null && p.wholesalePrice !== Number(dbProduct.wholesale_price)
+        const retailPriceChanged = p.retailPrice !== null && p.retailPrice !== Number(dbProduct.retail_price)
+
         const willUpdate = stockChanged || basePriceChanged || wholesalePriceChanged || retailPriceChanged
 
         return {
           ...p,
           productId: dbProduct.id,
           productName: dbProduct.name,
-          previousStock: dbProduct.current_stock,
-          previousBasePrice: dbProduct.base_price,
-          previousWholesalePrice: dbProduct.wholesale_price,
-          previousRetailPrice: dbProduct.retail_price,
+          previousStock: dbStockNum,
+          previousBasePrice: Number(dbProduct.base_price) || 0,
+          previousWholesalePrice: dbProduct.wholesale_price != null ? Number(dbProduct.wholesale_price) : null,
+          previousRetailPrice: dbProduct.retail_price != null ? Number(dbProduct.retail_price) : null,
           stockChanged,
           basePriceChanged,
           wholesalePriceChanged,

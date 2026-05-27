@@ -26,8 +26,8 @@ class StockService {
 
       // Restore stock for each item
       for (const item of orderItems) {
-        const quantityToRestore = item.quantity_assembled || 0
-        
+        const quantityToRestore = Number(item.quantity_assembled) || 0
+
         if (quantityToRestore > 0) {
           // Determine which product's stock to restore
           const productId = item.is_substituted && item.substituted_product_id
@@ -46,8 +46,8 @@ class StockService {
             continue
           }
 
-          // Restore stock
-          const newStock = (product.current_stock || 0) + quantityToRestore
+          // Restore stock — coerce a Number porque current_stock es DECIMAL (viene como string)
+          const newStock = (Number(product.current_stock) || 0) + quantityToRestore
           const { error: updateError } = await this.supabase
             .from("products")
             .update({ current_stock: newStock })
@@ -96,8 +96,8 @@ class StockService {
             continue
           }
 
-          // Decrease stock
-          const newStock = Math.max(0, (product.current_stock || 0) - item.quantityAssembled)
+          // Decrease stock — current_stock es DECIMAL (string)
+          const newStock = Math.max(0, (Number(product.current_stock) || 0) - item.quantityAssembled)
           const { error: updateError } = await this.supabase
             .from("products")
             .update({ current_stock: newStock })
@@ -140,9 +140,10 @@ class StockService {
           continue
         }
 
+        const stockNum = Number(product.current_stock) || 0
         result[item.productId] = {
-          available: product.current_stock || 0,
-          sufficient: (product.current_stock || 0) >= item.quantityRequested,
+          available: stockNum,
+          sufficient: stockNum >= item.quantityRequested,
         }
       }
 

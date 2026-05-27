@@ -290,10 +290,10 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     const product = products.find((p) => p.id === selectedProductId)
     if (!product) return
 
-    // Validar cantidad según tipo de producto
-    // Productos por peso (pieza pesada) siempre son piezas enteras
+    // Validar cantidad según tipo de producto.
+    // Pieza pesada admite fracciones (ej: 0.5, 1.5) — cada pieza/fracción se pesa al armar.
     const productIsPeso = (product as any).sale_unit === "peso"
-    const finalQuantity = (productIsPeso || !product.allows_decimal_quantity)
+    const finalQuantity = (!productIsPeso && !product.allows_decimal_quantity)
       ? Math.round(quantity)
       : quantity
 
@@ -771,8 +771,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             customerType={selectedCustomer?.customer_type}
           />
 
-          {/* Warning de stock del producto seleccionado */}
-          {selectedProduct && selectedProduct.current_stock === 0 && (
+          {/* Warning de stock del producto seleccionado (DECIMAL → coercer a Number) */}
+          {selectedProduct && Number(selectedProduct.current_stock) === 0 && (
             <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2 text-red-700 dark:text-red-300">
                 <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
@@ -784,13 +784,13 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
             </div>
           )}
 
-          {selectedProduct && selectedProduct.current_stock > 0 && selectedProduct.current_stock <= selectedProduct.min_stock && (
+          {selectedProduct && Number(selectedProduct.current_stock) > 0 && Number(selectedProduct.current_stock) <= Number(selectedProduct.min_stock) && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
               <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
                 <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium">Stock bajo: {selectedProduct.current_stock} unidades</p>
-                  <p className="text-sm">Este producto tiene stock bajo (mínimo: {selectedProduct.min_stock}). Verificar disponibilidad.</p>
+                  <p className="font-medium">Stock bajo: {Number(selectedProduct.current_stock)} unidades</p>
+                  <p className="text-sm">Este producto tiene stock bajo (mínimo: {Number(selectedProduct.min_stock)}). Verificar disponibilidad.</p>
                 </div>
               </div>
             </div>
@@ -805,7 +805,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 <div className="space-y-1">
                   <p className="font-medium text-sm">Pieza pesada — se factura por kg de balanza</p>
                   <p className="text-sm">
-                    Ingresá la cantidad de piezas. El total final se determina al armar el pedido (peso real de balanza × ${(customPrice ?? 0).toFixed(2)}/kg).
+                    Ingresá piezas enteras o fracciones (ej: 0.5, 1.5). El total final se determina al armar el pedido (peso real de balanza × ${(customPrice ?? 0).toFixed(2)}/kg).
                   </p>
                   <p className="text-xs font-medium">
                     {estimatedWeightKg > 0 ? (
@@ -881,8 +881,8 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
               <Input
                 id="quantity"
                 type="number"
-                min={isPesoProduct ? "1" : selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
-                step={isPesoProduct ? "1" : selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
+                min={isPesoProduct || selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
+                step={isPesoProduct || selectedProduct?.allows_decimal_quantity ? "0.01" : "1"}
                 value={quantity || ""}
                 onChange={(e) => {
                   const rawValue = e.target.value
@@ -892,8 +892,9 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   }
                   const value = Number.parseFloat(rawValue)
                   if (isNaN(value)) return
-                  // Productos por peso: siempre enteros
-                  if (isPesoProduct || (selectedProduct && !selectedProduct.allows_decimal_quantity)) {
+                  // Pieza pesada admite fracciones. Solo redondeamos cuando el producto no
+                  // permite decimales (ni por unidad ni por peso).
+                  if (!isPesoProduct && selectedProduct && !selectedProduct.allows_decimal_quantity) {
                     setQuantity(Math.round(value) || 0)
                   } else {
                     setQuantity(value >= 0 ? value : 0)

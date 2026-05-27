@@ -29,6 +29,7 @@ interface StockInlineEditProps {
   currentStock: number
   minStock: number
   userId: string
+  allowDecimals?: boolean
 }
 
 export function StockInlineEdit({
@@ -38,6 +39,7 @@ export function StockInlineEdit({
   currentStock,
   minStock,
   userId,
+  allowDecimals = false,
 }: StockInlineEditProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
@@ -54,7 +56,7 @@ export function StockInlineEdit({
 
   const handleSave = async () => {
     const stockValue = Number(newStock)
-    
+
     if (isNaN(stockValue) || stockValue < 0) {
       setError("Ingrese un valor válido")
       return
@@ -137,7 +139,7 @@ export function StockInlineEdit({
             <Input
               type="number"
               min="0"
-              step="1"
+              step={allowDecimals ? "0.01" : "1"}
               value={newStock}
               onChange={(e) => setNewStock(e.target.value)}
               className={`w-24 h-8 text-center ${

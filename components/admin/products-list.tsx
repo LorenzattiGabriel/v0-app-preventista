@@ -24,6 +24,8 @@ interface Product {
   product_margin: number
   location?: string
   supplier?: string
+  sale_unit?: "unidad" | "peso"
+  allows_decimal_quantity?: boolean
 }
 
 interface ProductsListProps {
@@ -56,7 +58,7 @@ export function ProductsList({ products, userId }: ProductsListProps) {
                       Inactivo
                     </Badge>
                   )}
-                  {product.current_stock <= product.min_stock && (
+                  {Number(product.current_stock) <= Number(product.min_stock) && (
                     <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-300">
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       Stock Bajo
@@ -155,9 +157,10 @@ export function ProductsList({ products, userId }: ProductsListProps) {
                   productId={product.id}
                   productCode={product.code}
                   productName={product.name}
-                  currentStock={product.current_stock}
-                  minStock={product.min_stock}
+                  currentStock={Number(product.current_stock) || 0}
+                  minStock={Number(product.min_stock) || 0}
                   userId={userId}
+                  allowDecimals={product.sale_unit === "peso" || product.allows_decimal_quantity === true}
                 />
               </div>
             </div>

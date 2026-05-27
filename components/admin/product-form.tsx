@@ -58,8 +58,9 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
     retail_price: product?.retail_price?.toString() || "",
     weight: product?.weight?.toString() || "",
     volume: product?.volume?.toString() || "",
-    current_stock: product?.current_stock?.toString() || "",
-    min_stock: product?.min_stock?.toString() || "",
+    // Number() para que "10.00" (DECIMAL) → 10 → "10" sin ceros a la derecha
+    current_stock: product?.current_stock != null ? String(Number(product.current_stock)) : "",
+    min_stock: product?.min_stock != null ? String(Number(product.min_stock)) : "",
     is_active: product?.is_active ?? true,
     barcode: product?.barcode || "",
     iva_aliquot: product?.iva_aliquot?.toString() || "",
@@ -93,8 +94,8 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
         retail_price: formData.retail_price ? parseFloat(formData.retail_price) : null,
         weight: formData.weight ? parseFloat(formData.weight) : null,
         volume: formData.volume ? parseFloat(formData.volume) : null,
-        current_stock: parseInt(formData.current_stock) || 0,
-        min_stock: parseInt(formData.min_stock) || 0,
+        current_stock: parseFloat(formData.current_stock) || 0,
+        min_stock: parseFloat(formData.min_stock) || 0,
         is_active: formData.is_active,
         barcode: formData.barcode || null,
         iva_aliquot: parseFloat(formData.iva_aliquot) || 0,
@@ -614,6 +615,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
                 id="current_stock"
                 type="number"
                 min="0"
+                step={formData.sale_unit === "peso" || formData.allows_decimal_quantity ? "0.01" : "1"}
                 value={formData.current_stock}
                 onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
                 placeholder="0"
@@ -626,6 +628,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
                 id="min_stock"
                 type="number"
                 min="0"
+                step={formData.sale_unit === "peso" || formData.allows_decimal_quantity ? "0.01" : "1"}
                 value={formData.min_stock}
                 onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })}
                 placeholder="0"

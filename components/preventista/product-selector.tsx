@@ -88,8 +88,11 @@ export function ProductSelector({ products, onSelect, selectedProduct, disabled,
               </CommandEmpty>
               <CommandGroup>
                 {filteredProducts.map((product) => {
-                  const hasNoStock = product.current_stock === 0
-                  const hasLowStock = product.current_stock > 0 && product.current_stock <= product.min_stock
+                  // current_stock/min_stock pueden venir como string (DECIMAL desde supabase)
+                  const stockNum = Number(product.current_stock) || 0
+                  const minStockNum = Number(product.min_stock) || 0
+                  const hasNoStock = stockNum === 0
+                  const hasLowStock = stockNum > 0 && stockNum <= minStockNum
 
                   return (
                     <CommandItem
@@ -124,11 +127,11 @@ export function ProductSelector({ products, onSelect, selectedProduct, disabled,
                         ) : hasLowStock ? (
                           <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                             <AlertTriangle className="h-3 w-3 mr-1" />
-                            {product.current_stock}
+                            {Number.isInteger(stockNum) ? stockNum : stockNum.toFixed(2)}
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">
-                            {product.current_stock}
+                            {Number.isInteger(stockNum) ? stockNum : stockNum.toFixed(2)}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">

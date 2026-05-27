@@ -108,9 +108,10 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
     const linePrice = byWeight
       ? (refKg ?? 0) * unitPrice
       : quantity * unitPrice
+    const piecesText = Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2)
     const qtyText = byWeight
-      ? `${quantity}pz · ${refKg != null ? refKg.toFixed(3) + "kg" : "N/A"}`
-      : Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2)
+      ? `${piecesText}pz · ${refKg != null ? refKg.toFixed(3) + "kg" : "N/A"}`
+      : piecesText
 
     // Check page break
     if (yPos > 270) {
@@ -348,8 +349,8 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
     doc.text(productName, col1, yPos)
     // Para items por peso: precio/kg; para unidad: precio/unidad
     doc.text(`$${unitPrice.toFixed(2)}${byWeight ? "/kg" : ""}`, colPriceRight, yPos, { align: "right" })
-    // "Solic.": para items peso muestra piezas; para unidad muestra cantidad
-    doc.text(byWeight ? `${quantityRequested}pz` : fmtQty(quantityRequested, false), colSolic, yPos, { align: "center" })
+    // "Solic.": para items peso muestra piezas (acepta fracciones); para unidad muestra cantidad
+    doc.text(byWeight ? `${fmtQty(quantityRequested, false)}pz` : fmtQty(quantityRequested, false), colSolic, yPos, { align: "center" })
     // "Armado": para items peso muestra kg de balanza; para unidad muestra cantidad armada
     doc.text(byWeight ? (refWeightKg != null ? `${refWeightKg.toFixed(3)}kg` : "-") : fmtQty(quantityAssembled, false), colAssembled, yPos, { align: "center" })
     doc.text(`$${lineTotal.toFixed(2)}`, colTotalRight, yPos, { align: "right" })
@@ -361,7 +362,7 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
       doc.setTextColor(150, 80, 0)
       const motivo = item.shortage_reason ? ` (${item.shortage_reason})` : ""
       if (byWeight) {
-        doc.text(`  Faltante: ${quantityRequested - quantityAssembled} pieza(s)${motivo}`, col1, yPos)
+        doc.text(`  Faltante: ${fmtQty(quantityRequested - quantityAssembled, false)} pieza(s)${motivo}`, col1, yPos)
       } else {
         const faltante = quantityRequested - quantityAssembled
         doc.text(`  Faltante: ${fmtQty(faltante, false)}${motivo}`, col1, yPos)
