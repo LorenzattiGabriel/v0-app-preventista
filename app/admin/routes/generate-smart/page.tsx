@@ -44,20 +44,6 @@ export default async function GenerateSmartRoutesPage() {
     .eq("status", "PENDIENTE_ENTREGA")
     .order("delivery_date", { ascending: true })
 
-  // Pedidos ya asignados a rutas activas (PLANIFICADO/EN_CURSO).
-  // Why: evitar que el admin los seleccione y reciba error recién al crear la ruta;
-  // los mostramos deshabilitados con badge del route_code.
-  const { data: assignedRouteOrders } = await supabase
-    .from("route_orders")
-    .select("order_id, routes!inner(route_code, status)")
-    .in("routes.status", ["PLANIFICADO", "EN_CURSO"])
-
-  const activeRouteAssignments: Record<string, string> = {}
-  for (const row of assignedRouteOrders || []) {
-    const code = (row.routes as any)?.route_code
-    if (row.order_id && code) activeRouteAssignments[row.order_id] = code
-  }
-
   // Get active depot configuration
   const { data: depot } = await supabase
     .from("depot_configuration")
@@ -80,7 +66,6 @@ export default async function GenerateSmartRoutesPage() {
             pendingOrders={pendingOrders || []}
             userId={user.id}
             depot={depot}
-            activeRouteAssignments={activeRouteAssignments}
           />
         </div>
       </main>

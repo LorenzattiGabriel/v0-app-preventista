@@ -324,30 +324,22 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       if (routeError) throw routeError
 
-      // Update all orders in route to EN_REPARTICION
+      // Marcar inicio físico del reparto en cada pedido.
+      // Why: los pedidos ya están en EN_REPARTICION desde que se creó la ruta;
+      // acá solo registramos cuándo el repartidor efectivamente salió del depósito.
+      // No insertamos en order_history porque no hay cambio de status real;
+      // routes.actual_start_time y orders.delivery_started_at son la fuente de verdad.
       const orderIds = route.route_orders.map((ro: any) => ro.orders.id)
 
       const { error: ordersError } = await supabase
         .from("orders")
         .update({
-          status: "EN_REPARTICION",
           delivery_started_at: new Date().toISOString(),
           delivered_by: userId,
         })
         .in("id", orderIds)
 
       if (ordersError) throw ordersError
-
-      // Create history entries
-      for (const orderId of orderIds) {
-        await supabase.from("order_history").insert({
-          order_id: orderId,
-          previous_status: "PENDIENTE_ENTREGA",
-          new_status: "EN_REPARTICION",
-          changed_by: userId,
-          change_reason: "Inicio de ruta de entrega",
-        })
-      }
 
       // Open Google Maps with route (depot -> customers -> depot)
       // 🆕 Manejar rutas segmentadas

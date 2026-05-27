@@ -7,6 +7,7 @@ import Link from "next/link"
 import { Package, Clock, CheckCircle, Truck, AlertTriangle } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { getClientOrderStatusLabel, getClientOrderStatusColor } from "@/lib/utils/client-order-status"
 
 export default async function ClienteDashboardPage() {
   const supabase = await createClient()
@@ -64,10 +65,10 @@ export default async function ClienteDashboardPage() {
     .eq("customer_id", customer.id)
     .eq("status", "ENTREGADO")
 
-  // Get recent orders
+  // Get recent orders (incluye route info para derivar el label correcto al cliente)
   const { data: orders } = await supabase
     .from("orders")
-    .select("*")
+    .select("*, route_orders(routes(actual_start_time, status))")
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
     .limit(5)
@@ -79,28 +80,6 @@ export default async function ClienteDashboardPage() {
     .eq("customer_id", customer.id)
     .eq("has_shortages", true)
     .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION"])
-
-  const statusLabels = {
-    BORRADOR: "Borrador",
-    PENDIENTE_ARMADO: "Pendiente de Armado",
-    EN_ARMADO: "En Armado",
-    PENDIENTE_ENTREGA: "Listo para Entrega",
-    EN_REPARTICION: "En Camino",
-    ENTREGADO: "Entregado",
-    CANCELADO: "Cancelado",
-    ESPERANDO_STOCK: "Esperando Stock",
-  } as const
-
-  const statusColors = {
-    BORRADOR: "secondary",
-    PENDIENTE_ARMADO: "secondary",
-    EN_ARMADO: "default",
-    PENDIENTE_ENTREGA: "default",
-    EN_REPARTICION: "default",
-    ENTREGADO: "default",
-    CANCELADO: "destructive",
-    ESPERANDO_STOCK: "destructive",
-  } as const
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -208,8 +187,8 @@ export default async function ClienteDashboardPage() {
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{order.order_number}</span>
-                          <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
-                            {statusLabels[order.status as keyof typeof statusLabels]}
+                          <Badge variant={getClientOrderStatusColor(order)}>
+                            {getClientOrderStatusLabel(order)}
                           </Badge>
                           {order.has_shortages && (
                             <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-700">

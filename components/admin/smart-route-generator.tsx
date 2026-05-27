@@ -44,8 +44,6 @@ interface SmartRouteGeneratorProps {
   pendingOrders: any[]
   userId: string
   depot: any | null // Depot configurado
-  // Mapeo order_id -> route_code para pedidos ya asignados a rutas PLANIFICADO/EN_CURSO.
-  activeRouteAssignments?: Record<string, string>
 }
 
 interface CostCalculation {
@@ -83,7 +81,7 @@ interface GeneratedRoute {
   segments?: RouteSegment[]
 }
 
-export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot, activeRouteAssignments = {} }: SmartRouteGeneratorProps) {
+export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -246,19 +244,14 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot, act
   const hasMultipleLocalities = selectedLocalitiesSet.size > 1
 
   const handleOrderToggle = (orderId: string) => {
-    if (activeRouteAssignments[orderId]) return // ya está en otra ruta activa
     setSelectedOrderIds((prev) =>
       prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
     )
   }
 
   const handleSelectAllOrders = () => {
-    // Excluir pedidos ya asignados a rutas activas del "Seleccionar todos"
-    const currentVisibleIds = availableOrders
-      .filter((o) => !activeRouteAssignments[o.id])
-      .map((o) => o.id)
-    const allVisibleSelected = currentVisibleIds.length > 0 &&
-      currentVisibleIds.every(id => selectedOrderIds.includes(id))
+    const currentVisibleIds = availableOrders.map((o) => o.id)
+    const allVisibleSelected = currentVisibleIds.every(id => selectedOrderIds.includes(id))
 
     if (allVisibleSelected) {
       setSelectedOrderIds(prev => prev.filter(id => !currentVisibleIds.includes(id)))
@@ -955,7 +948,6 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot, act
                         order={order}
                         isSelected={selectedOrderIds.includes(order.id)}
                         onToggle={handleOrderToggle}
-                        assignedRouteCode={activeRouteAssignments[order.id]}
                       />
                     ))}
                   </div>

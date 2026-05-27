@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowLeft, Truck, Package, CheckCircle, Clock } from "lucide-react"
+import { ArrowLeft, Truck, Package, CheckCircle, Clock, AlertTriangle } from "lucide-react"
 import { OrderRatingForm } from "@/components/cliente/order-rating-form"
 import { WhatsAppSupportButton } from "@/components/cliente/whatsapp-support-button"
 import { Separator } from "@/components/ui/separator"
+import { getClientOrderStatusLabel, getClientOrderStatusColor, isOrderInTransit } from "@/lib/utils/client-order-status"
 
 export default async function ClienteOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -32,7 +33,8 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
     redirect("/cliente/dashboard")
   }
 
-  // Get order with all details
+  // Get order with all details (incluye route_orders → routes para distinguir
+  // "asignado a ruta" de "efectivamente en la calle" al mostrarlo al cliente)
   const { data: order } = await supabase
     .from("orders")
     .select(
@@ -43,6 +45,9 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
         products:product_id (
           *
         )
+      ),
+      route_orders (
+        routes ( actual_start_time, status )
       )
     `,
     )
@@ -56,28 +61,6 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
 
   // Check if order has rating
   const { data: rating } = await supabase.from("order_ratings").select("*").eq("order_id", order.id).single()
-
-  const statusLabels = {
-    BORRADOR: "Borrador",
-    PENDIENTE_ARMADO: "Pendiente de Armado",
-    EN_ARMADO: "En Armado",
-    PENDIENTE_ENTREGA: "Listo para Entrega",
-    EN_REPARTICION: "En Camino",
-    ENTREGADO: "Entregado",
-    CANCELADO: "Cancelado",
-    ESPERANDO_STOCK: "Esperando Stock",
-  } as const
-
-  const statusColors = {
-    BORRADOR: "secondary",
-    PENDIENTE_ARMADO: "secondary",
-    EN_ARMADO: "default",
-    PENDIENTE_ENTREGA: "default",
-    EN_REPARTICION: "default",
-    ENTREGADO: "default",
-    CANCELADO: "destructive",
-    ESPERANDO_STOCK: "destructive",
-  } as const
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -127,10 +110,10 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
                 <div className="flex items-center gap-2">
                   {getStatusIcon(order.status)}
                   <Badge
-                    variant={statusColors[order.status as keyof typeof statusColors]}
+                    variant={getClientOrderStatusColor(order)}
                     className="text-base px-3 py-1"
                   >
-                    {statusLabels[order.status as keyof typeof statusLabels]}
+                    {getClientOrderStatusLabel(order)}
                   </Badge>
                 </div>
               </div>
@@ -205,13 +188,25 @@ export default async function ClienteOrderDetailPage({ params }: { params: Promi
               )}
 
               {order.status === "EN_REPARTICION" && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
-                  <Truck className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="font-medium text-blue-900">Tu pedido está en camino</p>
-                    <p className="text-sm text-blue-700">El repartidor está realizando las entregas de hoy</p>
+                isOrderInTransit(order) ? (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+                    <Truck className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <p className="font-medium text-blue-900">Tu pedido está en camino</p>
+                      <p className="text-sm text-blue-700">El repartidor está realizando las entregas de hoy</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
+                    <Clock className="h-5 w-5 text-amber-600" />
+                    <div>
+                      <p className="font-medium text-amber-900">Tu pedido está programado para entrega</p>
+                      <p className="text-sm text-amber-700">
+                        Será entregado el {new Date(order.delivery_date).toLocaleDateString("es-AR")}
+                      </p>
+                    </div>
+                  </div>
+                )
               )}
 
               {order.has_shortages && (

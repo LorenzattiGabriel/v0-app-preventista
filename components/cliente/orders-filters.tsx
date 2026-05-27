@@ -31,7 +31,7 @@ export function ClientOrdersFilters() {
     PENDIENTE_ARMADO: 'En Preparación',
     EN_ARMADO: 'Armándose',
     PENDIENTE_ENTREGA: 'Listo para Entrega',
-    EN_REPARTICION: 'En Camino',
+    EN_REPARTICION: 'En reparto',
     ENTREGADO: 'Entregado',
   }
 
