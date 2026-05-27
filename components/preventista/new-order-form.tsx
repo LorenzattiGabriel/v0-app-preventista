@@ -343,7 +343,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       discount: discountAmount,
       subtotal,
       unitOfMeasure: product.unit_of_measure || "unidad",
-      saleUnit: product.allows_decimal_quantity ? saleUnit : "unidad",
+      saleUnit: productIsPeso ? "peso" : (product.allows_decimal_quantity ? saleUnit : "unidad"),
     }
 
     setOrderItems([...orderItems, newItem])
