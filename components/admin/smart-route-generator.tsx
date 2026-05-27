@@ -80,6 +80,16 @@ interface GeneratedRoute {
   segments?: RouteSegment[]
 }
 
+// Devuelve la fecha local (zona horaria del navegador) como YYYY-MM-DD.
+// Why: new Date().toISOString() devuelve UTC, lo que de noche en AR (UTC-3) ya muestra el día siguiente.
+const getLocalDateString = () => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, "0")
+  const d = String(now.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
 export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
@@ -95,7 +105,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   }
 
   // Form state
-  const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split("T")[0])
+  const [deliveryDate, setDeliveryDate] = useState(getLocalDateString())
   const [selectedLocality, setSelectedLocality] = useState<string>("all") // Default to "all" localities
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [startTime, setStartTime] = useState("08:00")
@@ -211,7 +221,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     setSelectedOrderIds([])
     
     // Si es hoy, ajustar la hora de inicio a una hora válida
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDateString()
     if (deliveryDate === today) {
       const now = new Date()
       const minMinutes = now.getHours() * 60 + now.getMinutes() + 30
@@ -273,7 +283,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
     }
 
     // Validar que si la fecha es hoy, la hora de inicio sea posterior a la hora actual
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDateString()
     if (deliveryDate === today) {
       const now = new Date()
       const currentHour = now.getHours()
@@ -640,7 +650,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                   type="date"
                   value={deliveryDate}
                   onChange={(e) => setDeliveryDate(e.target.value)}
-                  min={new Date().toISOString().split("T")[0]}
+                  min={getLocalDateString()}
                 />
               </div>
 
@@ -662,7 +672,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                           "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
                           "20:00", "20:30", "21:00", "21:30", "22:00"
                         ]
-                        const today = new Date().toISOString().split("T")[0]
+                        const today = getLocalDateString()
                         const isToday = deliveryDate === today
                         
                         if (!isToday) {
@@ -694,7 +704,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                       })()}
                     </SelectContent>
                   </Select>
-                  {deliveryDate === new Date().toISOString().split("T")[0] && (
+                  {deliveryDate === getLocalDateString() && (
                     <p className="text-xs text-orange-600">
                       ⚠️ Ruta para hoy: solo horas futuras disponibles
                     </p>
