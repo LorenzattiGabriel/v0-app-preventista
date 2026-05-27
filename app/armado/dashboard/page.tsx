@@ -6,6 +6,7 @@ import { LogoutButton } from "@/components/logout-button"
 import { DashboardTabs } from "@/components/armado/dashboard-tabs"
 import { MergeableOrdersBanner } from "@/components/armado/mergeable-orders-banner"
 import { findMergeableGroups } from "@/lib/utils/mergeable-orders"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 export default async function ArmadoDashboardPage() {
   const supabase = await createClient()
@@ -47,7 +48,7 @@ export default async function ArmadoDashboardPage() {
     .limit(100)
 
   const safeOrders = orders || [];
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
 
   const finishedToday = safeOrders.filter(o =>
     o.status === "PENDIENTE_ENTREGA" &&

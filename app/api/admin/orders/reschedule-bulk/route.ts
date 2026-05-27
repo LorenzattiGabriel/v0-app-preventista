@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 /**
  * POST /api/admin/orders/reschedule-bulk
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar que la fecha no sea pasada
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDateString()
     if (new_delivery_date < today) {
       return NextResponse.json(
         { error: "La nueva fecha no puede ser anterior a hoy" },

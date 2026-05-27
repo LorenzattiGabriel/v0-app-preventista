@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Calendar, History, AlertTriangle } from "lucide-react"
 import type { DelayedOrder, OrderDateChange } from "@/lib/types/database"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 
 interface RescheduleOrderDialogProps {
   order: DelayedOrder
@@ -40,16 +41,14 @@ export function RescheduleOrderDialog({
   const [history, setHistory] = useState<OrderDateChange[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
 
-  const today = new Date().toISOString().split("T")[0]
+  const today = getLocalDateString()
 
   // Cargar historial al abrir
   useEffect(() => {
     if (open && order.id) {
       loadHistory()
       // Preseleccionar fecha de mañana
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      setNewDate(tomorrow.toISOString().split("T")[0])
+      setNewDate(getLocalTomorrowDateString())
     }
   }, [open, order.id])
 

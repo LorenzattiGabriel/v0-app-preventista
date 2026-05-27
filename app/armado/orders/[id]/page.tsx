@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { AssemblyForm } from "@/components/armado/assembly-form"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 
 export default async function AssemblyOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -50,8 +51,8 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
   // o si el admin lo habilitó manualmente con early_assembly_allowed = true.
   // Solo bloqueamos si está PENDIENTE_ARMADO (si ya está EN_ARMADO, ya pasó el control).
   if (order.status === "PENDIENTE_ARMADO" && !order.early_assembly_allowed) {
-    const todayStr = new Date().toISOString().split("T")[0]
-    const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+    const todayStr = getLocalDateString()
+    const tomorrowStr = getLocalTomorrowDateString()
     const deliveryDate = order.delivery_date
     if (deliveryDate && deliveryDate > tomorrowStr) {
       return (

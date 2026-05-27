@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Star, Package, Truck, TrendingUp } from 'lucide-react'
+import { formatDateLocal } from '@/lib/utils/dates'
 
 interface RatingsMetricsProps {
   startDate?: string
@@ -28,7 +29,7 @@ export async function RatingsMetrics({ startDate, endDate }: RatingsMetricsProps
     // Add one day to include the entire end date
     const endDatePlusOne = new Date(endDate)
     endDatePlusOne.setDate(endDatePlusOne.getDate() + 1)
-    query = query.lt('created_at', endDatePlusOne.toISOString().split('T')[0])
+    query = query.lt('created_at', formatDateLocal(endDatePlusOne))
   }
 
   const { data: ratings } = await query

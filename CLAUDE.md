@@ -79,6 +79,23 @@ También: `CANCELADO`, `ESPERANDO_STOCK`.
 
 ## Reglas de negocio críticas
 
+### 🚨 Fechas locales (BUG TÍPICO de timezone)
+**No usar `new Date().toISOString().split("T")[0]`** para calcular fechas locales (today/tomorrow/etc.). `toISOString()` formatea en UTC; Argentina es UTC-3 y a la noche (después de las 21hs) el resultado se desfasa al día siguiente. Esto rompe filtros tipo "hoy", validaciones de fecha mínima, defaults de datepicker, etc.
+
+```ts
+// ❌ MAL — a la noche devuelve mañana
+const today = new Date().toISOString().split("T")[0]
+const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+
+// ✅ BIEN
+import { getLocalDateString, getLocalTomorrowDateString, formatDateLocal } from "@/lib/utils/dates"
+const today = getLocalDateString()
+const tomorrow = getLocalTomorrowDateString()
+const anyDateAsString = formatDateLocal(someDate)
+```
+
+Excepción: si lo único que querés es un timestamp para un nombre de archivo o un log, da igual el desfase.
+
 ### 🚨 DECIMAL como strings (BUG TÍPICO)
 Supabase devuelve columnas `DECIMAL` como **strings**. Si hacés `+=` directo se concatenan en lugar de sumar.
 ```ts

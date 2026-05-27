@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { createStockMovementsService } from "@/lib/services/stockMovementsService"
 import { parseCSV, generateCSV, downloadCSV, type ParsedProduct } from "@/lib/utils/csv-parser"
+import { getLocalDateString } from "@/lib/utils/dates"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -106,7 +107,7 @@ export function StockCSVImport({ userId }: StockCSVImportProps) {
     }
 
     const csv = generateCSV(products || [])
-    downloadCSV(csv, `productos_${new Date().toISOString().split('T')[0]}.csv`)
+    downloadCSV(csv, `productos_${getLocalDateString()}.csv`)
   }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {

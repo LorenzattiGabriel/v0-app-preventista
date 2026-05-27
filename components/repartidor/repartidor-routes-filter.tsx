@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "lucide-react"
+import { getLocalDateString, getLocalTomorrowDateString, formatDateLocal } from "@/lib/utils/dates"
 
 interface RepartidorRoutesFilterProps {
   selectedDate: string
@@ -28,20 +29,17 @@ export function RepartidorRoutesFilter({ selectedDate }: RepartidorRoutesFilterP
   }
 
   const handleToday = () => {
-    const today = new Date().toISOString().split("T")[0]
-    handleDateChange(today)
+    handleDateChange(getLocalDateString())
   }
 
   const handleTomorrow = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    handleDateChange(tomorrow.toISOString().split("T")[0])
+    handleDateChange(getLocalTomorrowDateString())
   }
 
   const handleNextWeek = () => {
     const nextWeek = new Date()
     nextWeek.setDate(nextWeek.getDate() + 7)
-    handleDateChange(nextWeek.toISOString().split("T")[0])
+    handleDateChange(formatDateLocal(nextWeek))
   }
 
   return (
@@ -61,7 +59,7 @@ export function RepartidorRoutesFilter({ selectedDate }: RepartidorRoutesFilterP
             type="date"
             value={selectedDate}
             onChange={(e) => handleDateChange(e.target.value)}
-            min={new Date().toISOString().split("T")[0]}
+            min={getLocalDateString()}
           />
         </div>
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DeliveryRouteView } from "@/components/repartidor/delivery-route-view"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 export default async function RouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -61,7 +62,7 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
     .single()
 
   // Get today's date to validate if route can be started
-  const today = new Date().toISOString().split("T")[0]
+  const today = getLocalDateString()
 
   // Check if driver has any other route in progress
   const { count: activeRoutesCount } = await supabase

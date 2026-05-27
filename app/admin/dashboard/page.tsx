@@ -6,6 +6,7 @@ import Link from "next/link"
 import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2 } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
 import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
@@ -37,9 +38,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     redirect("/auth/login")
   }
 
-  // Get statistics
-  const today = new Date().toISOString().split("T")[0]
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+  // Get statistics (fechas en hora local AR — toISOString es UTC y se desfasa a la noche)
+  const today = getLocalDateString()
+  const tomorrow = getLocalTomorrowDateString()
 
   const { count: totalOrders } = await supabase.from("orders").select("*", { count: "exact", head: true })
 
@@ -54,6 +55,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     .select("*", { count: "exact", head: true })
     .eq("delivery_date", tomorrow)
     .in("status", ["PENDIENTE_ENTREGA", "EN_REPARTICION"])
+
+  // Solo PENDIENTE_ENTREGA para mañana (todavía sin asignar a una ruta).
+  // Útil para saber cuánto queda por rutear para el día siguiente.
+  const { count: tomorrowReadyToAssign } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("delivery_date", tomorrow)
+    .eq("status", "PENDIENTE_ENTREGA")
 
   const { count: todayRoutes } = await supabase
     .from("routes")
@@ -140,7 +149,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{tomorrowOrders || 0}</div>
-                <p className="text-xs text-muted-foreground">Para {new Date(tomorrow).toLocaleDateString("es-AR")}</p>
+                <p className="text-xs text-muted-foreground">Total para {new Date(tomorrow + "T00:00:00").toLocaleDateString("es-AR")}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/10">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Listos para Mañana</CardTitle>
+                <Package className="h-4 w-4 text-amber-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{tomorrowReadyToAssign || 0}</div>
+                <p className="text-xs text-muted-foreground">Pendientes de asignar a ruta</p>
               </CardContent>
             </Card>
 

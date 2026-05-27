@@ -3,6 +3,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import type { Customer, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 interface OrderItem {
   productId: string
@@ -136,7 +137,7 @@ export function useOrderFormActions() {
           .update({
             order_number: orderNumber, // Keep existing order number
             customer_id: selectedCustomer.id,
-            order_date: new Date().toISOString().split("T")[0], // Update order date on save
+            order_date: getLocalDateString(), // Update order date on save
             created_at: new Date().toISOString(), // Full timestamp with timezone
             delivery_date: deliveryDate,
             priority,
@@ -174,7 +175,7 @@ export function useOrderFormActions() {
           .insert({
             order_number: orderNumber,
             customer_id: selectedCustomer.id,
-            order_date: new Date().toISOString().split("T")[0],
+            order_date: getLocalDateString(),
             delivery_date: deliveryDate,
             priority,
             order_type: orderType,

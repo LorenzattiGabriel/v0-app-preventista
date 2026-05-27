@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from "@supabase/supabase-js"
 import type { DelayedOrder, OrderDateChange, DelaySeverity } from "@/lib/types/database"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 export interface DelayedOrdersService {
   getDelayedOrders(): Promise<DelayedOrder[]>
@@ -45,7 +46,7 @@ export function createDelayedOrdersService(supabase: SupabaseClient): DelayedOrd
      * Pedidos con fecha de entrega pasada, sin ruta activa asignada
      */
     async getDelayedOrders(): Promise<DelayedOrder[]> {
-      const today = new Date().toISOString().split("T")[0]
+      const today = getLocalDateString()
 
       // Primero obtener pedidos que están en rutas activas
       const { data: ordersInActiveRoutes } = await supabase
@@ -114,7 +115,7 @@ export function createDelayedOrdersService(supabase: SupabaseClient): DelayedOrd
      * Obtiene el conteo de pedidos retrasados (para badge en sidebar)
      */
     async getDelayedOrdersCount(): Promise<number> {
-      const today = new Date().toISOString().split("T")[0]
+      const today = getLocalDateString()
 
       // Obtener pedidos en rutas activas
       const { data: ordersInActiveRoutes } = await supabase

@@ -16,6 +16,7 @@ import { ArrowLeft, MapPin, Truck, Package, Loader2, ExternalLink, AlertCircle }
 import Link from "next/link"
 import { generateRouteFromOrders, reorderOrdersByOptimization } from "@/lib/services/rutasInteligentesService"
 import { RutasInteligentesError } from "@/lib/services/rutasInteligentesClient"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 
 interface RouteGeneratorFormProps {
   zones: Zone[]
@@ -42,7 +43,7 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
   const [error, setError] = useState<string | null>(null)
 
   // Form state
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+  const tomorrow = getLocalTomorrowDateString()
   const [deliveryDate, setDeliveryDate] = useState(tomorrow)
   const [selectedZones, setSelectedZones] = useState<string[]>(zones.map((z) => z.id))
   const [startTime, setStartTime] = useState("08:00")
@@ -327,7 +328,7 @@ export function RouteGeneratorForm({ zones, drivers, pendingOrders, userId }: Ro
                 type="date"
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
+                min={getLocalDateString()}
               />
             </div>
 

@@ -19,6 +19,7 @@ import { CustomerSelector } from "./customer-selector"
 import { ProductSelector } from "./product-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 
 // Valor por defecto para el radio máximo de validación presencial (en metros)
 // Este valor se sobrescribe con la configuración del depot si está disponible
@@ -83,7 +84,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const { saveOrder, isLoading, error, setError, calculateTotals } = useOrderFormActions()
 
   // Form state
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0]
+  const tomorrow = getLocalTomorrowDateString()
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialOrderData?.selectedCustomer || null)
   const [deliveryDate, setDeliveryDate] = useState(initialOrderData?.deliveryDate || tomorrow)
   const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
@@ -561,7 +562,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                 type="date"
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
+                min={getLocalDateString()}
                 className="border-2 border-primary/50 focus:border-primary"
                 required
               />

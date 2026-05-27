@@ -5,6 +5,7 @@ import type {
   ExpenseType,
   PaymentMethod,
 } from "@/lib/types/database"
+import { formatDateLocal } from "@/lib/utils/dates"
 
 export const EXPENSES_PER_PAGE = 20
 
@@ -295,8 +296,8 @@ class ExpensesService {
     const { data: prevData } = await this.supabase
       .from("expenses")
       .select("amount")
-      .gte("expense_date", prevFrom.toISOString().split("T")[0])
-      .lte("expense_date", prevTo.toISOString().split("T")[0])
+      .gte("expense_date", formatDateLocal(prevFrom))
+      .lte("expense_date", formatDateLocal(prevTo))
 
     const previousPeriodAmount = (prevData || []).reduce(
       (acc, r) => acc + toNum((r as any).amount),
@@ -322,8 +323,8 @@ class ExpensesService {
     startDate: Date,
     endDate: Date,
   ): Promise<ExpensesReportData> {
-    const from = startDate.toISOString().split("T")[0]
-    const to = endDate.toISOString().split("T")[0]
+    const from = formatDateLocal(startDate)
+    const to = formatDateLocal(endDate)
     const stats = await this.getStats(from, to)
 
     const { data, error } = await this.supabase

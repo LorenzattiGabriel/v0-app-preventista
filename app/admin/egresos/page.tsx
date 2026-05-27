@@ -12,6 +12,7 @@ import { ExpensesList } from "@/components/admin/expenses/expenses-list"
 import { ExpensesStats } from "@/components/admin/expenses/expenses-stats"
 import { ExpensesPagination } from "@/components/admin/expenses/expenses-pagination"
 import { startOfMonth, endOfMonth } from "date-fns"
+import { formatDateLocal } from "@/lib/utils/dates"
 
 export default async function ExpensesDashboardPage({
   searchParams,
@@ -36,8 +37,8 @@ export default async function ExpensesDashboardPage({
   if (!profile || profile.role !== "administrativo") redirect("/")
 
   const today = new Date()
-  const defaultFrom = startOfMonth(today).toISOString().split("T")[0]
-  const defaultTo = endOfMonth(today).toISOString().split("T")[0]
+  const defaultFrom = formatDateLocal(startOfMonth(today))
+  const defaultTo = formatDateLocal(endOfMonth(today))
   const from = params.from || defaultFrom
   const to = params.to || defaultTo
 

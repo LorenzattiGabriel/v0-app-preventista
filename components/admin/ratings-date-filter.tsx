@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, X } from 'lucide-react'
+import { formatDateLocal } from '@/lib/utils/dates'
 
 /**
  * Ratings Date Filter Component
@@ -53,8 +54,8 @@ export function RatingsDateFilter() {
     const start = new Date()
     start.setMonth(start.getMonth() - 1)
     
-    setStartDate(start.toISOString().split('T')[0])
-    setEndDate(end.toISOString().split('T')[0])
+    setStartDate(formatDateLocal(start))
+    setEndDate(formatDateLocal(end))
   }
 
   const setLastWeek = () => {
@@ -62,8 +63,8 @@ export function RatingsDateFilter() {
     const start = new Date()
     start.setDate(start.getDate() - 7)
     
-    setStartDate(start.toISOString().split('T')[0])
-    setEndDate(end.toISOString().split('T')[0])
+    setStartDate(formatDateLocal(start))
+    setEndDate(formatDateLocal(end))
   }
 
   const setThisMonth = () => {
@@ -71,8 +72,8 @@ export function RatingsDateFilter() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1)
     const end = new Date()
     
-    setStartDate(start.toISOString().split('T')[0])
-    setEndDate(end.toISOString().split('T')[0])
+    setStartDate(formatDateLocal(start))
+    setEndDate(formatDateLocal(end))
   }
 
   return (

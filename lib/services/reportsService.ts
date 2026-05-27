@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js"
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns"
+import { getLocalDateString, formatDateLocal } from "@/lib/utils/dates"
 
 export interface OrdersReportData {
   totalOrders: number
@@ -215,8 +216,8 @@ class ReportsService {
     const { data: routes, error: routesError } = await this.supabase
       .from("routes")
       .select("*, assigned_driver:profiles!driver_id(id, full_name)")
-      .gte("scheduled_date", startDate.toISOString().split('T')[0])
-      .lte("scheduled_date", endDate.toISOString().split('T')[0])
+      .gte("scheduled_date", formatDateLocal(startDate))
+      .lte("scheduled_date", formatDateLocal(endDate))
 
     if (routesError) {
       console.error("Error fetching routes:", routesError)
@@ -598,7 +599,7 @@ class ReportsService {
     }))
 
     // Get overdue debt (orders with due_date < today and balance_due > 0)
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDateString()
     const { data: overduePayments } = await this.supabase
       .from("order_payments")
       .select("balance_due, due_date")

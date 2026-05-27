@@ -3,19 +3,22 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Package, Calendar, Clock } from "lucide-react"
+import { MapPin, Package, Calendar, Clock, Truck } from "lucide-react"
 
 interface OrderCardProps {
   order: any
   isSelected: boolean
   onToggle: (orderId: string) => void
+  // Si está presente, el pedido ya está en una ruta activa y se renderiza deshabilitado.
+  assignedRouteCode?: string
 }
 
 /**
  * OrderCard - Componente de tarjeta para mostrar un pedido individual
  * Muestra información clave del pedido de forma visual y compacta
  */
-export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
+export function OrderCard({ order, isSelected, onToggle, assignedRouteCode }: OrderCardProps) {
+  const isAssigned = !!assignedRouteCode
   const customerName = order.customers?.commercial_name || order.customers?.name || "Cliente"
   const orderNumber = order.order_number || "S/N"
   const itemsCount = order.order_items?.length || 0
@@ -49,6 +52,7 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
   }
 
   const handleCardClick = () => {
+    if (isAssigned) return
     onToggle(order.id)
   }
 
@@ -94,22 +98,35 @@ export function OrderCard({ order, isSelected, onToggle }: OrderCardProps) {
 
   return (
     <Card
-      className={`group relative cursor-pointer overflow-hidden transition-all hover:shadow-lg border-l-[6px] ${
-        isSelected
-          ? "border-primary bg-primary/5 shadow-md"
-          : `${getUrgencyBorderClass(daysOverdue)} hover:bg-muted/50`
+      className={`group relative overflow-hidden transition-all border-l-[6px] ${
+        isAssigned
+          ? "cursor-not-allowed opacity-60 border-l-muted bg-muted/30"
+          : isSelected
+            ? "cursor-pointer hover:shadow-lg border-primary bg-primary/5 shadow-md"
+            : `cursor-pointer hover:shadow-lg ${getUrgencyBorderClass(daysOverdue)} hover:bg-muted/50`
       }`}
       onClick={handleCardClick}
+      title={isAssigned ? `Ya asignado a ruta ${assignedRouteCode}` : undefined}
     >
       <div className="absolute top-4 left-3 z-10">
         <Checkbox
           id={`order-${order.id}`}
           checked={isSelected}
-          onCheckedChange={() => onToggle(order.id)}
+          disabled={isAssigned}
+          onCheckedChange={() => !isAssigned && onToggle(order.id)}
           onClick={(e) => e.stopPropagation()}
           className="h-5 w-5 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
         />
       </div>
+
+      {isAssigned && (
+        <div className="absolute top-2 right-2 z-10">
+          <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900 dark:text-blue-200">
+            <Truck className="h-3 w-3 mr-1" />
+            En ruta {assignedRouteCode}
+          </Badge>
+        </div>
+      )}
 
       <CardContent className="p-3 pl-10 space-y-3">
         {/* Header: Name & Date Badge */}

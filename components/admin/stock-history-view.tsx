@@ -38,6 +38,7 @@ import {
   ChevronRight
 } from "lucide-react"
 import type { StockMovementType, StockMovementWithUser } from "@/lib/types/database"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 interface StockHistoryViewProps {
   users: Array<{ id: string; full_name: string }>
@@ -209,7 +210,7 @@ export function StockHistoryView({ users, products }: StockHistoryViewProps) {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `historial_stock_${new Date().toISOString().split("T")[0]}.csv`
+      link.download = `historial_stock_${getLocalDateString()}.csv`
       link.click()
       URL.revokeObjectURL(url)
     } catch (error) {

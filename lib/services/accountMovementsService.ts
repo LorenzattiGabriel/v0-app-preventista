@@ -1,11 +1,12 @@
 import { SupabaseClient } from "@supabase/supabase-js"
-import type { 
-  CustomerAccountMovement, 
-  AccountMovementType, 
+import type {
+  CustomerAccountMovement,
+  AccountMovementType,
   OrderPayment,
   RouteCashClosure,
-  PaymentMethod 
+  PaymentMethod
 } from "@/lib/types/database"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 interface CreateMovementParams {
   customerId: string
@@ -411,7 +412,7 @@ export class AccountMovementsService {
         cash_collected: cashCollected,
         transfer_collected: transferCollected,
         card_collected: cardCollected,
-        closure_date: new Date().toISOString().split("T")[0],
+        closure_date: getLocalDateString(),
         notes,
       })
       .select()

@@ -19,6 +19,7 @@ import {
   type PaymentMethod,
   type Supplier,
 } from "@/lib/types/database"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 interface Props {
   expense?: ExpenseWithRelations
@@ -37,7 +38,7 @@ export function ExpenseForm({ expense, categories, suppliers: initialSuppliers }
   const [quickDialogOpen, setQuickDialogOpen] = useState(false)
 
   const [expenseDate, setExpenseDate] = useState(
-    expense?.expense_date || new Date().toISOString().split("T")[0],
+    expense?.expense_date || getLocalDateString(),
   )
   const [description, setDescription] = useState(expense?.description || "")
   const [categoryId, setCategoryId] = useState(expense?.category_id || "")

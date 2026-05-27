@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 
 interface BulkRescheduleDialogProps {
   orderIds: string[]
@@ -39,7 +40,7 @@ export function BulkRescheduleDialog({
   const [reason, setReason] = useState("")
   const [increasePriority, setIncreasePriority] = useState(false)
 
-  const today = new Date().toISOString().split("T")[0]
+  const today = getLocalDateString()
 
   // Reset al abrir
   const handleOpenChange = (isOpen: boolean) => {
@@ -49,9 +50,7 @@ export function BulkRescheduleDialog({
       setReason("")
       setIncreasePriority(false)
       // Preseleccionar fecha de mañana
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      setNewDate(tomorrow.toISOString().split("T")[0])
+      setNewDate(getLocalTomorrowDateString())
     }
     onOpenChange(isOpen)
   }

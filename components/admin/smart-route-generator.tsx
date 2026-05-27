@@ -30,6 +30,7 @@ import {
   getUniqueLocalities
 } from "@/lib/utils/order-filters"
 import { revalidateDashboard } from "@/app/actions/revalidate"
+import { getLocalDateString } from "@/lib/utils/dates"
 
 // Coordenadas por defecto (solo si no hay depot configurado)
 const DEFAULT_COORDS = {
@@ -43,6 +44,8 @@ interface SmartRouteGeneratorProps {
   pendingOrders: any[]
   userId: string
   depot: any | null // Depot configurado
+  // Mapeo order_id -> route_code para pedidos ya asignados a rutas PLANIFICADO/EN_CURSO.
+  activeRouteAssignments?: Record<string, string>
 }
 
 interface CostCalculation {
@@ -80,17 +83,7 @@ interface GeneratedRoute {
   segments?: RouteSegment[]
 }
 
-// Devuelve la fecha local (zona horaria del navegador) como YYYY-MM-DD.
-// Why: new Date().toISOString() devuelve UTC, lo que de noche en AR (UTC-3) ya muestra el día siguiente.
-const getLocalDateString = () => {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, "0")
-  const d = String(now.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
-}
-
-export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: SmartRouteGeneratorProps) {
+export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot, activeRouteAssignments = {} }: SmartRouteGeneratorProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -253,20 +246,23 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   const hasMultipleLocalities = selectedLocalitiesSet.size > 1
 
   const handleOrderToggle = (orderId: string) => {
+    if (activeRouteAssignments[orderId]) return // ya está en otra ruta activa
     setSelectedOrderIds((prev) =>
       prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
     )
   }
 
   const handleSelectAllOrders = () => {
-    const currentVisibleIds = availableOrders.map((o) => o.id)
-    const allVisibleSelected = currentVisibleIds.every(id => selectedOrderIds.includes(id))
-    
+    // Excluir pedidos ya asignados a rutas activas del "Seleccionar todos"
+    const currentVisibleIds = availableOrders
+      .filter((o) => !activeRouteAssignments[o.id])
+      .map((o) => o.id)
+    const allVisibleSelected = currentVisibleIds.length > 0 &&
+      currentVisibleIds.every(id => selectedOrderIds.includes(id))
+
     if (allVisibleSelected) {
-      // Deselect all visible orders (but keep orders from other localities)
       setSelectedOrderIds(prev => prev.filter(id => !currentVisibleIds.includes(id)))
     } else {
-      // Add all visible orders to selection (keeping existing selections)
       setSelectedOrderIds(prev => {
         const newIds = currentVisibleIds.filter(id => !prev.includes(id))
         return [...prev, ...newIds]
@@ -959,6 +955,7 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                         order={order}
                         isSelected={selectedOrderIds.includes(order.id)}
                         onToggle={handleOrderToggle}
+                        assignedRouteCode={activeRouteAssignments[order.id]}
                       />
                     ))}
                   </div>
