@@ -148,6 +148,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   // Delivery form state
   const [wasCollected, setWasCollected] = useState(false)
   const [deliveryNotes, setDeliveryNotes] = useState("")
+  // Doble confirmación: paso de resumen antes de registrar la entrega
+  const [showDeliveryConfirmStep, setShowDeliveryConfirmStep] = useState(false)
 
   // Payment lines para split payment (múltiples métodos de pago)
   interface PaymentLineState {
@@ -435,6 +437,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setNoDeliveryNotes("")
     setNoDeliveryPhoto(null)
     setNoDeliveryPhotoPreview(null)
+    setShowDeliveryConfirmStep(false)
     setShowDeliveryDialog(true)
   }
 
@@ -508,6 +511,37 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     
     // Open WhatsApp
     window.open(`https://wa.me/${phone.replace("+", "")}?text=${message}`, "_blank")
+  }
+
+  // Doble confirmación: valida los datos de entrega y abre el resumen antes de registrar
+  const handleRequestConfirm = () => {
+    if (!selectedOrder) return
+
+    if (!receivedByName.trim()) {
+      setError("Debe ingresar el nombre de quien recibió el pedido")
+      return
+    }
+
+    if (wasCollected) {
+      if (totalCollected <= 0) {
+        setError("Debe ingresar al menos un monto cobrado válido (mayor a $0)")
+        return
+      }
+      for (const line of paymentLines) {
+        const lineAmount = Number.parseFloat(line.amount) || 0
+        if (lineAmount <= 0) {
+          setError("Cada línea de pago debe tener un monto mayor a $0")
+          return
+        }
+        if (line.method === "Transferencia" && !line.transferProof) {
+          setError("Debe adjuntar el comprobante de transferencia para cada pago con transferencia")
+          return
+        }
+      }
+    }
+
+    setError(null)
+    setShowDeliveryConfirmStep(true)
   }
 
   const handleConfirmDelivery = async () => {
@@ -820,6 +854,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           : `Entrega confirmada - Sin cobro - Deuda: $${orderTotal.toFixed(2)}`,
       })
 
+      setShowDeliveryConfirmStep(false)
       setShowDeliveryDialog(false)
       setSelectedOrder(null)
       router.refresh()
@@ -2179,12 +2214,95 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
             <Button variant="outline" onClick={() => setShowDeliveryDialog(false)} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button 
-              onClick={handleConfirmDelivery} 
+            <Button
+              onClick={cannotDeliver ? handleConfirmDelivery : handleRequestConfirm}
               disabled={isLoading}
               variant={cannotDeliver ? "destructive" : "default"}
             >
               {isLoading ? "Procesando..." : (cannotDeliver ? "Registrar No-Entrega" : "Confirmar Entrega")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🆕 Doble confirmación: resumen de entrega + forma de pago */}
+      <Dialog open={showDeliveryConfirmStep} onOpenChange={setShowDeliveryConfirmStep}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmá la entrega</DialogTitle>
+            <DialogDescription>
+              Revisá los datos antes de registrar. Prestá atención a la forma de pago.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Pedido:</span>
+              <span className="font-medium">{selectedOrder?.order_number}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Recibe:</span>
+              <span className="font-medium">{receivedByName}</span>
+            </div>
+
+            <div className="border-t pt-3">
+              {wasCollected ? (
+                <>
+                  <p className="font-medium mb-2">Cobro registrado:</p>
+                  <div className="border rounded-md divide-y">
+                    {paymentLines.map((line) => (
+                      <div key={line.id} className="flex justify-between p-2">
+                        <span className="font-semibold text-blue-700 dark:text-blue-300">{line.method}</span>
+                        <span className="font-medium">
+                          ${(Number.parseFloat(line.amount) || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    <span className="text-muted-foreground">Total cobrado:</span>
+                    <span className="font-bold">${totalCollected.toFixed(2)}</span>
+                  </div>
+                  {(() => {
+                    const debt = (Number(selectedOrder?.total) || 0) - totalCollected
+                    return debt > 0.01 ? (
+                      <p className="text-xs text-yellow-600 mt-1">
+                        Quedará deuda de ${debt.toFixed(2)} en la cuenta del cliente.
+                      </p>
+                    ) : null
+                  })()}
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 mt-3">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      ¿La forma de pago es correcta? Si te equivocaste, volvé y corregila antes de confirmar.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-orange-50 dark:bg-orange-950 border border-orange-300 dark:border-orange-700 rounded-md p-3">
+                  <p className="text-sm text-orange-800 dark:text-orange-200">
+                    No se cobró el pedido. Se generará una deuda de ${(Number(selectedOrder?.total) || 0).toFixed(2)}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-3">
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeliveryConfirmStep(false)}
+              disabled={isLoading}
+            >
+              Volver
+            </Button>
+            <Button onClick={handleConfirmDelivery} disabled={isLoading}>
+              {isLoading ? "Procesando..." : "Sí, confirmar entrega"}
             </Button>
           </DialogFooter>
         </DialogContent>

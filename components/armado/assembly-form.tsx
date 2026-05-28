@@ -287,6 +287,14 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
   )
 
   const handleConfirmAssembly = async () => {
+    // 🛡️ Solo se puede confirmar un pedido que está EN_ARMADO.
+    // Evita re-confirmar un pedido ya armado (duplicaría deuda y descontaría stock de nuevo).
+    if (order.status !== "EN_ARMADO") {
+      setError("Este pedido ya no está en armado. Actualizá la página antes de confirmar.")
+      setShowConfirmDialog(false)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -310,8 +318,8 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
         return
       }
 
-      // Update order
-      const { error: orderError } = await supabase
+      // Update order (solo si sigue EN_ARMADO — evita re-confirmaciones concurrentes)
+      const { data: updatedRows, error: orderError } = await supabase
         .from("orders")
         .update({
           status: "PENDIENTE_ENTREGA",
@@ -322,8 +330,19 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
           assembly_notes: assemblyNotes,
         })
         .eq("id", order.id)
+        .eq("status", "EN_ARMADO")
+        .select("id")
 
       if (orderError) throw orderError
+
+      // Si no se actualizó ninguna fila, el pedido ya fue confirmado por otra vía.
+      // Abortar para no duplicar deuda ni descontar stock de nuevo.
+      if (!updatedRows || updatedRows.length === 0) {
+        setError("Este pedido ya fue confirmado. Actualizá la página.")
+        setShowConfirmDialog(false)
+        setIsLoading(false)
+        return
+      }
 
       // Update order items and product stock
       for (const item of assemblyItems) {

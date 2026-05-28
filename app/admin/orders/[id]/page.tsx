@@ -15,9 +15,11 @@ import {
   Calendar,
   Star,
   History,
+  CircleDollarSign,
 } from "lucide-react"
 import { CancelOrderButton } from "@/components/admin/cancel-order-button"
 import { DownloadOrderReceiptButton } from "@/components/admin/download-order-receipt-button"
+import { EditPaymentMethodDialog } from "@/components/admin/edit-payment-method-dialog"
 
 export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -319,6 +321,66 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                         <p className="text-xs text-muted-foreground mb-1">Notas de entrega:</p>
                         <p>{order.delivery_notes}</p>
                       </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 🆕 Forma de Pago (editable por admin tras la entrega) */}
+              {order.status === "ENTREGADO" && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <CircleDollarSign className="h-5 w-5 text-green-600" />
+                          Forma de Pago
+                        </CardTitle>
+                        <CardDescription>Cómo se cobró el pedido en la entrega</CardDescription>
+                      </div>
+                      {order.was_collected_on_delivery && (
+                        <EditPaymentMethodDialog
+                          orderId={order.id}
+                          orderNumber={order.order_number}
+                          amountPaid={Number(order.amount_paid || 0)}
+                          paymentMethod={order.payment_method}
+                          paymentMethodsJson={order.payment_methods_json}
+                        />
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    {order.was_collected_on_delivery ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Monto cobrado:</span>
+                          <span className="font-bold">${Number(order.amount_paid || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="border rounded-md divide-y">
+                          {Array.isArray(order.payment_methods_json) && order.payment_methods_json.length > 0 ? (
+                            order.payment_methods_json.map((p: any, i: number) => (
+                              <div key={i} className="flex justify-between p-2">
+                                <span>{p.method}</span>
+                                <span className="font-medium">${Number(p.amount || 0).toFixed(2)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex justify-between p-2">
+                              <span>{order.payment_method || "—"}</span>
+                              <span className="font-medium">${Number(order.amount_paid || 0).toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
+                        {Number(order.amount_paid || 0) < Number(order.total || 0) && (
+                          <p className="text-xs text-yellow-600">
+                            Quedó deuda: ${(Number(order.total || 0) - Number(order.amount_paid || 0)).toFixed(2)}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        No se cobró en la entrega — se generó deuda de ${Number(order.total || 0).toFixed(2)}.
+                      </p>
                     )}
                   </CardContent>
                 </Card>

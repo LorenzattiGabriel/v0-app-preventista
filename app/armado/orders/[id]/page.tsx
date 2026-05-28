@@ -47,6 +47,13 @@ export default async function AssemblyOrderPage({ params }: { params: Promise<{ 
     redirect("/armado/dashboard")
   }
 
+  // 🛡️ El formulario de armado solo aplica a pedidos por armar o en armado.
+  // Si ya fue armado/entregado/cancelado, mostrar el detalle (read-only) en vez del form
+  // editable, para evitar re-confirmaciones que duplican deuda y descuentan stock de nuevo.
+  if (!["PENDIENTE_ARMADO", "EN_ARMADO"].includes(order.status)) {
+    redirect(`/armado/orders/${order.id}/detalle`)
+  }
+
   // 🆕 Bloquear armado anticipado: solo permite armar si delivery_date <= mañana
   // o si el admin lo habilitó manualmente con early_assembly_allowed = true.
   // Solo bloqueamos si está PENDIENTE_ARMADO (si ya está EN_ARMADO, ya pasó el control).

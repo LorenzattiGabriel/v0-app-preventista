@@ -268,6 +268,99 @@ export class AccountMovementsService {
   }
 
   /**
+   * Mapea un método de pago al tipo de movimiento de cuenta corriente.
+   * Mantiene la misma lógica que recordDebtPayment (Cuenta Corriente / Otro / Tarjetas → PAGO_TARJETA).
+   */
+  private methodToMovementType(method: PaymentMethod): AccountMovementType {
+    const m = method.toLowerCase()
+    if (m === "efectivo") return "PAGO_EFECTIVO"
+    if (m === "transferencia") return "PAGO_TRANSFERENCIA"
+    if (m === "cheque") return "PAGO_CHEQUE"
+    return "PAGO_TARJETA"
+  }
+
+  /**
+   * 🆕 Corrige SOLO la(s) forma(s) de pago de un pedido ya cobrado, sin alterar el monto.
+   * Re-categoriza los movimientos PAGO_* del pedido para que reportes/cierre de caja por tipo
+   * queden consistentes. NO modifica current_balance porque el total cobrado no cambia.
+   *
+   * Requiere que la suma de las nuevas líneas sea igual al total ya cobrado (validado en el API).
+   */
+  async correctOrderPaymentMethods(params: {
+    orderId: string
+    lines: { method: PaymentMethod; amount: number; transferProofUrl?: string }[]
+    createdBy?: string
+  }): Promise<void> {
+    const { orderId, lines, createdBy } = params
+
+    const { data: order, error: orderError } = await this.supabase
+      .from("orders")
+      .select("id, customer_id, order_number")
+      .eq("id", orderId)
+      .single()
+
+    if (orderError || !order) throw orderError || new Error("Pedido no encontrado")
+
+    // Movimientos de pago existentes del pedido
+    const { data: existing } = await this.supabase
+      .from("customer_account_movements")
+      .select("*")
+      .eq("order_id", orderId)
+      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE"])
+      .order("created_at", { ascending: true })
+
+    // Si no hay movimientos previos (sistema de cuenta no usado en su momento), no hay nada que re-categorizar.
+    if (!existing || existing.length === 0) return
+
+    const oldTotal = existing.reduce((sum, m) => sum + Number(m.credit_amount || 0), 0)
+    const newTotal = lines.reduce((sum, l) => sum + Number(l.amount || 0), 0)
+
+    if (Math.abs(oldTotal - newTotal) > 0.01) {
+      throw new Error(
+        `El total de las nuevas formas de pago ($${newTotal.toFixed(2)}) no coincide con el cobro registrado ($${oldTotal.toFixed(2)}).`,
+      )
+    }
+
+    // Metadatos a preservar del registro original
+    const first = existing[0]
+    const last = existing[existing.length - 1]
+    const origCreatedAt = first.created_at
+    const routeId = first.route_id || undefined
+    // Saldo luego de aplicar todos los pagos (no cambia: el total cobrado es el mismo)
+    const balanceAfter = Number(last.balance_after ?? (await this.getCustomerBalance(order.customer_id)))
+
+    // Borrar los movimientos de pago anteriores
+    const ids = existing.map((m) => m.id)
+    const { error: deleteError } = await this.supabase
+      .from("customer_account_movements")
+      .delete()
+      .in("id", ids)
+
+    if (deleteError) throw deleteError
+
+    // Insertar movimientos nuevos según las líneas corregidas (el balance neto no cambia)
+    const newRows = lines.map((line) => ({
+      customer_id: order.customer_id,
+      movement_type: this.methodToMovementType(line.method),
+      description: `Pago pedido ${order.order_number} (forma de pago corregida)`,
+      debit_amount: 0,
+      credit_amount: Number(line.amount || 0),
+      balance_after: balanceAfter,
+      order_id: orderId,
+      route_id: routeId,
+      created_by: createdBy || first.created_by || undefined,
+      created_at: origCreatedAt,
+      proof_url: line.method === "Transferencia" ? line.transferProofUrl || null : null,
+    }))
+
+    const { error: insertError } = await this.supabase
+      .from("customer_account_movements")
+      .insert(newRows)
+
+    if (insertError) throw insertError
+  }
+
+  /**
    * Genera deuda cuando un pedido no se cobra completamente
    */
   async generateDebt(orderId: string, debtAmount: number, routeId: string, createdBy: string): Promise<void> {
@@ -309,6 +402,20 @@ export class AccountMovementsService {
 
     // Usar el total del pedido (ya ajustado por faltantes)
     const amount = orderTotal || order.total
+
+    // 🛡️ Idempotencia: si ya existe una deuda para este pedido, no crear otra.
+    // Evita duplicar DEUDA_PEDIDO si el armado se confirma más de una vez.
+    const { data: existingDebt } = await this.supabase
+      .from("customer_account_movements")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("movement_type", "DEUDA_PEDIDO")
+      .limit(1)
+
+    if (existingDebt && existingDebt.length > 0) {
+      console.warn(`[accountMovements] Deuda ya registrada para pedido ${order.order_number}, se omite duplicado.`)
+      return
+    }
 
     // Crear movimiento de deuda
     await this.createMovement({
