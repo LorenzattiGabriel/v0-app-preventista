@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MapPin, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { GeocodingService } from "@/lib/services/geocodingService"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface DepotConfigFormProps {
   depot: any | null
@@ -21,7 +28,8 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+
   const [formData, setFormData] = useState({
     name: depot?.name || "Distribuidora Principal",
     street: depot?.street || "",
@@ -125,12 +133,8 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
 
       if (insertError) throw insertError
 
-      setSuccess("✅ Configuración guardada exitosamente")
-      
-      // Refresh the page to show updated data
-      setTimeout(() => {
-        router.refresh()
-      }, 1500)
+      // Mostrar confirmación clara en un modal
+      setShowSuccessDialog(true)
     } catch (err) {
       console.error("Error saving depot configuration:", err)
       setError(err instanceof Error ? err.message : "Error al guardar la configuración")
@@ -139,7 +143,13 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
     }
   }
 
+  const handleSuccessClose = () => {
+    setShowSuccessDialog(false)
+    router.refresh()
+  }
+
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md flex items-start gap-2">
@@ -346,6 +356,50 @@ export function DepotConfigForm({ depot, userId }: DepotConfigFormProps) {
         </Button>
       </div>
     </form>
+
+    {/* Modal de confirmación de guardado */}
+    <Dialog open={showSuccessDialog} onOpenChange={(open) => { if (!open) handleSuccessClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="sr-only">Configuración guardada</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center text-center gap-3 py-2">
+          <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+            <CheckCircle className="h-9 w-9 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <p className="text-lg font-semibold">¡Configuración guardada!</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Los cambios del depósito se guardaron correctamente.
+            </p>
+          </div>
+
+          <div className="w-full text-left bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
+            <div>
+              <p className="font-medium">{formData.name}</p>
+              <p className="text-muted-foreground">
+                {formData.street} {formData.streetNumber}
+                {formData.floorApt ? `, ${formData.floorApt}` : ""} — {formData.locality}, {formData.province}
+              </p>
+            </div>
+            <div className="flex justify-between pt-2 border-t text-muted-foreground">
+              <span>Radio repartidor</span>
+              <span className="font-medium text-foreground">{formData.radiusMeters} m</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Radio pedido presencial</span>
+              <span className="font-medium text-foreground">{formData.presencialOrderRadiusMeters} m</span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={handleSuccessClose} className="w-full">
+            Aceptar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 
