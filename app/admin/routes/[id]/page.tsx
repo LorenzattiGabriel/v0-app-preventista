@@ -16,6 +16,7 @@ import {
   Truck,
 } from "lucide-react"
 import { RouteMapView } from "@/components/admin/route-map-view"
+import { CancelRouteButton } from "@/components/admin/cancel-route-button"
 
 export default async function AdminRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -72,6 +73,11 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
 
   // Sort orders by current (executed) delivery sequence
   const sortedOrders = [...(route.route_orders || [])].sort((a, b) => a.delivery_order - b.delivery_order)
+
+  // Pedidos que volverían a PENDIENTE_ENTREGA si se cancela la ruta (los no entregados)
+  const pendingToRevertCount = sortedOrders.filter(
+    (ro: any) => ro.orders?.status === "EN_REPARTICION",
+  ).length
 
   // Build planned order map from optimized_route snapshot (original microservice order)
   const plannedOrderMap = new Map<string, number>()
@@ -206,6 +212,13 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                 Volver a Rutas
               </Link>
             </Button>
+
+            <CancelRouteButton
+              routeId={route.id}
+              routeCode={route.route_code}
+              status={route.status}
+              pendingCount={pendingToRevertCount}
+            />
           </div>
 
           {/* Route Header */}

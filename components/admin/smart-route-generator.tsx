@@ -445,12 +445,14 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
         totalDurationMinutes: totalDurationMinutes
       })
 
-      // Calcular hora fin basada en hora inicio + duración total
+      // Calcular hora fin basada en hora inicio + duración total.
+      // Trabajamos en minutos para evitar el wrap de Date al cruzar medianoche.
+      // scheduled_end_time es TIME (un solo día): si la ruta termina pasada la
+      // medianoche, lo limitamos a 23:59 para que el fin nunca quede antes del inicio.
       const [hours, minutes] = startTime.split(':').map(Number)
-      const startDate = new Date()
-      startDate.setHours(hours, minutes, 0)
-      startDate.setMinutes(startDate.getMinutes() + totalDurationMinutes)
-      const endTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`
+      const startMinutes = hours * 60 + minutes
+      const endMinutes = Math.min(startMinutes + Math.round(totalDurationMinutes), 23 * 60 + 59)
+      const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
 
       // Preparar datos completos de la ruta para guardar
       const routeData = {
@@ -487,54 +489,32 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
         totalDurationRounded: Math.round(totalDurationMinutes)
       })
 
-      // Create route
+      // Crear ruta + paradas + actualizar pedidos en UNA transacción (RPC atómica).
+      // Si algo falla, la función revierte todo (no quedan rutas parciales).
       // Formatear tiempos a formato TIME de PostgreSQL (HH:mm:ss)
       const formattedStartTime = `${startTime}:00`
       const formattedEndTime = `${endTime}:00`
-      
-      const { data: createdRoute, error: routeError } = await supabase
-        .from("routes")
-        .insert({
-          route_code: routeCode,
-          driver_id: selectedDriver,
-          zone_id: null, // Ya no usamos zone_id, filtramos por localidad
-          scheduled_date: deliveryDate,
-          scheduled_start_time: formattedStartTime,
-          scheduled_end_time: formattedEndTime,
-          total_distance: generatedRoute.totalDistance,
-          estimated_duration: Math.round(totalDurationMinutes), // ✅ Redondeado a entero
-          google_maps_url: generatedRoute.googleMapsUrl, // ✅ Guardado en columna dedicada
-          optimized_route: routeData, // Guardamos el resto de la info
-          status: "PLANIFICADO",
-          created_by: userId,
-        })
-        .select()
-        .single()
 
-      if (routeError) throw routeError
+      const orderedOrderIds = generatedRoute.orders.map((o) => o.id)
 
-      // Create route_orders in order
-      for (let i = 0; i < generatedRoute.orders.length; i++) {
-        const order = generatedRoute.orders[i]
+      const { data: createdRouteId, error: rpcError } = await supabase.rpc("create_route_with_orders", {
+        p_route_code: routeCode,
+        p_driver_id: selectedDriver,
+        p_zone_id: null, // Ya no usamos zone_id, filtramos por localidad
+        p_scheduled_date: deliveryDate,
+        p_scheduled_start_time: formattedStartTime,
+        p_scheduled_end_time: formattedEndTime,
+        p_total_distance: generatedRoute.totalDistance,
+        p_estimated_duration: Math.round(totalDurationMinutes), // ✅ Redondeado a entero
+        p_google_maps_url: generatedRoute.googleMapsUrl,
+        p_optimized_route: routeData,
+        p_created_by: userId,
+        p_order_ids: orderedOrderIds,
+      })
 
-        const { error: routeOrderError } = await supabase.from("route_orders").insert({
-          route_id: createdRoute.id,
-          order_id: order.id,
-          delivery_order: i + 1,
-        })
+      if (rpcError) throw rpcError
 
-        if (routeOrderError) throw routeOrderError
-        
-        // Update order status to EN_REPARTICION (asignado a ruta)
-        const { error: orderUpdateError } = await supabase
-          .from("orders")
-          .update({ status: "EN_REPARTICION" })
-          .eq("id", order.id)
-        
-        if (orderUpdateError) throw orderUpdateError
-      }
-
-      console.log(`✅ Ruta ${routeCode} creada exitosamente`)
+      console.log(`✅ Ruta ${routeCode} creada exitosamente`, createdRouteId)
       
       // Revalidar todos los paths relevantes para actualizar el dashboard
       await revalidateDashboard()
