@@ -70,6 +70,9 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
   const autocompleteService = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const placesService = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessionToken = useRef<any>(null)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
 
   // Close suggestions when clicking outside
@@ -100,10 +103,15 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
       return
     }
 
+    if (!sessionToken.current) {
+      sessionToken.current = new google.maps.places.AutocompleteSessionToken()
+    }
+
     autocompleteService.current.getPlacePredictions(
       {
         input,
         componentRestrictions: { country: 'ar' },
+        sessionToken: sessionToken.current,
       },
       (predictions, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
@@ -118,8 +126,9 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
   const handleAddressSearchChange = (value: string) => {
     setAddressSearchValue(value)
     setShowSuggestions(true)
-    if (value.length > 2) {
-      searchAddresses(value)
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    if (value.length > 3) {
+      debounceTimer.current = setTimeout(() => searchAddresses(value), 400)
     } else {
       setPredictions([])
     }
@@ -137,8 +146,11 @@ export function AdminNewCustomerForm({ zones, userId }: AdminNewCustomerFormProp
       {
         placeId: prediction.place_id,
         fields: ['address_components', 'geometry'],
+        sessionToken: sessionToken.current,
       },
       (place, status) => {
+        // El Place Details cierra la sesión: limpiar token para que la próxima búsqueda inicie una nueva
+        sessionToken.current = null
         if (status === google.maps.places.PlacesServiceStatus.OK && place) {
           const lat = place.geometry?.location?.lat()
           const lng = place.geometry?.location?.lng()
