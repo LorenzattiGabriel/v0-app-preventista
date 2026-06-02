@@ -70,7 +70,8 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
   const buildEmbedUrl = () => {
     if (locations.length === 0) return ''
 
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDRsczXb0roqcWOV3EXW9DCMVph0FKzpwY'
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    if (!apiKey) return ''
     const waypoints = locations.map(loc => `${loc.lat},${loc.lng}`).join('|')
     return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${depotLat},${depotLng}&destination=${depotLat},${depotLng}&waypoints=${waypoints}`
   }

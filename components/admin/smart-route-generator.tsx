@@ -1136,17 +1136,19 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
                     /* Ruta simple: un solo link */
                     <div className="space-y-3">
                       {/* Mapa embebido */}
-                      <div className="relative w-full h-64 rounded-lg overflow-hidden border-2 border-blue-300 dark:border-blue-700">
-                        <iframe
-                          src={`https://www.google.com/maps/embed/v1/directions?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDRsczXb0roqcWOV3EXW9DCMVph0FKzpwY'}&origin=${startCoords.lat},${startCoords.lng}&destination=${startCoords.lat},${startCoords.lng}&waypoints=${generatedRoute.orders.map(o => `${o.customers.latitude},${o.customers.longitude}`).join('|')}`}
-                          width="100%"
-                          height="100%"
-                          style={{ border: 0 }}
-                          allowFullScreen
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                        />
-                      </div>
+                      {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
+                        <div className="relative w-full h-64 rounded-lg overflow-hidden border-2 border-blue-300 dark:border-blue-700">
+                          <iframe
+                            src={`https://www.google.com/maps/embed/v1/directions?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&origin=${startCoords.lat},${startCoords.lng}&destination=${startCoords.lat},${startCoords.lng}&waypoints=${generatedRoute.orders.map(o => `${o.customers.latitude},${o.customers.longitude}`).join('|')}`}
+                            width="100%"
+                            height="100%"
+                            style={{ border: 0 }}
+                            allowFullScreen
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                        </div>
+                      )}
                       
                       {/* Botón para abrir en Google Maps */}
                       <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border-2 border-blue-300 dark:border-blue-700">
