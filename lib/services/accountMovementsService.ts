@@ -174,11 +174,7 @@ export class AccountMovementsService {
     }
 
     // Registrar movimiento de pago en cuenta corriente
-    const paymentMethodLower = paymentMethod.toLowerCase()
-    const movementType = paymentMethodLower === "efectivo" ? "PAGO_EFECTIVO" 
-      : paymentMethodLower === "transferencia" ? "PAGO_TRANSFERENCIA" 
-      : paymentMethodLower === "cheque" ? "PAGO_CHEQUE"
-      : "PAGO_TARJETA"
+    const movementType = this.methodToMovementType(paymentMethod)
 
     await this.createMovement({
       customerId: order.customer_id,
@@ -202,12 +198,7 @@ export class AccountMovementsService {
   async recordGeneralPayment(params: RecordGeneralPaymentParams): Promise<CustomerAccountMovement> {
     const { customerId, amount, paymentMethod, createdBy, notes, proofUrl } = params
 
-    const method = paymentMethod.toLowerCase()
-    const movementType: AccountMovementType =
-      method === "efectivo" ? "PAGO_EFECTIVO"
-      : method === "transferencia" ? "PAGO_TRANSFERENCIA"
-      : method === "cheque" ? "PAGO_CHEQUE"
-      : "PAGO_TARJETA"
+    const movementType = this.methodToMovementType(paymentMethod)
 
     return this.createMovement({
       customerId,
@@ -269,14 +260,17 @@ export class AccountMovementsService {
 
   /**
    * Mapea un método de pago al tipo de movimiento de cuenta corriente.
-   * Mantiene la misma lógica que recordDebtPayment (Cuenta Corriente / Otro / Tarjetas → PAGO_TARJETA).
+   * Cada método tiene su propio tipo: Cuenta Corriente → PAGO_CUENTA_CORRIENTE,
+   * Otro/desconocido → PAGO_OTRO. Sólo las tarjetas (débito/crédito) → PAGO_TARJETA.
    */
   private methodToMovementType(method: PaymentMethod): AccountMovementType {
-    const m = method.toLowerCase()
+    const m = (method || "").toLowerCase()
     if (m === "efectivo") return "PAGO_EFECTIVO"
     if (m === "transferencia") return "PAGO_TRANSFERENCIA"
     if (m === "cheque") return "PAGO_CHEQUE"
-    return "PAGO_TARJETA"
+    if (m === "cuenta corriente") return "PAGO_CUENTA_CORRIENTE"
+    if (m.startsWith("tarjeta")) return "PAGO_TARJETA"
+    return "PAGO_OTRO"
   }
 
   /**
@@ -306,7 +300,7 @@ export class AccountMovementsService {
       .from("customer_account_movements")
       .select("*")
       .eq("order_id", orderId)
-      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE"])
+      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE", "PAGO_CUENTA_CORRIENTE", "PAGO_OTRO"])
       .order("created_at", { ascending: true })
 
     // Si no hay movimientos previos (sistema de cuenta no usado en su momento), no hay nada que re-categorizar.

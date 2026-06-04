@@ -615,7 +615,7 @@ class ReportsService {
     const { data: recentPaymentMovements } = await this.supabase
       .from("customer_account_movements")
       .select("credit_amount")
-      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA"])
+      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE", "PAGO_CUENTA_CORRIENTE", "PAGO_OTRO"])
       .gte("created_at", thirtyDaysAgo.toISOString())
 
     const recentPayments = recentPaymentMovements?.reduce((sum, m) => sum + (m.credit_amount || 0), 0) || 0

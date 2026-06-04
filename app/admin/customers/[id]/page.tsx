@@ -189,6 +189,8 @@ export default async function AdminCustomerDetailPage({
     PAGO_TRANSFERENCIA: "Pago transferencia",
     PAGO_TARJETA: "Pago tarjeta",
     PAGO_CHEQUE: "Pago cheque",
+    PAGO_CUENTA_CORRIENTE: "Pago cuenta corriente",
+    PAGO_OTRO: "Pago otro",
     AJUSTE_CREDITO: "Ajuste a favor",
     AJUSTE_DEBITO: "Ajuste en contra",
     NOTA_CREDITO: "Nota de crédito",
