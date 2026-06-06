@@ -70,6 +70,10 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
       doc.text(`Localidad: ${order.customers.locality}, ${order.customers.province || ""}`, margin, yPos)
       yPos += 6
   }
+  if (order.customers.phone) {
+      doc.text(`Tel: ${order.customers.phone}`, margin, yPos)
+      yPos += 6
+  }
   yPos += 4
 
   // --- Items ---
@@ -241,6 +245,10 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
       margin,
       yPos,
     )
+    yPos += 5
+  }
+  if (customers.phone) {
+    doc.text(`Tel: ${customers.phone}`, margin, yPos)
     yPos += 5
   }
 
