@@ -191,9 +191,17 @@ export default function EditOrderPage() {
                   <SelectItem value="PENDIENTE_ENTREGA">Pendiente Entrega</SelectItem>
                   <SelectItem value="EN_REPARTICION">En Repartición</SelectItem>
                   <SelectItem value="ENTREGADO">Entregado</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                  {/* "Cancelado" NO es seleccionable acá: cancelar debe ir por el botón
+                      "Cancelar Pedido" para que revierta stock y saldos. Solo se muestra
+                      si el pedido ya está cancelado, para que el select no quede vacío. */}
+                  {status === "CANCELADO" && (
+                    <SelectItem value="CANCELADO" disabled>Cancelado</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Para cancelar un pedido usá el botón <strong>"Cancelar Pedido"</strong> en el detalle: revierte stock y saldo automáticamente.
+              </p>
             </div>
           </div>
 

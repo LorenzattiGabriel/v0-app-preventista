@@ -273,9 +273,12 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
   const handleCustomerSelect = (customer: Customer) => {
     setSelectedCustomer(customer)
-    // Apply customer's general discount if exists
+    // Apply customer's general discount if exists.
+    // customer.general_discount está guardado como PORCENTAJE ("Descuento General (%)"),
+    // así que hay que forzar discountType a "percentage" o se aplicaría como monto fijo.
     if (customer.general_discount > 0) {
       setGeneralDiscount(customer.general_discount)
+      setDiscountType("percentage")
     }
     // Apply customer's time restriction if exists
     setHasTimeRestriction(customer.has_time_restriction || false)
@@ -400,6 +403,7 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
       invoiceType: requiresInvoice ? invoiceType : null,
       observations,
       generalDiscount,
+      discountType,
       paymentMethod,
       orderItems,
       userId,

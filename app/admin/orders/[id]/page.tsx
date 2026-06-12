@@ -18,6 +18,7 @@ import {
   CircleDollarSign,
 } from "lucide-react"
 import { CancelOrderButton } from "@/components/admin/cancel-order-button"
+import { VoidSaleButton } from "@/components/admin/void-sale-button"
 import { DownloadOrderReceiptButton } from "@/components/admin/download-order-receipt-button"
 import { EditPaymentMethodDialog } from "@/components/admin/edit-payment-method-dialog"
 
@@ -197,13 +198,24 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                 </Link>
               </Button>
 
-              {/* Cancel Order Button */}
-              <CancelOrderButton
-                orderId={order.id}
-                orderNumber={order.order_number}
-                status={order.status}
-                wasAssembled={["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION"].includes(order.status)}
-              />
+              {/* Cancel Order Button (pedidos normales) */}
+              {order.order_type !== "local" && (
+                <CancelOrderButton
+                  orderId={order.id}
+                  orderNumber={order.order_number}
+                  status={order.status}
+                  wasAssembled={["PENDIENTE_ENTREGA", "EN_RUTA", "EN_REPARTICION"].includes(order.status)}
+                />
+              )}
+
+              {/* Anular Venta (ventas directas / order_type local) */}
+              {order.order_type === "local" && (
+                <VoidSaleButton
+                  orderId={order.id}
+                  orderNumber={order.order_number}
+                  status={order.status}
+                />
+              )}
             </div>
           </div>
 

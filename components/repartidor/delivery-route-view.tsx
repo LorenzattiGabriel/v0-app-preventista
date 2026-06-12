@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil, Info } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil, Info, Search } from "lucide-react"
 import {
   DndContext,
   closestCenter,
@@ -56,6 +56,12 @@ import {
   type RouteOrderData 
 } from "@/lib/services/routeCalculations"
 
+// Métodos de cobro válidos en la entrega. "Cuenta Corriente" se excluye a propósito:
+// no es un cobro real, es dejar la deuda en la cuenta. Si el cliente no paga, el
+// repartidor NO debe tildar "Se cobró el pedido" y el sistema deja la deuda del pedido.
+const DELIVERY_PAYMENT_METHODS: PaymentMethod[] = PAYMENT_METHODS.filter(
+  (m) => m !== "Cuenta Corriente"
+)
 
 interface DeliveryRouteViewProps {
   route: any
@@ -199,6 +205,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   
   // 🆕 Estado para expandir/colapsar segmentos de ruta
   const [segmentsExpanded, setSegmentsExpanded] = useState(false)
+
+  // 🔍 Buscador + filtro del listado de paradas
+  const [stopSearch, setStopSearch] = useState("")
+  const [stopFilter, setStopFilter] = useState<"pendientes" | "entregados" | "todos">("pendientes")
 
   // 🆕 Helper function para verificar si la ruta está segmentada
   const isRouteSegmented = (): boolean => {
@@ -1063,6 +1073,28 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
   const stopsWithTimeRestriction = sortedOrders.filter((o: any) => o.has_time_restriction).length
 
+  // 🔍 Posición original (secuencia) por id, estable ante el filtro/búsqueda
+  const stopPositionById = new Map<string, number>(sortedOrders.map((o: any, i: number) => [o.id, i + 1]))
+  const managedCount = sortedOrders.filter((o: any) => o.status === "ENTREGADO" || o.no_delivery_reason).length
+  const filteredStops = sortedOrders.filter((order: any) => {
+    const isManaged = order.status === "ENTREGADO" || !!order.no_delivery_reason
+    if (stopFilter === "pendientes" && isManaged) return false
+    if (stopFilter === "entregados" && !isManaged) return false
+    const q = stopSearch.trim().toLowerCase()
+    if (!q) return true
+    const haystack = [
+      order.order_number,
+      order.customers?.commercial_name,
+      order.customers?.street,
+      order.customers?.street_number,
+      order.customers?.locality,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+    return haystack.includes(q)
+  })
+
   // 🆕 Handlers de modo edición de ruta (drag & drop)
   const enterEditMode = () => {
     // Inicializar con el orden actual de los pendientes
@@ -1627,7 +1659,53 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           {/* Modo normal: vista completa con todos los detalles */}
           {!editMode && (
           <div className="space-y-4">
-            {sortedOrders.map((order: any, index: number) => (
+            {/* 🔍 Buscador + filtro segmentado */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={stopSearch}
+                  onChange={(e) => setStopSearch(e.target.value)}
+                  placeholder="Buscar cliente, pedido o dirección..."
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex rounded-md border overflow-hidden text-sm">
+                <button
+                  type="button"
+                  onClick={() => setStopFilter("pendientes")}
+                  className={`flex-1 px-2 py-2 font-medium transition-colors ${stopFilter === "pendientes" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                >
+                  Por entregar ({pendingOrders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStopFilter("entregados")}
+                  className={`flex-1 px-2 py-2 font-medium transition-colors border-l ${stopFilter === "entregados" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                >
+                  Entregados ({managedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStopFilter("todos")}
+                  className={`flex-1 px-2 py-2 font-medium transition-colors border-l ${stopFilter === "todos" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                >
+                  Todos ({totalOrders})
+                </button>
+              </div>
+            </div>
+
+            {filteredStops.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {stopSearch.trim()
+                  ? "No hay paradas que coincidan con la búsqueda."
+                  : stopFilter === "pendientes"
+                  ? "¡No quedan pedidos por entregar! 🎉"
+                  : "No hay paradas en esta vista."}
+              </p>
+            )}
+
+            {filteredStops.map((order: any) => (
               <div
                 key={order.id}
                 className={`border rounded-lg p-3 sm:p-4 ${order.status === "ENTREGADO" ? "bg-muted/50" : order.no_delivery_reason ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900" : ""}`}
@@ -1635,7 +1713,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                 {/* Header con número y badges */}
                 <div className="flex items-start gap-3 mb-3">
                   <div className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm shrink-0 ${order.no_delivery_reason ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-100" : "bg-primary text-primary-foreground"}`}>
-                    {index + 1}
+                    {stopPositionById.get(order.id)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -2058,7 +2136,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {PAYMENT_METHODS.map((method) => (
+                                  {DELIVERY_PAYMENT_METHODS.map((method) => (
                                     <SelectItem key={method} value={method}>
                                       {method}
                                     </SelectItem>

@@ -247,7 +247,7 @@ export function AdjustBalanceDialog({
               </div>
               <p className="text-xs text-muted-foreground">
                 {direction === "debit"
-                  ? "Cargar saldo inicial preexistente o registrar deuda manual."
+                  ? "Cargar a la cuenta corriente: saldo inicial preexistente o deuda manual (se suma a la deuda)."
                   : "Aplicar nota de crédito o corrección a favor del cliente."}
               </p>
             </div>

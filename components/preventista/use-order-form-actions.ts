@@ -23,6 +23,7 @@ interface SaveOrderParams {
   invoiceType?: "A" | "B" | "C" | null
   observations: string
   generalDiscount: number
+  discountType?: "fixed" | "percentage" // Modo de entrada del descuento general (default fixed)
   paymentMethod?: PaymentMethod // Payment method (Efectivo, Transferencia, etc.)
   orderItems: OrderItem[]
   userId: string
@@ -62,6 +63,7 @@ export function useOrderFormActions() {
     invoiceType,
     observations,
     generalDiscount,
+    discountType = "fixed",
     paymentMethod,
     orderItems,
     userId,
@@ -93,7 +95,10 @@ export function useOrderFormActions() {
 
     try {
       const supabase = createClient()
-      const { subtotal, total } = calculateTotals(orderItems, generalDiscount)
+      // La columna orders.general_discount se guarda SIEMPRE como monto en pesos
+      // (así lo leen recibos y vistas admin/cliente). discountType solo define cómo
+      // se interpreta el valor ingresado; persistimos el monto resultante.
+      const { subtotal, total, discountAmount } = calculateTotals(orderItems, generalDiscount, discountType)
       const status = isDraft ? "BORRADOR" : "PENDIENTE_ARMADO"
 
       let currentOrderNumber: string | undefined = undefined;
@@ -144,7 +149,7 @@ export function useOrderFormActions() {
             order_type: orderType,
             status,
             subtotal,
-            general_discount: generalDiscount,
+            general_discount: discountAmount,
             total,
             requires_invoice: requiresInvoice,
             invoice_type: requiresInvoice ? invoiceType ?? null : null,
@@ -181,7 +186,7 @@ export function useOrderFormActions() {
             order_type: orderType,
             status,
             subtotal,
-            general_discount: generalDiscount,
+            general_discount: discountAmount,
             total,
             requires_invoice: requiresInvoice,
             invoice_type: requiresInvoice ? invoiceType ?? null : null,

@@ -23,6 +23,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Forbidden - Admin only" }, { status: 403 })
   }
 
+  // Motivo obligatorio (justificativo de la cancelación)
+  let reason = ""
+  try {
+    const body = await request.json()
+    reason = (body?.reason || "").toString().trim()
+  } catch {
+    // body vacío → reason queda ""
+  }
+
+  if (reason.length < 5) {
+    return NextResponse.json({ error: "El motivo de cancelación es obligatorio (mínimo 5 caracteres)" }, { status: 400 })
+  }
+
   try {
     // Get order details to check status
     const { data: order, error: orderError } = await supabase
@@ -94,6 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               amount: balanceToReverse,
               orderId,
               createdBy: user.id,
+              notes: reason,
             })
 
             console.log(`[Order ${orderId}] Debt reversed: $${balanceToReverse} (of total $${orderDetails.total})`)
@@ -131,12 +145,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Create order history entry
+    const baseReason = wasAssembled ? "Pedido cancelado - Stock y deuda revertidos" : "Pedido cancelado"
     await supabase.from("order_history").insert({
       order_id: orderId,
       previous_status: order.status,
       new_status: "CANCELADO",
       changed_by: user.id,
-      change_reason: wasAssembled ? "Pedido cancelado - Stock y deuda revertidos" : "Pedido cancelado",
+      change_reason: `${baseReason}. Motivo: ${reason}`,
     })
 
     return NextResponse.json({
