@@ -340,6 +340,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     Cuentas Corrientes
                   </Link>
                 </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/credit-notes">
+                    <Receipt className="mr-2 h-4 w-4" />
+                    Notas de Crédito
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
 
