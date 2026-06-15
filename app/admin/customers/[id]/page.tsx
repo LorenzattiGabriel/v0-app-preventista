@@ -28,6 +28,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
+import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 
 const MOVEMENTS_PER_PAGE = 20
@@ -150,6 +151,45 @@ export default async function AdminCustomerDetailPage({
     total: op.order_total,
     balance_due: op.balance_due,
   })) || []
+
+  // Productos activos para el selector de la nota de crédito
+  const { data: productsForCreditNote } = await supabase
+    .from("products")
+    .select("id, name, brand, base_price")
+    .eq("is_active", true)
+    .order("name", { ascending: true })
+
+  // Pedidos ENTREGADOS del cliente (con items) para basar una nota de crédito
+  const { data: deliveredOrdersRaw } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      order_number,
+      invoice_type,
+      order_items (
+        product_id,
+        unit_price,
+        quantity_delivered,
+        quantity_assembled,
+        quantity_requested,
+        products:product_id ( name, brand )
+      )
+    `)
+    .eq("customer_id", customer.id)
+    .eq("status", "ENTREGADO")
+    .order("created_at", { ascending: false })
+
+  const deliveredOrdersForCreditNote = (deliveredOrdersRaw || []).map((o: any) => ({
+    id: o.id,
+    order_number: o.order_number,
+    invoice_type: o.invoice_type,
+    items: (o.order_items || []).map((it: any) => ({
+      productId: it.product_id,
+      productName: `${it.products?.name || "Producto"}${it.products?.brand ? ` ${it.products.brand}` : ""}`.trim(),
+      unitPrice: Number(it.unit_price) || 0,
+      maxQuantity: Number(it.quantity_delivered ?? it.quantity_assembled ?? it.quantity_requested) || 0,
+    })),
+  }))
 
   // Calculate stats
   const totalOrders = orders?.length || 0
@@ -665,6 +705,18 @@ export default async function AdminCustomerDetailPage({
                       />
                     </div>
                   )}
+
+                  {/* Nota de crédito / devolución (basada en un pedido entregado) */}
+                  <div className="pt-2 border-t">
+                    <CreditNoteDialog
+                      customerId={customer.id}
+                      customerName={customer.commercial_name}
+                      customer={customer}
+                      products={productsForCreditNote || []}
+                      deliveredOrders={deliveredOrdersForCreditNote}
+                      triggerLabel="Nota de crédito"
+                    />
+                  </div>
                 </CardContent>
               </Card>
 

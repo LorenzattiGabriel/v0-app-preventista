@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { CancelOrderButton } from "@/components/admin/cancel-order-button"
 import { VoidSaleButton } from "@/components/admin/void-sale-button"
+import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
 import { DownloadOrderReceiptButton } from "@/components/admin/download-order-receipt-button"
 import { EditPaymentMethodDialog } from "@/components/admin/edit-payment-method-dialog"
 
@@ -96,6 +97,13 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   // Get rating if exists
   const { data: rating } = await supabase.from("order_ratings").select("*").eq("order_id", order.id).single()
+
+  // Productos para el selector de la nota de crédito (devoluciones/reemplazos)
+  const { data: productsForCreditNote } = await supabase
+    .from("products")
+    .select("id, name, brand, base_price")
+    .eq("is_active", true)
+    .order("name", { ascending: true })
 
   // Get route if exists
   const { data: routeOrder } = await supabase
@@ -214,6 +222,27 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                   orderId={order.id}
                   orderNumber={order.order_number}
                   status={order.status}
+                />
+              )}
+
+              {/* Nota de crédito / devolución (sobre pedidos entregados) */}
+              {order.status === "ENTREGADO" && (
+                <CreditNoteDialog
+                  customerId={order.customer_id}
+                  customerName={order.customers.commercial_name}
+                  customer={order.customers}
+                  products={productsForCreditNote || []}
+                  order={{
+                    id: order.id,
+                    order_number: order.order_number,
+                    invoice_type: order.invoice_type,
+                    items: (order.order_items || []).map((it: any) => ({
+                      productId: it.product_id,
+                      productName: `${it.products?.name || "Producto"}${it.products?.brand ? ` ${it.products.brand}` : ""}`.trim(),
+                      unitPrice: Number(it.unit_price) || 0,
+                      maxQuantity: Number(it.quantity_delivered ?? it.quantity_assembled ?? it.quantity_requested) || 0,
+                    })),
+                  }}
                 />
               )}
             </div>

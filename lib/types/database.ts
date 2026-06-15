@@ -368,6 +368,50 @@ export interface OrderPayment {
   updated_at: string
 }
 
+// =====================================================
+// NOTAS DE CRÉDITO / DEVOLUCIONES
+// =====================================================
+
+/** Resolución que elige el admin al emitir la nota de crédito. */
+export type CreditNoteResolution = "reemplazo" | "saldo_favor" | "devolucion_dinero"
+
+/** Tipo de línea de una nota de crédito. */
+export type CreditNoteLineType = "devuelto" | "reemplazo"
+
+/** Destino del producto físico devuelto (solo líneas 'devuelto'). */
+export type CreditNoteDisposition = "reintegrar" | "dejar_cliente" | "desechar"
+
+export interface CreditNoteItem {
+  id?: string
+  credit_note_id?: string
+  product_id: string | null
+  product_name: string
+  line_type: CreditNoteLineType
+  quantity: number
+  unit_price: number
+  subtotal: number
+  /** Solo aplica a líneas 'devuelto': qué se hace con el producto devuelto. */
+  disposition?: CreditNoteDisposition | null
+}
+
+export interface CreditNote {
+  id: string
+  credit_note_number: string
+  customer_id: string
+  order_id?: string | null
+  invoice_type?: "A" | "B" | "C" | null
+  resolution_type: CreditNoteResolution
+  /** Si genera movimiento en cuenta corriente (siempre true en 'saldo_favor'). */
+  affects_account: boolean
+  reason: string
+  authorized_by?: string | null
+  amount: number
+  notes?: string | null
+  created_by?: string | null
+  created_at: string
+  items?: CreditNoteItem[]
+}
+
 export interface RouteCashClosure {
   id: string
   route_id: string

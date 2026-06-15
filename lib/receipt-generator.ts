@@ -1,9 +1,9 @@
 import jsPDF from "jspdf"
 
-const ALEF_LOGO_URL =
+export const ALEF_LOGO_URL =
   "https://ojghwcbliucsntrbqvaw.supabase.co/storage/v1/object/public/logos/alef-logo.png"
 
-async function fetchLogoBase64(url: string): Promise<string | null> {
+export async function fetchLogoBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
     if (!res.ok) return null
