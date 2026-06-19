@@ -15,8 +15,14 @@ const toNum = (v: any): number => {
 export interface CreditNoteReturnedItem {
   productId: string | null
   productName: string
+  /** Productos por unidad: unidades devueltas. Por peso: PIEZAS devueltas (se reintegran al stock). */
   quantity: number
+  /** Por unidad: precio por unidad. Por peso: precio por kg. */
   unitPrice: number
+  /** 'peso' = el monto se calcula sobre weightKg × unitPrice. */
+  saleUnit?: "unidad" | "peso" | null
+  /** Kg exactos devueltos (solo saleUnit='peso'). */
+  weightKg?: number
   /** Qué se hace con el producto devuelto: reintegrar al stock, dejar al cliente o desechar. */
   disposition: CreditNoteDisposition
 }
@@ -135,11 +141,16 @@ class CreditNotesService {
       return { success: false, error: "El motivo es obligatorio" }
     }
 
+    // Subtotal de una línea devuelta:
+    //  - por peso: kg exactos × precio/kg
+    //  - por unidad: cantidad × precio/unidad
+    const lineSubtotal = (it: CreditNoteReturnedItem) =>
+      it.saleUnit === "peso"
+        ? toNum(it.weightKg) * toNum(it.unitPrice)
+        : toNum(it.quantity) * toNum(it.unitPrice)
+
     // Monto total = suma de los productos devueltos
-    const amount = returnedItems.reduce(
-      (sum, it) => sum + toNum(it.quantity) * toNum(it.unitPrice),
-      0,
-    )
+    const amount = returnedItems.reduce((sum, it) => sum + lineSubtotal(it), 0)
 
     const affectsAccount = this.shouldAffectAccount(
       input.resolutionType,
@@ -186,7 +197,9 @@ class CreditNotesService {
         line_type: "devuelto" as const,
         quantity: toNum(it.quantity),
         unit_price: toNum(it.unitPrice),
-        subtotal: toNum(it.quantity) * toNum(it.unitPrice),
+        subtotal: lineSubtotal(it),
+        sale_unit: it.saleUnit ?? null,
+        returned_weight_kg: it.saleUnit === "peso" ? toNum(it.weightKg) : null,
         disposition: it.disposition,
       })),
       ...replacementItems.map((it) => ({
@@ -197,6 +210,8 @@ class CreditNotesService {
         quantity: toNum(it.quantity),
         unit_price: toNum(it.unitPrice),
         subtotal: toNum(it.quantity) * toNum(it.unitPrice),
+        sale_unit: null,
+        returned_weight_kg: null,
         disposition: null,
       })),
     ]

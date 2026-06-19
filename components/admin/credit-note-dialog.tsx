@@ -38,8 +38,14 @@ interface ProductOption {
 interface OrderItemOption {
   productId: string
   productName: string
+  /** Por unidad: precio por unidad. Por peso: precio por kg. */
   unitPrice: number
+  /** Tope a devolver: por unidad = unidades; por peso = PIEZAS entregadas. */
   maxQuantity: number
+  /** 'peso' habilita el input de kg para la devolución. */
+  saleUnit?: "unidad" | "peso" | null
+  /** Kg entregados de la línea (tope del peso a devolver). Solo saleUnit='peso'. */
+  deliveredKg?: number | null
 }
 
 /** Pedido entregado sobre el que se puede emitir la NC. */
@@ -79,7 +85,13 @@ interface ReturnLine {
   unitPrice: number
   maxQuantity: number
   include: boolean
+  /** Por unidad: unidades. Por peso: PIEZAS devueltas. */
   quantity: string
+  saleUnit: "unidad" | "peso"
+  /** Kg entregados (tope del peso a devolver). Solo 'peso'. */
+  maxWeightKg: number
+  /** Kg exactos a devolver (raw string para aceptar coma). Solo 'peso'. */
+  weight: string
   disposition: CreditNoteDisposition
 }
 
@@ -92,9 +104,12 @@ interface ReplacementLine {
 }
 
 const toNum = (v: string | number) => {
-  const n = typeof v === "number" ? v : parseFloat(v)
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."))
   return Number.isFinite(n) ? n : 0
 }
+
+/** Formatea kg con coma decimal (locale AR). */
+const fmtKg = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })
 
 const RESOLUTION_OPTIONS: { value: CreditNoteResolution; label: string; hint: string }[] = [
   { value: "reemplazo", label: "Reemplazo de producto", hint: "Se entrega otro producto. No toca la cuenta corriente." },
@@ -144,23 +159,31 @@ export function CreditNoteDialog({
       return
     }
     setReturnLines(
-      selectedOrder.items.map((it) => ({
-        productId: it.productId,
-        productName: it.productName,
-        unitPrice: it.unitPrice,
-        maxQuantity: it.maxQuantity,
-        include: false,
-        quantity: it.maxQuantity ? String(it.maxQuantity) : "",
-        disposition: "reintegrar" as CreditNoteDisposition,
-      })),
+      selectedOrder.items.map((it) => {
+        const saleUnit: "unidad" | "peso" = it.saleUnit === "peso" ? "peso" : "unidad"
+        const maxWeightKg = Number(it.deliveredKg) || 0
+        return {
+          productId: it.productId,
+          productName: it.productName,
+          unitPrice: it.unitPrice,
+          maxQuantity: it.maxQuantity,
+          include: false,
+          quantity: it.maxQuantity ? String(it.maxQuantity) : "",
+          saleUnit,
+          maxWeightKg,
+          weight: saleUnit === "peso" && maxWeightKg ? fmtKg(maxWeightKg) : "",
+          disposition: "reintegrar" as CreditNoteDisposition,
+        }
+      }),
     )
   }, [selectedOrderId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Monto de una línea: por peso = kg × precio/kg; por unidad = cantidad × precio. */
+  const lineAmount = (l: ReturnLine) =>
+    l.saleUnit === "peso" ? toNum(l.weight) * toNum(l.unitPrice) : toNum(l.quantity) * toNum(l.unitPrice)
+
   const amount = useMemo(
-    () =>
-      returnLines
-        .filter((l) => l.include)
-        .reduce((sum, l) => sum + toNum(l.quantity) * toNum(l.unitPrice), 0),
+    () => returnLines.filter((l) => l.include).reduce((sum, l) => sum + lineAmount(l), 0),
     [returnLines],
   )
 
@@ -201,26 +224,37 @@ export function CreditNoteDialog({
       return
     }
 
-    const returnedItems = returnLines
-      .filter((l) => l.include && toNum(l.quantity) > 0)
-      .map((l) => ({
-        productId: l.productId,
-        productName: l.productName,
-        quantity: toNum(l.quantity),
-        unitPrice: toNum(l.unitPrice),
-        disposition: l.disposition,
-      }))
+    const includedLines = returnLines.filter(
+      (l) => l.include && (l.saleUnit === "peso" ? toNum(l.weight) > 0 : toNum(l.quantity) > 0),
+    )
+
+    const returnedItems = includedLines.map((l) => ({
+      productId: l.productId,
+      productName: l.productName,
+      // por peso: quantity = PIEZAS (van al stock); por unidad: unidades
+      quantity: toNum(l.quantity),
+      unitPrice: toNum(l.unitPrice),
+      saleUnit: l.saleUnit,
+      weightKg: l.saleUnit === "peso" ? toNum(l.weight) : undefined,
+      disposition: l.disposition,
+    }))
 
     if (returnedItems.length === 0) {
       setError("Marcá al menos un producto del pedido para devolver")
       return
     }
-    // Validar que no se devuelva más de lo del pedido
-    const overMax = returnLines.find(
-      (l) => l.include && l.maxQuantity > 0 && toNum(l.quantity) > l.maxQuantity,
+    // Validar que no se devuelva más de lo entregado
+    const overWeight = includedLines.find(
+      (l) => l.saleUnit === "peso" && l.maxWeightKg > 0 && toNum(l.weight) > l.maxWeightKg,
     )
+    if (overWeight) {
+      setError(`No podés devolver más de ${fmtKg(overWeight.maxWeightKg)} kg de "${overWeight.productName}"`)
+      return
+    }
+    const overMax = includedLines.find((l) => l.maxQuantity > 0 && toNum(l.quantity) > l.maxQuantity)
     if (overMax) {
-      setError(`No podés devolver más de ${overMax.maxQuantity} de "${overMax.productName}"`)
+      const unidad = overMax.saleUnit === "peso" ? "piezas" : "unidades"
+      setError(`No podés devolver más de ${overMax.maxQuantity} ${unidad} de "${overMax.productName}"`)
       return
     }
     if (reason.trim().length < 5) {
@@ -284,7 +318,10 @@ export function CreditNoteDialog({
               line_type: "devuelto" as const,
               quantity: it.quantity,
               unit_price: it.unitPrice,
-              subtotal: it.quantity * it.unitPrice,
+              subtotal:
+                it.saleUnit === "peso" ? (it.weightKg ?? 0) * it.unitPrice : it.quantity * it.unitPrice,
+              sale_unit: it.saleUnit ?? null,
+              returned_weight_kg: it.saleUnit === "peso" ? (it.weightKg ?? 0) : null,
               disposition: it.disposition,
             })),
             ...replacementItems.map((it) => ({
@@ -294,6 +331,8 @@ export function CreditNoteDialog({
               quantity: it.quantity,
               unit_price: it.unitPrice,
               subtotal: it.quantity * it.unitPrice,
+              sale_unit: null,
+              returned_weight_kg: null,
               disposition: null,
             })),
           ],
@@ -394,46 +433,71 @@ export function CreditNoteDialog({
               <p className="text-xs text-muted-foreground">El pedido no tiene productos.</p>
             ) : (
               <div className="space-y-2">
-                {returnLines.map((l) => (
-                  <div key={l.productId} className="grid grid-cols-12 gap-2 items-center border rounded-md p-2">
-                    <div className="col-span-1 flex justify-center">
-                      <Checkbox
-                        checked={l.include}
-                        onCheckedChange={(c) => updateReturn(l.productId, { include: c as boolean })}
-                      />
-                    </div>
-                    <div className="col-span-4 text-sm truncate" title={l.productName}>
-                      {l.productName}
-                      <span className="block text-xs text-muted-foreground">
-                        ${l.unitPrice.toFixed(2)} · pedido: {l.maxQuantity}
-                      </span>
-                    </div>
-                    <Input
-                      className="col-span-2 h-8"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Cant."
-                      value={l.quantity}
-                      disabled={!l.include}
-                      onChange={(e) => updateReturn(l.productId, { quantity: e.target.value })}
-                    />
-                    <div className="col-span-5">
-                      <Select
-                        value={l.disposition}
-                        onValueChange={(v) => updateReturn(l.productId, { disposition: v as CreditNoteDisposition })}
+                {returnLines.map((l) => {
+                  const isWeight = l.saleUnit === "peso"
+                  return (
+                  <div key={l.productId} className="border rounded-md p-2 space-y-2">
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-1 flex justify-center">
+                        <Checkbox
+                          checked={l.include}
+                          onCheckedChange={(c) => updateReturn(l.productId, { include: c as boolean })}
+                        />
+                      </div>
+                      <div className="col-span-4 text-sm truncate" title={l.productName}>
+                        {l.productName}
+                        <span className="block text-xs text-muted-foreground">
+                          {isWeight
+                            ? `$${l.unitPrice.toFixed(2)}/kg · entregado: ${l.maxQuantity} pza`
+                            : `$${l.unitPrice.toFixed(2)} · pedido: ${l.maxQuantity}`}
+                        </span>
+                      </div>
+                      <Input
+                        className="col-span-2 h-8"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder={isWeight ? "Piezas" : "Cant."}
+                        value={l.quantity}
                         disabled={!l.include}
-                      >
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {DISPOSITION_OPTIONS.map((d) => (
-                            <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(e) => updateReturn(l.productId, { quantity: e.target.value })}
+                      />
+                      <div className="col-span-5">
+                        <Select
+                          value={l.disposition}
+                          onValueChange={(v) => updateReturn(l.productId, { disposition: v as CreditNoteDisposition })}
+                          disabled={!l.include}
+                        >
+                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {DISPOSITION_OPTIONS.map((d) => (
+                              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+
+                    {/* Productos por peso: kg exactos a devolver (definen el monto) */}
+                    {isWeight && l.include && (
+                      <div className="grid grid-cols-12 gap-2 items-center pl-8">
+                        <Label className="col-span-3 text-xs text-muted-foreground">Kg a devolver</Label>
+                        <Input
+                          className="col-span-3 h-8"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Kg"
+                          value={l.weight}
+                          onChange={(e) => updateReturn(l.productId, { weight: e.target.value })}
+                        />
+                        <span className="col-span-6 text-xs text-muted-foreground">
+                          {l.maxWeightKg > 0 && `de ${fmtKg(l.maxWeightKg)} kg · `}
+                          acredita <strong>${lineAmount(l).toFixed(2)}</strong>
+                        </span>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground">

@@ -172,6 +172,8 @@ export default async function AdminCustomerDetailPage({
         quantity_delivered,
         quantity_assembled,
         quantity_requested,
+        sale_unit,
+        assembled_weight_kg,
         products:product_id ( name, brand )
       )
     `)
@@ -188,6 +190,8 @@ export default async function AdminCustomerDetailPage({
       productName: `${it.products?.name || "Producto"}${it.products?.brand ? ` ${it.products.brand}` : ""}`.trim(),
       unitPrice: Number(it.unit_price) || 0,
       maxQuantity: Number(it.quantity_delivered ?? it.quantity_assembled ?? it.quantity_requested) || 0,
+      saleUnit: it.sale_unit ?? "unidad",
+      deliveredKg: Number(it.assembled_weight_kg) || 0,
     })),
   }))
 

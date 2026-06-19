@@ -40,6 +40,8 @@ const fmtCurrency = (n: number) => `$${(Number(n) || 0).toFixed(2)}`
 
 const fmtQty = (n: number) => (Number.isInteger(n) ? n.toString() : Number(n).toFixed(2))
 
+const fmtKg = (n: number) => Number(n).toLocaleString("es-AR", { maximumFractionDigits: 3 })
+
 export const generateCreditNote = async (creditNote: CreditNoteForPdf) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.width
@@ -164,16 +166,26 @@ export const generateCreditNote = async (creditNote: CreditNoteForPdf) => {
       doc.addPage()
       yPos = 20
     }
+    const isWeight = item.sale_unit === "peso"
     doc.setFontSize(8)
     doc.text(item.product_name.substring(0, 40), col1, yPos)
-    doc.text(fmtQty(item.quantity), colQty, yPos, { align: "center" })
-    doc.text(fmtCurrency(item.unit_price), colPrice, yPos, { align: "right" })
+    doc.text(isWeight ? `${fmtQty(item.quantity)} pza` : fmtQty(item.quantity), colQty, yPos, { align: "center" })
+    doc.text(
+      isWeight ? `${fmtCurrency(item.unit_price)}/kg` : fmtCurrency(item.unit_price),
+      colPrice,
+      yPos,
+      { align: "right" },
+    )
     doc.text(fmtCurrency(item.subtotal), colTotal, yPos, { align: "right" })
-    if (extra) {
+    const extras = [
+      isWeight && item.returned_weight_kg ? `${fmtKg(item.returned_weight_kg)} kg` : null,
+      extra,
+    ].filter(Boolean)
+    if (extras.length) {
       yPos += 4
       doc.setFontSize(7)
       doc.setTextColor(120)
-      doc.text(`  ${extra}`, col1, yPos)
+      doc.text(`  ${extras.join(" · ")}`, col1, yPos)
       doc.setTextColor(0)
     }
     yPos += 6

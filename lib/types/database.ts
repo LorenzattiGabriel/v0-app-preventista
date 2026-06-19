@@ -387,9 +387,15 @@ export interface CreditNoteItem {
   product_id: string | null
   product_name: string
   line_type: CreditNoteLineType
+  /** Productos por unidad: unidades. Productos por peso: PIEZAS devueltas (van al stock). */
   quantity: number
+  /** Por unidad: precio por unidad. Por peso: precio por kg cobrado. */
   unit_price: number
   subtotal: number
+  /** 'peso' = el subtotal se calcula sobre returned_weight_kg × unit_price. */
+  sale_unit?: "unidad" | "peso" | null
+  /** Kg exactos devueltos (solo sale_unit='peso'). */
+  returned_weight_kg?: number | null
   /** Solo aplica a líneas 'devuelto': qué se hace con el producto devuelto. */
   disposition?: CreditNoteDisposition | null
 }
