@@ -86,6 +86,7 @@ export default async function MovimientosPage({
 
   const filters: Filters = {
     search: params.search,
+    partyId: params.partyId,
     source: params.source as Filters["source"],
     direction: params.direction as Filters["direction"],
     channel: params.channel as Filters["channel"],
@@ -95,6 +96,31 @@ export default async function MovimientosPage({
   }
 
   const service = createFinancialMovementsService(supabase)
+
+  // Opciones del combobox: clientes activos + proveedores
+  const [{ data: customersRaw }, { data: suppliersRaw }] = await Promise.all([
+    supabase
+      .from("customers")
+      .select("id, commercial_name, code")
+      .eq("is_active", true)
+      .order("commercial_name", { ascending: true }),
+    supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
+  ])
+
+  const parties = [
+    ...(customersRaw || []).map((c: any) => ({
+      id: c.id,
+      name: c.commercial_name,
+      code: c.code,
+      type: "cliente" as const,
+    })),
+    ...(suppliersRaw || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      type: "proveedor" as const,
+    })),
+  ]
+
   const { rows, count, totalPages, totals } = await service.listMovements(filters, page)
 
   return (
@@ -221,8 +247,10 @@ export default async function MovimientosPage({
             </CardHeader>
             <CardContent className="space-y-4">
               <FinancialMovementsFilters
+                parties={parties}
                 defaults={{
                   search: params.search,
+                  partyId: params.partyId,
                   source: params.source,
                   direction: params.direction,
                   channel: params.channel,

@@ -78,7 +78,7 @@ class FinancialMovementsService {
     if (filters.search) {
       const term = filters.search.replace(/[%,]/g, "")
       query = query.or(
-        `party_name.ilike.%${term}%,description.ilike.%${term}%,notes.ilike.%${term}%,order_number.ilike.%${term}%`,
+        `description.ilike.%${term}%,notes.ilike.%${term}%,order_number.ilike.%${term}%`,
       )
     }
     return query

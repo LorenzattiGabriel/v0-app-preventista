@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,10 +13,13 @@ import {
 } from "@/components/ui/select"
 import { Search, RotateCcw } from "lucide-react"
 import Link from "next/link"
+import { PartyCombobox, type PartyOption } from "@/components/admin/party-combobox"
 
 interface FinancialMovementsFiltersProps {
+  parties: PartyOption[]
   defaults: {
     search?: string
+    partyId?: string
     source?: string
     direction?: string
     channel?: string
@@ -34,30 +38,37 @@ const PAYMENT_METHODS = [
   "Otro",
 ]
 
-export function FinancialMovementsFilters({ defaults }: FinancialMovementsFiltersProps) {
+export function FinancialMovementsFilters({ parties, defaults }: FinancialMovementsFiltersProps) {
+  const [dateFrom, setDateFrom] = useState(defaults.dateFrom || "")
+  const [dateTo, setDateTo] = useState(defaults.dateTo || "")
+
   return (
     <form className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
       <div className="space-y-1.5 lg:col-span-2">
-        <Label className="text-xs text-muted-foreground">Buscar</Label>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            name="search"
-            placeholder="Cliente, proveedor, descripción, N° pedido..."
-            className="pl-10"
-            defaultValue={defaults.search}
-          />
-        </div>
+        <Label className="text-xs text-muted-foreground">Cliente / Proveedor</Label>
+        <PartyCombobox parties={parties} defaultPartyId={defaults.partyId} />
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Desde</Label>
-        <Input type="date" name="dateFrom" defaultValue={defaults.dateFrom} />
+        <Input
+          type="date"
+          name="dateFrom"
+          value={dateFrom}
+          max={dateTo || undefined}
+          onChange={(e) => setDateFrom(e.target.value)}
+        />
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Hasta</Label>
-        <Input type="date" name="dateTo" defaultValue={defaults.dateTo} />
+        <Input
+          type="date"
+          name="dateTo"
+          value={dateTo}
+          min={dateFrom || undefined}
+          onChange={(e) => setDateTo(e.target.value)}
+        />
       </div>
 
       <div className="space-y-1.5">
@@ -120,7 +131,20 @@ export function FinancialMovementsFilters({ defaults }: FinancialMovementsFilter
         </Select>
       </div>
 
-      <div className="flex items-end gap-2 md:col-span-3 lg:col-span-4">
+      <div className="space-y-1.5 lg:col-span-2">
+        <Label className="text-xs text-muted-foreground">Texto libre (descripción, N° pedido, notas)</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            name="search"
+            placeholder="Buscar en descripción, pedido o notas..."
+            className="pl-10"
+            defaultValue={defaults.search}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-end gap-2 md:col-span-3 lg:col-span-2">
         <Button type="submit">
           <Search className="h-4 w-4 mr-2" />
           Aplicar filtros

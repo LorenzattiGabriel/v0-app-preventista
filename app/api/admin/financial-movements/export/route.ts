@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
   const p = url.searchParams
   const filters: FinancialMovementsFilters = {
     search: p.get("search") || undefined,
+    partyId: p.get("partyId") || undefined,
     source: (p.get("source") as FinancialMovementsFilters["source"]) || undefined,
     direction: (p.get("direction") as FinancialMovementsFilters["direction"]) || undefined,
     channel: (p.get("channel") as FinancialMovementsFilters["channel"]) || undefined,
