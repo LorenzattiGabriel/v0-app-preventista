@@ -115,7 +115,15 @@ export default async function AdminCuentasCorrientesPage({
 
       <main className="flex-1 bg-muted/40 p-6">
         <div className="container mx-auto space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex rounded-md border bg-background p-1">
+              <Button variant="default" size="sm" asChild>
+                <Link href="/admin/cuentas-corrientes">Saldos</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/admin/cuentas-corrientes/movimientos">Movimientos</Link>
+              </Button>
+            </div>
             <Button variant="outline" asChild>
               <Link href="/admin/dashboard">
                 <ArrowLeft className="mr-2 h-4 w-4" />

@@ -341,6 +341,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/cuentas-corrientes/movimientos">
+                    <ArrowDownRight className="mr-2 h-4 w-4" />
+                    Movimientos financieros
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/credit-notes">
                     <Receipt className="mr-2 h-4 w-4" />
                     Notas de Crédito
