@@ -258,6 +258,17 @@ export default async function MovimientosPage({
             </CardHeader>
             <CardContent className="space-y-4">
               <FinancialMovementsFilters
+                key={[
+                  params.search,
+                  params.partyId,
+                  params.routeId,
+                  params.source,
+                  params.direction,
+                  params.channel,
+                  params.paymentMethod,
+                  params.dateFrom,
+                  params.dateTo,
+                ].join("|")}
                 parties={parties}
                 routes={routes}
                 defaults={{
