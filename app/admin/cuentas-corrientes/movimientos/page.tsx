@@ -87,6 +87,7 @@ export default async function MovimientosPage({
   const filters: Filters = {
     search: params.search,
     partyId: params.partyId,
+    routeId: params.routeId,
     source: params.source as Filters["source"],
     direction: params.direction as Filters["direction"],
     channel: params.channel as Filters["channel"],
@@ -97,14 +98,18 @@ export default async function MovimientosPage({
 
   const service = createFinancialMovementsService(supabase)
 
-  // Opciones del combobox: clientes activos + proveedores
-  const [{ data: customersRaw }, { data: suppliersRaw }] = await Promise.all([
+  // Opciones de los combobox: clientes activos + proveedores + rutas
+  const [{ data: customersRaw }, { data: suppliersRaw }, { data: routesRaw }] = await Promise.all([
     supabase
       .from("customers")
       .select("id, commercial_name, code")
       .eq("is_active", true)
       .order("commercial_name", { ascending: true }),
     supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
+    supabase
+      .from("routes")
+      .select("id, route_code, scheduled_date")
+      .order("scheduled_date", { ascending: false }),
   ])
 
   const parties = [
@@ -120,6 +125,12 @@ export default async function MovimientosPage({
       type: "proveedor" as const,
     })),
   ]
+
+  const routes = (routesRaw || []).map((r: any) => ({
+    id: r.id,
+    code: r.route_code,
+    date: r.scheduled_date,
+  }))
 
   const { rows, count, totalPages, totals } = await service.listMovements(filters, page)
 
@@ -248,9 +259,11 @@ export default async function MovimientosPage({
             <CardContent className="space-y-4">
               <FinancialMovementsFilters
                 parties={parties}
+                routes={routes}
                 defaults={{
                   search: params.search,
                   partyId: params.partyId,
+                  routeId: params.routeId,
                   source: params.source,
                   direction: params.direction,
                   channel: params.channel,
@@ -305,7 +318,14 @@ export default async function MovimientosPage({
                               </TableCell>
                               <TableCell>
                                 {m.channel === "ruta" ? (
-                                  <Badge variant="default">🚚 Ruta</Badge>
+                                  <div className="flex flex-col gap-0.5">
+                                    <Badge variant="default" className="w-fit">🚚 Ruta</Badge>
+                                    {m.route_code && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {m.route_code}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : m.channel === "fuera_ruta" ? (
                                   <Badge variant="secondary">🏢 Fuera de ruta</Badge>
                                 ) : (

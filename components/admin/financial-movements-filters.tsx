@@ -14,12 +14,15 @@ import {
 import { Search, RotateCcw } from "lucide-react"
 import Link from "next/link"
 import { PartyCombobox, type PartyOption } from "@/components/admin/party-combobox"
+import { RouteCombobox, type RouteOption } from "@/components/admin/route-combobox"
 
 interface FinancialMovementsFiltersProps {
   parties: PartyOption[]
+  routes: RouteOption[]
   defaults: {
     search?: string
     partyId?: string
+    routeId?: string
     source?: string
     direction?: string
     channel?: string
@@ -38,7 +41,7 @@ const PAYMENT_METHODS = [
   "Otro",
 ]
 
-export function FinancialMovementsFilters({ parties, defaults }: FinancialMovementsFiltersProps) {
+export function FinancialMovementsFilters({ parties, routes, defaults }: FinancialMovementsFiltersProps) {
   const [dateFrom, setDateFrom] = useState(defaults.dateFrom || "")
   const [dateTo, setDateTo] = useState(defaults.dateTo || "")
 
@@ -47,6 +50,11 @@ export function FinancialMovementsFilters({ parties, defaults }: FinancialMoveme
       <div className="space-y-1.5 lg:col-span-2">
         <Label className="text-xs text-muted-foreground">Cliente / Proveedor</Label>
         <PartyCombobox parties={parties} defaultPartyId={defaults.partyId} />
+      </div>
+
+      <div className="space-y-1.5 lg:col-span-2">
+        <Label className="text-xs text-muted-foreground">Reparto / Ruta</Label>
+        <RouteCombobox routes={routes} defaultRouteId={defaults.routeId} />
       </div>
 
       <div className="space-y-1.5">

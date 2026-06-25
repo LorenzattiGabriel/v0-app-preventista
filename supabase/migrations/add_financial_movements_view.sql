@@ -58,11 +58,13 @@ SELECT
   m.order_id                                              AS order_id,
   o.order_number                                          AS order_number,
   m.route_id                                              AS route_id,
+  r.route_code                                            AS route_code,
   m.notes                                                 AS notes,
   m.created_by                                            AS created_by
 FROM customer_account_movements m
 LEFT JOIN customers c ON c.id = m.customer_id
 LEFT JOIN orders o    ON o.id = m.order_id
+LEFT JOIN routes r    ON r.id = m.route_id
 
 UNION ALL
 
@@ -84,6 +86,7 @@ SELECT
   NULL::uuid                                              AS order_id,
   NULL::text                                              AS order_number,
   NULL::uuid                                              AS route_id,
+  NULL::text                                              AS route_code,
   e.notes                                                 AS notes,
   e.created_by                                            AS created_by
 FROM expenses e

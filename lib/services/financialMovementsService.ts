@@ -23,6 +23,7 @@ export interface FinancialMovementRow {
   order_id: string | null
   order_number: string | null
   route_id: string | null
+  route_code: string | null
   notes: string | null
   created_by: string | null
 }
@@ -34,6 +35,7 @@ export interface FinancialMovementsFilters {
   direction?: MovementDirection | "all"
   channel?: MovementChannel | "all"
   partyId?: string
+  routeId?: string
   paymentMethod?: string | "all"
   search?: string
 }
@@ -72,6 +74,7 @@ class FinancialMovementsService {
     if (filters.direction && filters.direction !== "all") query = query.eq("direction", filters.direction)
     if (filters.channel && filters.channel !== "all") query = query.eq("channel", filters.channel)
     if (filters.partyId) query = query.eq("party_id", filters.partyId)
+    if (filters.routeId) query = query.eq("route_id", filters.routeId)
     if (filters.paymentMethod && filters.paymentMethod !== "all") {
       query = query.eq("payment_method", filters.paymentMethod)
     }

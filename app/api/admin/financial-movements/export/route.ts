@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
   const filters: FinancialMovementsFilters = {
     search: p.get("search") || undefined,
     partyId: p.get("partyId") || undefined,
+    routeId: p.get("routeId") || undefined,
     source: (p.get("source") as FinancialMovementsFilters["source"]) || undefined,
     direction: (p.get("direction") as FinancialMovementsFilters["direction"]) || undefined,
     channel: (p.get("channel") as FinancialMovementsFilters["channel"]) || undefined,
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
     "Concepto",
     "Descripción",
     "Canal",
+    "Reparto",
     "Método",
     "Ingreso",
     "Egreso",
@@ -110,6 +112,7 @@ export async function GET(request: NextRequest) {
         csvCell(CONCEPT_LABELS[m.concept || ""] || m.concept),
         csvCell(m.description),
         csvCell(CHANNEL_LABELS[m.channel] || m.channel),
+        csvCell(m.route_code),
         csvCell(m.payment_method),
         csvCell(isIngreso ? m.amount : ""),
         csvCell(!isIngreso ? m.amount : ""),
