@@ -31,6 +31,7 @@ import {
 } from "lucide-react"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { InactiveThresholdFilter } from "@/components/admin/inactive-threshold-filter"
+import { CollapsibleSection } from "@/components/admin/collapsible-section"
 import {
   createCustomerStatsService,
   CUSTOMER_STATS_PER_PAGE,
@@ -138,6 +139,12 @@ export default async function CustomerStatsPage({
           </div>
 
           {/* KPIs */}
+          <CollapsibleSection
+            title="Resumen general"
+            description="Activos, nuevos, facturación y ticket promedio"
+            storageKey="stats-kpis"
+            icon={<TrendingUp className="h-5 w-5 text-muted-foreground" />}
+          >
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
             <Card>
               <CardHeader className="pb-2">
@@ -208,8 +215,15 @@ export default async function CustomerStatsPage({
               </CardContent>
             </Card>
           </div>
+          </CollapsibleSection>
 
           {/* Rankings */}
+          <CollapsibleSection
+            title="Rankings de clientes"
+            description="Top facturación, pedidos, ticket y los que dejaron de pedir"
+            storageKey="stats-rankings"
+            icon={<Trophy className="h-5 w-5 text-amber-500" />}
+          >
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
@@ -261,13 +275,18 @@ export default async function CustomerStatsPage({
               </CardContent>
             </Card>
           </div>
+          </CollapsibleSection>
 
           {/* Composición */}
+          <CollapsibleSection
+            title="Composición de la cartera"
+            description="Mayoristas/minoristas, activos y por localidad"
+            storageKey="stats-composicion"
+            defaultOpen={false}
+            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+          >
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Composición de la cartera</CardTitle>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid gap-4 sm:grid-cols-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Mayoristas</div>
@@ -297,20 +316,17 @@ export default async function CustomerStatsPage({
               )}
             </CardContent>
           </Card>
+          </CollapsibleSection>
 
           {/* Clientes inactivos (lista) */}
+          <CollapsibleSection
+            title="Clientes que dejaron de pedir"
+            description={`No compran hace ${inactiveDays} días o más · seguimiento y reactivación`}
+            storageKey="stats-inactivos"
+            icon={<AlertTriangle className="h-5 w-5 text-amber-500" />}
+          >
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-500" />
-                Clientes que dejaron de pedir
-              </CardTitle>
-              <CardDescription>
-                Clientes que alguna vez pidieron y no compran hace {inactiveDays} días o más. Ideal para
-                seguimiento y reactivación.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <InactiveThresholdFilter defaultValue={inactiveDays} />
 
               {inactive.rows.length > 0 ? (
@@ -404,6 +420,7 @@ export default async function CustomerStatsPage({
               )}
             </CardContent>
           </Card>
+          </CollapsibleSection>
         </div>
       </main>
     </div>

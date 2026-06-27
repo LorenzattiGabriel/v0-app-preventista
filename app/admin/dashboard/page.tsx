@@ -11,6 +11,7 @@ import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/date
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
 import { RatingsDateFilter } from "@/components/admin/ratings-date-filter"
+import { CollapsibleSection } from "@/components/admin/collapsible-section"
 import { Suspense } from "react"
 
 interface SearchParams {
@@ -175,6 +176,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
             </Link>
           </div>
 
+          <CollapsibleSection
+            title="Métricas operativas"
+            description="Pedidos, entregas, rutas y más"
+            storageKey="metricas"
+            icon={<Package className="h-5 w-5 text-muted-foreground" />}
+          >
           <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -253,7 +260,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               </CardContent>
             </Card>
           </div>
+          </CollapsibleSection>
 
+          <CollapsibleSection
+            title="Accesos y gestión"
+            description="Rutas, pedidos, clientes, productos y configuración"
+            storageKey="accesos"
+            icon={<Settings className="h-5 w-5 text-muted-foreground" />}
+          >
           <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2">
             <Card>
               <CardHeader>
@@ -391,6 +405,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   <Link href="/admin/customers">Ver Clientes</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full bg-transparent">
+                  <Link href="/admin/customers/estadisticas">
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    Estadísticas de Clientes
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full bg-transparent">
                   <Link href="/admin/cuentas-corrientes">
                     <Wallet className="mr-2 h-4 w-4" />
                     Cuentas Corrientes
@@ -462,31 +482,33 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               </CardContent>
             </Card>
           </div>
+          </CollapsibleSection>
 
           {/* Customer Satisfaction Metrics */}
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-semibold tracking-tight">Satisfacción del Cliente</h3>
-              <p className="text-muted-foreground">Métricas de calificaciones y experiencia del cliente</p>
-            </div>
-
+          <CollapsibleSection
+            title="Satisfacción del Cliente"
+            description="Métricas de calificaciones y experiencia del cliente"
+            storageKey="satisfaccion"
+            defaultOpen={false}
+            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+          >
             <div className="grid gap-6 lg:grid-cols-4">
               <div className="lg:col-span-1">
                 <RatingsDateFilter />
               </div>
               <div className="lg:col-span-3">
-                <Suspense 
+                <Suspense
                   key={`${params.start_date}-${params.end_date}`}
                   fallback={<div className="text-center py-8 text-muted-foreground">Cargando métricas...</div>}
                 >
-                  <RatingsMetrics 
-                    startDate={params.start_date} 
+                  <RatingsMetrics
+                    startDate={params.start_date}
                     endDate={params.end_date}
                   />
                 </Suspense>
               </div>
             </div>
-          </div>
+          </CollapsibleSection>
         </div>
       </main>
     </div>
