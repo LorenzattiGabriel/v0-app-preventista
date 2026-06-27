@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2 } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
+import { createCustomerStatsService, DEFAULT_INACTIVE_DAYS } from "@/lib/services/customerStatsService"
 import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
@@ -95,6 +96,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     .eq("requires_invoice", true)
     .or("is_invoiced.is.null,is_invoiced.eq.false")
 
+  // Alertas de clientes: inactivos (no piden hace >= umbral) y con deuda
+  const customerStatsService = createCustomerStatsService(supabase)
+  const customerAlerts = await customerStatsService.getAlerts(DEFAULT_INACTIVE_DAYS)
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-background">
@@ -117,6 +122,57 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
           <div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Panel Administrativo</h2>
             <p className="text-sm md:text-base text-muted-foreground">Gestión completa del sistema</p>
+          </div>
+
+          {/* Alertas de seguimiento de clientes */}
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <Link href={`/admin/customers/estadisticas?inactiveDays=${DEFAULT_INACTIVE_DAYS}`}>
+              <Card className={`h-full transition-colors hover:bg-muted/50 ${customerAlerts.inactiveCount > 0 ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/20" : ""}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Clientes inactivos</CardTitle>
+                  <Clock className={`h-4 w-4 ${customerAlerts.inactiveCount > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${customerAlerts.inactiveCount > 0 ? "text-amber-600" : ""}`}>
+                    {customerAlerts.inactiveCount}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    No piden hace ≥{DEFAULT_INACTIVE_DAYS} días · ver seguimiento
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/admin/cuentas-corrientes?balance=debt">
+              <Card className={`h-full transition-colors hover:bg-muted/50 ${customerAlerts.debtCount > 0 ? "border-red-300 bg-red-50/60 dark:bg-red-950/20" : ""}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Clientes con deuda</CardTitle>
+                  <Wallet className={`h-4 w-4 ${customerAlerts.debtCount > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${customerAlerts.debtCount > 0 ? "text-red-600" : ""}`}>
+                    {customerAlerts.debtCount}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    ${customerAlerts.totalDebt.toLocaleString("es-AR", { maximumFractionDigits: 0 })} a cobrar
+                    {customerAlerts.overdueCount > 0 ? ` · ${customerAlerts.overdueCount} vencidos` : ""}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/admin/customers/estadisticas">
+              <Card className="h-full transition-colors hover:bg-muted/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Estadísticas de clientes</CardTitle>
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">Ver</div>
+                  <p className="text-xs text-muted-foreground">Rankings, nuevos y composición</p>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
