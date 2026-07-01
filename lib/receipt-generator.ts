@@ -99,6 +99,7 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   // Table Body
   doc.setFont("helvetica", "normal")
   const items = order.order_items || []
+  let subtotalShown = 0 // suma de los renglones tal como se imprimen (para mostrar el descuento)
 
   items.forEach((item: any) => {
     const p = item.products || {}
@@ -123,6 +124,8 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
       yPos = 20
     }
 
+    subtotalShown += linePrice
+
     doc.text(productName, col1, yPos)
     doc.text(qtyText, col2 + 2, yPos, { align: "center" })
     doc.text(`$${linePrice.toFixed(2)}`, col3, yPos, { align: "right" })
@@ -134,11 +137,23 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   yPos += 8
 
   // --- Totals ---
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(11)
   const total = Number(order.total) || 0
   const collected = order.was_collected ? (Number(order.collected_amount) || 0) : 0
 
+  // Si el total cobrado es menor a la suma de los renglones, mostramos el descuento
+  // para que la boleta cuadre (Subtotal - Descuento = Total).
+  const discountShown = subtotalShown - total
+  if (discountShown > 0.01) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text(`Subtotal: $${subtotalShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 6
+    doc.text(`Descuento: -$${discountShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 7
+  }
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(11)
   doc.text(`TOTAL: $${total.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 8
 
@@ -428,6 +443,17 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
   const generalDiscount = Number(order.general_discount) || 0
   const finalAssembledTotal =
     order.total != null ? Number(order.total) : Math.max(0, assembledTotal - generalDiscount)
+
+  // Mostrar el descuento para que cuadre (Subtotal - Descuento = Total)
+  const discountShown = assembledTotal - finalAssembledTotal
+  if (discountShown > 0.01) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text(`Subtotal: $${assembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 6
+    doc.text(`Descuento: -$${discountShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 7
+  }
 
   doc.setFont("helvetica", "bold")
   doc.setFontSize(12)
