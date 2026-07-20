@@ -23,6 +23,7 @@ interface ProductFormProps {
     base_price: number
     wholesale_price?: number
     retail_price?: number
+    cash_price?: number
     weight?: number
     volume?: number
     current_stock: number
@@ -56,6 +57,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
     base_price: product?.base_price?.toString() || "",
     wholesale_price: product?.wholesale_price?.toString() || "",
     retail_price: product?.retail_price?.toString() || "",
+    cash_price: product?.cash_price?.toString() || "",
     weight: product?.weight?.toString() || "",
     volume: product?.volume?.toString() || "",
     // Number() para que "10.00" (DECIMAL) → 10 → "10" sin ceros a la derecha
@@ -92,6 +94,7 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
         base_price: parseFloat(formData.base_price),
         wholesale_price: formData.wholesale_price ? parseFloat(formData.wholesale_price) : null,
         retail_price: formData.retail_price ? parseFloat(formData.retail_price) : null,
+        cash_price: formData.cash_price ? parseFloat(formData.cash_price) : null,
         weight: formData.weight ? parseFloat(formData.weight) : null,
         volume: formData.volume ? parseFloat(formData.volume) : null,
         current_stock: parseFloat(formData.current_stock) || 0,
@@ -288,6 +291,19 @@ export function ProductForm({ product, initialCode }: ProductFormProps) {
                 min="0"
                 value={formData.retail_price}
                 onChange={(e) => setFormData({ ...formData, retail_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cash_price">Precio Efectivo</Label>
+              <Input
+                id="cash_price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.cash_price}
+                onChange={(e) => setFormData({ ...formData, cash_price: e.target.value })}
                 placeholder="0.00"
               />
             </div>

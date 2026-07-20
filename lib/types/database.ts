@@ -136,6 +136,7 @@ export interface Product {
   base_price: number
   wholesale_price?: number
   retail_price?: number
+  cash_price?: number // Precio en efectivo/contado (columna extra en lista de precios)
   weight?: number
   volume?: number
   current_stock: number

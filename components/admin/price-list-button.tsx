@@ -40,6 +40,7 @@ interface Product {
   base_price: number
   wholesale_price?: number | null
   retail_price?: number | null
+  cash_price?: number | null
   is_active: boolean
   current_stock?: number
 }
@@ -125,6 +126,8 @@ export function PriceListButton() {
       case "base": return "Base"
       case "wholesale": return "Mayorista"
       case "retail": return "Minorista"
+      case "cash": return "Efectivo"
+      case "all": return "Base-Mayor-Efectivo"
       case "discount": return `Base-${parsedDiscount}pct`
       case "both":
       default: return "Completa"
@@ -328,9 +331,11 @@ export function PriceListButton() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="both">Base + Mayorista (2 columnas)</SelectItem>
+                  <SelectItem value="all">Base + Mayorista + Efectivo (3 columnas)</SelectItem>
                   <SelectItem value="base">Solo Precio Base</SelectItem>
                   <SelectItem value="wholesale">Solo Precio Mayorista</SelectItem>
                   <SelectItem value="retail">Solo Precio Minorista</SelectItem>
+                  <SelectItem value="cash">Solo Precio Efectivo</SelectItem>
                   <SelectItem value="discount">Base con descuento %</SelectItem>
                 </SelectContent>
               </Select>
@@ -438,6 +443,7 @@ export function PriceListButton() {
                       <th className="text-left p-2 font-medium hidden sm:table-cell">Marca</th>
                       <th className="text-right p-2 font-medium">P. Base</th>
                       <th className="text-right p-2 font-medium">P. Mayor</th>
+                      <th className="text-right p-2 font-medium">Efectivo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -459,6 +465,11 @@ export function PriceListButton() {
                         <td className="p-2 text-right text-muted-foreground">
                           {p.wholesale_price != null
                             ? `$${Number(p.wholesale_price).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+                            : "-"}
+                        </td>
+                        <td className="p-2 text-right text-muted-foreground">
+                          {p.cash_price != null
+                            ? `$${Number(p.cash_price).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
                             : "-"}
                         </td>
                       </tr>

@@ -34,13 +34,14 @@ export interface PriceListProduct {
   base_price: number
   wholesale_price?: number | null
   retail_price?: number | null
+  cash_price?: number | null
 }
 
 const fmtPrice = (n: number | null | undefined) =>
   n != null ? `$ ${Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"
 
 export type GroupBy = "category" | "brand"
-export type PriceMode = "both" | "base" | "wholesale" | "retail" | "discount"
+export type PriceMode = "both" | "all" | "base" | "wholesale" | "retail" | "cash" | "discount"
 
 export interface PriceModeConfig {
   mode: PriceMode
@@ -55,6 +56,8 @@ const priceModeLabel = (cfg: PriceModeConfig): string => {
     case "base": return "Precio Base"
     case "wholesale": return "Precio Mayorista"
     case "retail": return "Precio Minorista"
+    case "cash": return "Precio Efectivo"
+    case "all": return "Base, Mayorista y Efectivo"
     case "discount": return `Base con ${clampPct(cfg.discountPercent)}% de descuento`
     case "both":
     default: return "Base y Mayorista"
@@ -66,6 +69,7 @@ const resolvePrice = (p: PriceListProduct, cfg: PriceModeConfig): number | null 
     case "base": return p.base_price ?? null
     case "wholesale": return p.wholesale_price ?? null
     case "retail": return p.retail_price ?? null
+    case "cash": return p.cash_price ?? null
     case "discount": {
       const base = p.base_price
       if (base == null) return null
@@ -106,6 +110,7 @@ export async function generatePriceListPDF(
 
   const logoBase64 = await fetchLogoBase64(ALEF_LOGO_URL)
   const isTwoCol = priceConfig.mode === "both"
+  const isThreeCol = priceConfig.mode === "all"
 
   // ---- HEADER ----
   const headerH = filterLabel ? 27 : 22
@@ -151,12 +156,19 @@ export async function generatePriceListPDF(
   const colWholesale = pageW - mr - 2   // right-align anchor para P.Mayor o Precio único
   const colSingle = colWholesale        // alias para la única columna de precio en modo 1-col
 
+  // En 3 columnas (Base + Mayor + Efectivo) usamos anchors más juntos (30mm entre sí)
+  const colBase3 = pageW - mr - 62
+  const colWholesale3 = pageW - mr - 32
+  const colCash3 = pageW - mr - 2
+
   const singleColHeader = priceConfig.mode === "discount"
     ? `Precio (-${clampPct(priceConfig.discountPercent)}%)`
     : priceConfig.mode === "wholesale"
     ? "P. Mayorista"
     : priceConfig.mode === "retail"
     ? "P. Minorista"
+    : priceConfig.mode === "cash"
+    ? "P. Efectivo"
     : "P. Base"
 
   const drawTableHeader = (yy: number) => {
@@ -166,7 +178,11 @@ export async function generatePriceListPDF(
     doc.setFontSize(8)
     doc.setTextColor(255, 255, 255)
     doc.text("Producto", colProduct + 2, yy + 4.5)
-    if (isTwoCol) {
+    if (isThreeCol) {
+      doc.text("P. Base", colBase3, yy + 4.5, { align: "right" })
+      doc.text("P. Mayor", colWholesale3, yy + 4.5, { align: "right" })
+      doc.text("Efectivo", colCash3, yy + 4.5, { align: "right" })
+    } else if (isTwoCol) {
       doc.text("P. Base", colBase, yy + 4.5, { align: "right" })
       doc.text("P. Mayor", colWholesale, yy + 4.5, { align: "right" })
     } else {
@@ -236,13 +252,24 @@ export async function generatePriceListPDF(
       doc.setFontSize(7.5)
       doc.setTextColor(20, 20, 20)
 
-      // En 1-col el nombre tiene más ancho (no necesita reservar espacio para 2 columnas)
-      const priceColLeft = isTwoCol ? colBase : colSingle
-      const maxNameWidth = priceColLeft - 6 - (colProduct + 2) - (isTwoCol ? 0 : 32)
+      // El nombre se corta según el ancho disponible antes de la primera columna de precio.
+      const priceColLeft = isThreeCol ? colBase3 : isTwoCol ? colBase : colSingle
+      const maxNameWidth = priceColLeft - 6 - (colProduct + 2) - (isTwoCol || isThreeCol ? 0 : 32)
       const name = fitText(p.name || "", maxNameWidth)
       doc.text(name, colProduct + 2, y)
 
-      if (isTwoCol) {
+      if (isThreeCol) {
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0)
+        doc.text(fmtPrice(p.base_price), colBase3, y, { align: "right" })
+
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(p.wholesale_price != null ? 60 : 160)
+        doc.text(p.wholesale_price != null ? fmtPrice(p.wholesale_price) : "-", colWholesale3, y, { align: "right" })
+
+        doc.setTextColor(p.cash_price != null ? 60 : 160)
+        doc.text(p.cash_price != null ? fmtPrice(p.cash_price) : "-", colCash3, y, { align: "right" })
+      } else if (isTwoCol) {
         doc.setFont("helvetica", "bold")
         doc.setTextColor(0)
         doc.text(fmtPrice(p.base_price), colBase, y, { align: "right" })
@@ -293,7 +320,7 @@ export function generatePriceListCSV(products: PriceListProduct[]): string {
     return a.name.localeCompare(b.name, "es")
   })
 
-  const headers = ["Categoría", "Nombre", "Marca", "Código", "Unidad", "Precio Base", "Precio Mayorista"]
+  const headers = ["Categoría", "Nombre", "Marca", "Código", "Unidad", "Precio Base", "Precio Mayorista", "Precio Efectivo"]
   const rows = sorted.map((p) => [
     p.category || "",
     p.name,
@@ -302,6 +329,7 @@ export function generatePriceListCSV(products: PriceListProduct[]): string {
     p.unit_of_measure || "",
     Number(p.base_price).toFixed(2),
     p.wholesale_price != null ? Number(p.wholesale_price).toFixed(2) : "",
+    p.cash_price != null ? Number(p.cash_price).toFixed(2) : "-",
   ])
 
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
