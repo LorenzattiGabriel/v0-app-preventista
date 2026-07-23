@@ -19,6 +19,40 @@ export async function fetchLogoBase64(url: string): Promise<string | null> {
   }
 }
 
+// Formatea un porcentaje con hasta 1 decimal y coma decimal (es-AR): 10 → "10", 12.5 → "12,5"
+const fmtPct = (p: number): string =>
+  (Math.round(p * 10) / 10).toString().replace(".", ",")
+
+// Dibuja el bloque de totales discriminado, alineado a la derecha en x.
+// grossSubtotal = suma de renglones SIN descuento; finalTotal = total final/cobrado.
+// Muestra Subtotal, % de descuento e importe del descuento SOLO si hay descuento (>0.01).
+// El descuento total incluye descuentos por línea + descuento general (todo agregado).
+const drawDiscountedTotals = (
+  doc: jsPDF,
+  x: number,
+  yPos: number,
+  grossSubtotal: number,
+  finalTotal: number,
+  totalFontSize: number,
+): number => {
+  const discount = grossSubtotal - finalTotal
+  if (discount > 0.01) {
+    const pct = grossSubtotal > 0 ? (discount / grossSubtotal) * 100 : 0
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text(`Subtotal: $${grossSubtotal.toFixed(2)}`, x, yPos, { align: "right" })
+    yPos += 6
+    doc.text(`Descuento: ${fmtPct(pct)}%`, x, yPos, { align: "right" })
+    yPos += 6
+    doc.text(`Importe desc.: -$${discount.toFixed(2)}`, x, yPos, { align: "right" })
+    yPos += 7
+  }
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(totalFontSize)
+  doc.text(`TOTAL: $${finalTotal.toFixed(2)}`, x, yPos, { align: "right" })
+  return yPos + 8
+}
+
 export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.width
@@ -140,22 +174,9 @@ export const generateOrderReceipt = (order: any, repartidorName?: string) => {
   const total = Number(order.total) || 0
   const collected = order.was_collected ? (Number(order.collected_amount) || 0) : 0
 
-  // Si el total cobrado es menor a la suma de los renglones, mostramos el descuento
-  // para que la boleta cuadre (Subtotal - Descuento = Total).
-  const discountShown = subtotalShown - total
-  if (discountShown > 0.01) {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    doc.text(`Subtotal: $${subtotalShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 6
-    doc.text(`Descuento: -$${discountShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 7
-  }
-
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(11)
-  doc.text(`TOTAL: $${total.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-  yPos += 8
+  // Bloque discriminado: Subtotal (bruto) - Descuento (% + importe) = TOTAL.
+  // subtotalShown ya es la suma de renglones sin descuento.
+  yPos = drawDiscountedTotals(doc, pageWidth - margin, yPos, subtotalShown, total, 11)
 
   // Payment Status
   doc.setFontSize(10)
@@ -322,7 +343,8 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
   const fmtQty = (v: number, byWeight: boolean) =>
     byWeight ? `${v.toFixed(3)} kg` : Number.isInteger(v) ? v.toString() : v.toFixed(2)
 
-  let assembledTotal = 0
+  let assembledTotal = 0        // subtotal BRUTO (suma de renglones sin descuento)
+  let lineDiscountsTotal = 0    // suma de descuentos por línea (para el fallback del total)
   let totalWeightRequested = 0
   let totalWeightAssembled = 0
 
@@ -336,11 +358,13 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
     const byWeight = item.sale_unit === "peso"
     const refWeightKg = item.assembled_weight_kg != null ? Number(item.assembled_weight_kg) : null
 
-    // Para items por peso: total = kg_balanza × precio/kg (no cantidad × precio)
+    // Renglón BRUTO (sin descuento): para peso = kg_balanza × precio/kg; para unidad = cantidad × precio.
+    // El descuento se discrimina agregado en el bloque de totales (no por renglón).
     const lineTotal = byWeight
-      ? Math.max(0, unitPrice * (refWeightKg ?? 0) - discount)
-      : Math.max(0, unitPrice * quantityAssembled - discount)
+      ? unitPrice * (refWeightKg ?? 0)
+      : unitPrice * quantityAssembled
     assembledTotal += lineTotal
+    lineDiscountsTotal += discount
 
     // Faltante: para items peso, comparar piezas; para unidad, comparar cantidades
     const hasShortage = item.is_shortage === true || quantityAssembled < quantityRequested
@@ -440,25 +464,15 @@ export const generateAssemblyReceipt = async (order: any, armadorName?: string) 
   yPos += 7
 
   // --- Totals ---
+  // assembledTotal es el subtotal BRUTO. El total final resta descuentos por línea + general.
   const generalDiscount = Number(order.general_discount) || 0
   const finalAssembledTotal =
-    order.total != null ? Number(order.total) : Math.max(0, assembledTotal - generalDiscount)
+    order.total != null
+      ? Number(order.total)
+      : Math.max(0, assembledTotal - lineDiscountsTotal - generalDiscount)
 
-  // Mostrar el descuento para que cuadre (Subtotal - Descuento = Total)
-  const discountShown = assembledTotal - finalAssembledTotal
-  if (discountShown > 0.01) {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    doc.text(`Subtotal: $${assembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 6
-    doc.text(`Descuento: -$${discountShown.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-    yPos += 7
-  }
-
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text(`TOTAL: $${finalAssembledTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: "right" })
-  yPos += 8
+  // Bloque discriminado: Subtotal (bruto) - Descuento (% + importe) = TOTAL.
+  yPos = drawDiscountedTotals(doc, pageWidth - margin, yPos, assembledTotal, finalAssembledTotal, 12)
 
   // --- Peso del pedido ---
   if (totalWeightAssembled > 0) {
