@@ -12,6 +12,39 @@ App Next.js para gestión de distribuidora argentina con 4 módulos por rol.
 - **jsPDF** para comprobantes
 - **Google Maps API** para geocoding y validación GPS
 - Deploy en Vercel
+- **Microservicio de rutas inteligentes** (TSP/VRPTW) externo — ver `docs/microservicio-rutas-uso-y-costos.md`
+
+## Setup en máquina nueva
+
+```bash
+pnpm install
+cp .env.example .env.local   # completar valores (ver abajo)
+pnpm dev
+```
+
+Requiere **Node 18+** y **pnpm**. No hay `.nvmrc` ni `engines` fijado.
+
+### Variables de entorno (`.env.local`)
+
+```
+# Supabase (public + service role)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=
+
+# Google Maps (geocoding, autocomplete de direcciones, validación GPS)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+
+# Microservicio de rutas inteligentes (tiene default a producción si se omite)
+RUTAS_INTELIGENTES_API_URL=
+
+# Opcional: número de WhatsApp de soporte que se muestra en la UI
+NEXT_PUBLIC_WHATSAPP_SUPPORT=
+```
+
+- Las credenciales de Supabase (URL, anon key, service role key) salen de Supabase Studio → Connect → App Frameworks → `.env.local`, y la service role key desde Get API Keys. El `.env.example` tiene el paso a paso.
+- El código lee tanto `NEXT_PUBLIC_SUPABASE_*` como los alias sin prefijo (`SUPABASE_URL`, etc.) según el contexto (cliente vs server).
+- La API key de Google Maps **no debe hardcodearse** en componentes (ya hubo un fix de seguridad por eso, commit `b25de11`). Siempre vía env var.
 
 ## Roles
 
@@ -275,6 +308,31 @@ git fetch origin main && git status         # ver si hay cambios remotos
 ### Login
 - Eliminados los usuarios de prueba hardcodeados (`app/auth/login/page.tsx`)
 - Logout: `window.location.href = "/auth/login"` para redirect confiable; route handler devuelve `NextResponse.redirect()`
+
+### Notas de crédito y precio por kg
+- Use case de nota de crédito (anulación/ajuste de ventas) — commits `b1d2c86`, `fc90499`
+- Productos con **precio por kg** además de por unidad
+- Arreglado el flujo de anular ventas + buscador de pedidos + cálculo de porcentajes (`712198e`)
+
+### Movimientos financieros (`/admin` — vista movimientos)
+- Vista de movimientos (`account_movements`) con **filtro por reparto/ruta** y filtros de fecha
+- Reset de filtros al limpiar (`816235e`); fix de movimientos duplicados (`6d32fd1`)
+
+### Estadísticas de clientes (`/admin`)
+- Seguimiento de clientes + rankings (`e18d486`)
+- Secciones **colapsables** en dashboard y en estadísticas de clientes (`14cc138`)
+- Fix: KPIs de canales se desbordaban con montos grandes (`cc2faa5`)
+
+### Descuentos en boletas/remitos
+- La boleta discrimina **subtotal + descuento + total** (`3274392`)
+- El descuento se muestra distinguiendo **porcentaje vs importe fijo** (`8028c66`)
+- Lista de precios: columna de **precio efectivo por producto** (`71fa3a8`)
+
+### Rutas inteligentes — microservicio y costos (Google Maps)
+- El TSP/VRPTW corre en un **microservicio externo**: URL vía `RUTAS_INTELIGENTES_API_URL` (default a producción). Ver `docs/microservicio-rutas-uso-y-costos.md`.
+- Optimización de costo de Places API: **session tokens + debounce** en el autocomplete de direcciones (`39a09df`)
+- Creación de rutas dentro de una **transacción**; se eliminó el generador viejo (`a242e99`)
+- **Seguridad**: nunca hardcodear la API key de Google Maps en componentes — usar siempre `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (`b25de11`)
 
 ## Próximos features potenciales (mencionados pero no implementados)
 
