@@ -1,8 +1,10 @@
 "use client"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useRouter } from "next/navigation"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, MapPin, Phone, User, Package, CreditCard, FileText } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Calendar, Clock, MapPin, Phone, User, Package, CreditCard, FileText, Copy } from "lucide-react"
 
 type OrderDetailModalProps = {
   open: boolean
@@ -11,6 +13,8 @@ type OrderDetailModalProps = {
 }
 
 export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModalProps) {
+  const router = useRouter()
+
   if (!pedido) return null
 
   const getPriorityColor = (priority: string) => {
@@ -308,6 +312,16 @@ export function OrderDetailModal({ open, onOpenChange, pedido }: OrderDetailModa
             </section>
           </div>
         </div>
+
+        <DialogFooter className="border-t pt-4">
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => router.push(`/preventista/orders/new/from/${pedido.id}`)}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Repetir este pedido
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

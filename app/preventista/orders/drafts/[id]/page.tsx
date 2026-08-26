@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { NewOrderForm } from "@/components/preventista/new-order-form"
+import { toNum } from "@/lib/utils/cart-calculations"
 
 interface DraftOrderPageProps {
   params: {
@@ -77,7 +78,9 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
 
   const { data: products } = await supabase.from("products").select("*").eq("is_active", true).order("name")
 
-  // Prepare initial form data from the draft order
+  // Prepare initial form data from the draft order.
+  // Supabase devuelve los DECIMAL como strings → coercer con toNum o los
+  // totales se concatenan en lugar de sumarse.
   const initialOrderData = {
     orderNumber: order.order_number,
     selectedCustomer: customers?.find((c) => c.id === order.customer_id) || null,
@@ -85,15 +88,22 @@ export default async function DraftOrderPage({ params }: DraftOrderPageProps) {
     priority: order.priority,
     orderType: order.order_type,
     requiresInvoice: order.requires_invoice,
+    invoiceType: order.invoice_type,
     observations: order.observations,
-    generalDiscount: order.general_discount,
+    generalDiscount: toNum(order.general_discount),
+    discountType: "fixed" as const,
+    paymentMethod: order.payment_method,
+    hasTimeRestriction: order.has_time_restriction,
+    deliveryWindowStart: order.delivery_window_start,
+    deliveryWindowEnd: order.delivery_window_end,
+    timeRestrictionNotes: order.time_restriction_notes,
     orderItems: order.order_items.map((item: any) => ({
       productId: item.product_id,
       productName: `${item.products?.name} ${item.products?.brand ? `- ${item.products?.brand}` : ""}`,
-      quantity: item.quantity_requested,
-      unitPrice: item.unit_price,
-      discount: item.discount,
-      subtotal: item.subtotal,
+      quantity: toNum(item.quantity_requested),
+      unitPrice: toNum(item.unit_price),
+      discount: toNum(item.discount),
+      subtotal: toNum(item.subtotal),
       saleUnit: item.sale_unit || "unidad",
       unitOfMeasure: item.products?.unit_of_measure || "unidad",
     })),

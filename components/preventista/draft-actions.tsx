@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Edit, FileText, Trash2, CheckCircle } from "lucide-react"
+import { MoreHorizontal, Edit, Copy, Trash2, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { createClient } from "@/lib/supabase/client"
@@ -31,7 +31,7 @@ interface DraftActionsProps {
 }
 
 export function DraftActions({ orderId }: DraftActionsProps) {
-  const { isLoading, deleteOrder: deleteDraft, duplicateDraft, confirmOrder, isDeleting, isDuplicating, isConfirming } = useOrderFormActions()
+  const { isLoading, deleteOrder: deleteDraft, confirmOrder, isDeleting, isConfirming } = useOrderFormActions()
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,10 +45,6 @@ export function DraftActions({ orderId }: DraftActionsProps) {
 
   const handleDelete = async () => {
     await deleteDraft(orderId)
-  }
-
-  const handleDuplicate = async () => {
-    await duplicateDraft(orderId)
   }
 
   const handleConfirm = async () => {
@@ -71,7 +67,7 @@ export function DraftActions({ orderId }: DraftActionsProps) {
         {/* 🆕 CRITICAL-3a: Confirm Order Button */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-green-600 focus:bg-green-50 focus:text-green-600" disabled={isConfirming || isDuplicating || isDeleting}>
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-green-600 focus:bg-green-50 focus:text-green-600" disabled={isConfirming || isDeleting}>
               <CheckCircle className="mr-2 h-4 w-4" />
               {isConfirming ? "Confirmando..." : "Confirmar Pedido"}
             </DropdownMenuItem>
@@ -90,15 +86,17 @@ export function DraftActions({ orderId }: DraftActionsProps) {
           </AlertDialogContent>
         </AlertDialog>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild disabled={isDuplicating || isDeleting || isConfirming}>
+        <DropdownMenuItem asChild disabled={isDeleting || isConfirming}>
           <Link href={`/preventista/orders/drafts/${orderId}`} className="flex items-center"><Edit className="mr-2 h-4 w-4" />Editar</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={handleDuplicate} disabled={isDuplicating || isDeleting || isConfirming}>
-          <FileText className="mr-2 h-4 w-4" />{isDuplicating ? "Duplicando..." : "Duplicar"}
+        <DropdownMenuItem asChild disabled={isDeleting || isConfirming}>
+          <Link href={`/preventista/orders/new/from/${orderId}`} className="flex items-center">
+            <Copy className="mr-2 h-4 w-4" />Usar como base
+          </Link>
         </DropdownMenuItem>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={isDeleting || isDuplicating || isConfirming}>
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={isDeleting || isConfirming}>
               <Trash2 className="mr-2 h-4 w-4" />
               {isDeleting ? "Eliminando..." : "Eliminar"}
             </DropdownMenuItem>

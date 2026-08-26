@@ -13,13 +13,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { Customer, Product, OrderPriority, OrderType, PaymentMethod } from "@/lib/types/database"
 import { PAYMENT_METHODS } from "@/lib/types/database"
-import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle, Info, Ban } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, Save, MapPin, Loader2, CheckCircle, AlertCircle, AlertTriangle, Info, Ban, History, Copy } from "lucide-react"
 import Link from "next/link"
 import { CustomerSelector } from "./customer-selector"
 import { ProductSelector } from "./product-selector"
 import { useOrderFormActions } from "./use-order-form-actions"
 import { GoBackButton } from "../ui/go-back-button"
 import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
+import { toNum } from "@/lib/utils/cart-calculations"
+import { buildOrderTemplate } from "@/lib/utils/order-template"
 
 // Valor por defecto para el radio máximo de validación presencial (en metros)
 // Este valor se sobrescribe con la configuración del depot si está disponible
@@ -58,6 +60,33 @@ interface OrderItem {
   saleUnit?: "unidad" | "peso" // Cómo se vende esta línea: por unidad o por peso (kg)
 }
 
+/** Resumen de un pedido previo del cliente, para el selector de plantilla. */
+interface PreviousOrder {
+  id: string
+  order_number: string
+  delivery_date: string | null
+  order_date: string | null
+  status: string
+  total: number
+  itemCount: number
+}
+
+/**
+ * Los items precargados pueden venir de Supabase con los DECIMAL como strings.
+ * Si no se coercen, `calculateTotals` concatena en vez de sumar y los
+ * `.toFixed()` del render explotan.
+ */
+function normalizeItems(items?: OrderItem[]): OrderItem[] {
+  if (!items) return []
+  return items.map((item) => ({
+    ...item,
+    quantity: toNum(item.quantity),
+    unitPrice: toNum(item.unitPrice),
+    discount: toNum(item.discount),
+    subtotal: toNum(item.subtotal),
+  }))
+}
+
 interface InitialOrderData {
   orderNumber: string
   selectedCustomer: Customer | null
@@ -65,10 +94,24 @@ interface InitialOrderData {
   priority: OrderPriority
   orderType: OrderType
   requiresInvoice: boolean
+  invoiceType?: "A" | "B" | "C" | null
   observations: string
   generalDiscount: number
+  discountType?: "fixed" | "percentage"
+  paymentMethod?: PaymentMethod
   orderItems: OrderItem[]
+  hasTimeRestriction?: boolean
+  deliveryWindowStart?: string | null
+  deliveryWindowEnd?: string | null
+  timeRestrictionNotes?: string | null
 }
+
+/**
+ * - `new`: pedido desde cero
+ * - `edit-draft`: se está editando un borrador existente (se pasa `orderId`)
+ * - `from-order`: pedido nuevo precargado con los datos de uno anterior (sin `orderId`)
+ */
+type OrderFormMode = "new" | "edit-draft" | "from-order"
 
 interface NewOrderFormProps {
   customers: Customer[]
@@ -76,9 +119,23 @@ interface NewOrderFormProps {
   userId: string
   initialOrderData?: InitialOrderData
   orderId?: string // Added for editing existing orders
+  mode?: OrderFormMode
+  /** Pedido que se usó como plantilla (sólo en modo `from-order`). */
+  sourceOrder?: { orderNumber: string; date: string | null }
+  /** Avisos de la re-precificación al copiar un pedido (ver lib/utils/order-template.ts). */
+  templateWarnings?: string[]
 }
 
-export function NewOrderForm({ customers, products, userId, initialOrderData, orderId }: NewOrderFormProps) {
+export function NewOrderForm({
+  customers,
+  products,
+  userId,
+  initialOrderData,
+  orderId,
+  mode = orderId ? "edit-draft" : "new",
+  sourceOrder,
+  templateWarnings = [],
+}: NewOrderFormProps) {
   const router = useRouter()
 
   const { saveOrder, isLoading, error, setError, calculateTotals } = useOrderFormActions()
@@ -90,18 +147,26 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
   const [priority, setPriority] = useState<OrderPriority>(initialOrderData?.priority || "normal")
   const [orderType, setOrderType] = useState<OrderType>(initialOrderData?.orderType || "presencial")
   const [requiresInvoice, setRequiresInvoice] = useState(initialOrderData?.requiresInvoice || false)
-  const [invoiceType, setInvoiceType] = useState<"A" | "B" | "C">("B")
+  const [invoiceType, setInvoiceType] = useState<"A" | "B" | "C">(initialOrderData?.invoiceType || "B")
   const [observations, setObservations] = useState(initialOrderData?.observations || "")
-  const [generalDiscount, setGeneralDiscount] = useState(initialOrderData?.generalDiscount || 0)
-  const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed") // Tipo de descuento
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Efectivo") // Payment method
-  const [orderItems, setOrderItems] = useState<OrderItem[]>(initialOrderData?.orderItems || [])
+  const [generalDiscount, setGeneralDiscount] = useState(toNum(initialOrderData?.generalDiscount))
+  // Tipo de descuento. orders.general_discount se persiste SIEMPRE como monto,
+  // así que al precargar arrancamos en "fixed".
+  const [discountType, setDiscountType] = useState<"fixed" | "percentage">(initialOrderData?.discountType || "fixed")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialOrderData?.paymentMethod || "Efectivo")
+  const [orderItems, setOrderItems] = useState<OrderItem[]>(() => normalizeItems(initialOrderData?.orderItems))
 
   // Time Windows (VRPTW) - Restricciones horarias
-  const [hasTimeRestriction, setHasTimeRestriction] = useState(false)
-  const [deliveryWindowStart, setDeliveryWindowStart] = useState("08:00")
-  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("18:00")
-  const [timeRestrictionNotes, setTimeRestrictionNotes] = useState("")
+  const [hasTimeRestriction, setHasTimeRestriction] = useState(initialOrderData?.hasTimeRestriction || false)
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState(initialOrderData?.deliveryWindowStart || "08:00")
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState(initialOrderData?.deliveryWindowEnd || "18:00")
+  const [timeRestrictionNotes, setTimeRestrictionNotes] = useState(initialOrderData?.timeRestrictionNotes || "")
+
+  // Pedidos anteriores del cliente, para precargar desde uno de ellos
+  const [previousOrders, setPreviousOrders] = useState<PreviousOrder[]>([])
+  const [isLoadingPreviousOrders, setIsLoadingPreviousOrders] = useState(false)
+  // Aviso cuando se re-precifican los items por un cambio de tipo de cliente
+  const [repricingNotice, setRepricingNotice] = useState<string | null>(null)
 
   // Geolocalización para validación de pedidos presenciales
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
@@ -266,13 +331,81 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
     )
   }
 
-  // Initialize order items if provided
-  useState(() => {
-    if (initialOrderData?.orderItems) setOrderItems(initialOrderData.orderItems)
-  })
+  // Pedidos anteriores del cliente seleccionado (sólo al crear desde cero:
+  // en modo edición o copia el pedido ya viene armado).
+  useEffect(() => {
+    if (mode !== "new" || !selectedCustomer) {
+      setPreviousOrders([])
+      return
+    }
+
+    let cancelled = false
+    const fetchPreviousOrders = async () => {
+      setIsLoadingPreviousOrders(true)
+      try {
+        const supabase = createClient()
+        const { data, error: fetchError } = await supabase
+          .from("orders")
+          .select("id, order_number, order_date, delivery_date, status, total, order_items(id)")
+          .eq("customer_id", selectedCustomer.id)
+          .neq("status", "CANCELADO")
+          .order("created_at", { ascending: false })
+          .limit(10)
+
+        if (fetchError) throw fetchError
+        if (cancelled) return
+
+        setPreviousOrders(
+          (data || []).map((order: any) => ({
+            id: order.id,
+            order_number: order.order_number,
+            order_date: order.order_date,
+            delivery_date: order.delivery_date,
+            status: order.status,
+            total: toNum(order.total),
+            itemCount: order.order_items?.length || 0,
+          })),
+        )
+      } catch (err) {
+        console.error("Error fetching previous orders:", err)
+        if (!cancelled) setPreviousOrders([])
+      } finally {
+        if (!cancelled) setIsLoadingPreviousOrders(false)
+      }
+    }
+
+    fetchPreviousOrders()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, selectedCustomer])
 
   const handleCustomerSelect = (customer: Customer) => {
+    const previousType = selectedCustomer?.customer_type
     setSelectedCustomer(customer)
+
+    // Si cambia el tipo de cliente y ya hay items cargados (típico al venir de un
+    // pedido copiado), los precios quedaron atados al cliente anterior. Se
+    // re-precifican con la lista que corresponde al cliente nuevo.
+    if (orderItems.length > 0 && previousType && previousType !== customer.customer_type) {
+      const { items, warnings } = buildOrderTemplate(
+        orderItems.map((item) => ({
+          product_id: item.productId,
+          quantity_requested: item.quantity,
+          unit_price: item.unitPrice,
+          discount: item.discount,
+          subtotal: item.subtotal,
+          sale_unit: item.saleUnit,
+        })),
+        products,
+        customer,
+      )
+      setOrderItems(items)
+      setRepricingNotice(
+        `Cambiaste a un cliente ${customer.customer_type}: se actualizaron los precios de los ${items.length} productos cargados.` +
+          (warnings.length > 0 ? ` ${warnings.join(" ")}` : ""),
+      )
+    }
     // Apply customer's general discount if exists.
     // customer.general_discount está guardado como PORCENTAJE ("Descuento General (%)"),
     // así que hay que forzar discountType a "percentage" o se aplicaría como monto fijo.
@@ -434,11 +567,47 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
 
       <div className="flex items-center justify-between">
         <GoBackButton/>
-        <h2 className="text-2xl font-medium">Borrador de Pedido: {initialOrderData?.orderNumber || ""}</h2>
+        <h2 className="text-2xl font-medium">
+          {mode === "edit-draft"
+            ? `Borrador de Pedido: ${initialOrderData?.orderNumber || ""}`
+            : mode === "from-order"
+              ? "Nuevo Pedido (basado en uno anterior)"
+              : "Nuevo Pedido"}
+        </h2>
       </div>
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+      )}
+
+      {repricingNotice && (
+        <Alert className="border-blue-300 bg-blue-50 dark:bg-blue-950/30">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800 dark:text-blue-300">{repricingNotice}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Resumen de la copia + avisos de re-precificación */}
+      {mode === "from-order" && sourceOrder && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+          <Copy className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            <p className="font-medium">
+              Basado en el pedido {sourceOrder.orderNumber}
+              {sourceOrder.date ? ` del ${new Date(sourceOrder.date).toLocaleDateString("es-AR")}` : ""}.
+            </p>
+            <p className="text-sm mt-1">
+              Los precios se actualizaron a la lista vigente. Revisá cantidades y precios antes de confirmar.
+            </p>
+            {templateWarnings.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm list-disc list-inside">
+                {templateWarnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       <Card>
@@ -477,6 +646,53 @@ export function NewOrderForm({ customers, products, userId, initialOrderData, or
                   </div>
                 </div>
               </div>
+
+              {/* Precargar desde un pedido anterior del cliente */}
+              {mode === "new" && (isLoadingPreviousOrders || previousOrders.length > 0) && (
+                <div className="p-4 rounded-md border-2 border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 space-y-3">
+                  <Label className="flex items-center gap-2 font-semibold text-blue-900 dark:text-blue-200">
+                    <History className="h-4 w-4" />
+                    Basarse en un pedido anterior
+                  </Label>
+
+                  {isLoadingPreviousOrders ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Buscando pedidos anteriores...
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-blue-800/80 dark:text-blue-300/80">
+                        Precargá los productos de un pedido previo de este cliente y retocá lo que haga falta.
+                      </p>
+                      <div className="max-h-56 overflow-y-auto space-y-2">
+                        {previousOrders.map((prev) => (
+                          <button
+                            key={prev.id}
+                            type="button"
+                            onClick={() => router.push(`/preventista/orders/new/from/${prev.id}`)}
+                            className="w-full text-left p-3 rounded-md border bg-background hover:bg-muted transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-sm">{prev.order_number}</span>
+                              <span className="font-semibold text-sm">${prev.total.toLocaleString("es-AR")}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground mt-1">
+                              <span>
+                                {prev.delivery_date || prev.order_date
+                                  ? new Date(prev.delivery_date || prev.order_date!).toLocaleDateString("es-AR")
+                                  : "Sin fecha"}
+                              </span>
+                              <span>{prev.itemCount} {prev.itemCount === 1 ? "producto" : "productos"}</span>
+                              <span>{prev.status.replace(/_/g, " ")}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Restricción Horaria (Time Window) */}
               <div className={`p-4 rounded-md border-2 ${hasTimeRestriction ? 'border-orange-300 bg-orange-50 dark:bg-orange-950/30' : 'border-muted bg-muted/30'}`}>

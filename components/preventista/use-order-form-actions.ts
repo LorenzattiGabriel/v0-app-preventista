@@ -40,7 +40,6 @@ export function useOrderFormActions() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [isDuplicating, setIsDuplicating] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -277,64 +276,6 @@ export function useOrderFormActions() {
     }
   };
 
-  const duplicateDraft = async (orderIdToDuplicate: string) => {
-    setIsDuplicating(true);
-    setError(null);
-    try {
-      const supabase = createClient();
-
-      // 1. Fetch the complete original draft data
-      const { data: originalOrder, error: fetchError } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          customers (*),
-          order_items (*)
-        `)
-        .eq("id", orderIdToDuplicate)
-        .single();
-
-      if (fetchError || !originalOrder) {
-        throw new Error("No se pudo encontrar el borrador original para duplicar.");
-      }
-
-      // 2. Prepare the data for the new draft
-      const newOrderParams: SaveOrderParams = {
-        selectedCustomer: originalOrder.customers,
-        deliveryDate: originalOrder.delivery_date,
-        priority: originalOrder.priority,
-        orderType: originalOrder.order_type,
-        requiresInvoice: originalOrder.requires_invoice,
-        observations: `(Copia de ${originalOrder.order_number}) ${originalOrder.observations || ''}`.trim(),
-        generalDiscount: originalOrder.general_discount,
-        orderItems: originalOrder.order_items.map((item: any) => ({
-          productId: item.product_id,
-          quantity: item.quantity_requested,
-          unitPrice: item.unit_price,
-          discount: item.discount,
-          subtotal: item.subtotal,
-          saleUnit: item.sale_unit || "unidad",
-        })),
-        userId: originalOrder.created_by,
-        isDraft: true,
-        orderId: undefined, // CRUCIAL: Ensure it creates a new order
-      };
-
-      // 3. Call saveOrder to create the new draft
-      const newOrderId = await saveOrder(newOrderParams);
-
-      // 4. Refresh page
-      if (newOrderId) {
-        router.refresh();
-      }
-    } catch (err) {
-      console.error("[v0] Error duplicating draft:", err);
-      setError(err instanceof Error ? err.message : "Error al duplicar el borrador");
-    } finally {
-      setIsDuplicating(false);
-    }
-  };
-
   // 🆕 CRITICAL-3a: Confirm Order (BORRADOR → PENDIENTE_ARMADO)
   const confirmOrder = async (orderId: string, userId: string) => {
     setIsConfirming(true);
@@ -374,5 +315,5 @@ export function useOrderFormActions() {
     }
   };
 
-  return { saveOrder, deleteOrder, duplicateDraft, confirmOrder, isLoading, isDeleting, isDuplicating, isConfirming, error, setError, calculateTotals };
+  return { saveOrder, deleteOrder, confirmOrder, isLoading, isDeleting, isConfirming, error, setError, calculateTotals };
 }
