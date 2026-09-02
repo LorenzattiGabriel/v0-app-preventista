@@ -32,11 +32,13 @@ import {
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { InactiveThresholdFilter } from "@/components/admin/inactive-threshold-filter"
 import { CollapsibleSection } from "@/components/admin/collapsible-section"
+import { TopRankingFilter } from "@/components/admin/top-ranking-filter"
 import {
   createCustomerStatsService,
   CUSTOMER_STATS_PER_PAGE,
   DEFAULT_INACTIVE_DAYS,
-  type CustomerStatRow,
+  parseTopN,
+  type CustomerRankingRow,
 } from "@/lib/services/customerStatsService"
 
 const formatARS = (n: number) =>
@@ -45,40 +47,98 @@ const formatARS = (n: number) =>
 const formatDate = (d?: string | null) =>
   d ? new Date(d).toLocaleDateString("es-AR") : "—"
 
+/**
+ * A partir de acá la lista pasa a tener altura fija con scroll propio.
+ * Coincide con el Top N por defecto: con Top 10 la card se ve igual que antes
+ * de este cambio, y el scroll recién aparece cuando lo pedís (Top 20+).
+ */
+const RANKING_SCROLL_THRESHOLD = 10
+
+/** Celdas compactas: en 360px de ancho el `p-4` heredado se come el nombre. */
+const RANKING_CELL = "px-2 py-2"
+
 function RankingTable({
   rows,
   metric,
+  metricLabel,
 }: {
-  rows: CustomerStatRow[]
-  metric: (r: CustomerStatRow) => string
+  rows: CustomerRankingRow[]
+  metric: (r: CustomerRankingRow) => string
+  metricLabel: string
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground py-4 text-center">Sin datos.</p>
   }
+
+  const scrolls = rows.length > RANKING_SCROLL_THRESHOLD
+
   return (
-    <Table>
-      <TableBody>
-        {rows.map((r, i) => (
-          <TableRow key={r.id}>
-            <TableCell className="w-8 text-muted-foreground font-medium">{i + 1}</TableCell>
-            <TableCell>
-              <Link href={`/admin/customers/${r.id}`} className="font-medium hover:underline">
-                {r.commercial_name}
-              </Link>
-              <div className="text-xs text-muted-foreground">{r.code}</div>
-            </TableCell>
-            <TableCell className="text-right font-semibold whitespace-nowrap">{metric(r)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="space-y-2">
+      {/*
+        `overscroll-contain` evita que al llegar al final del ranking el gesto
+        siga arrastrando la página: es lo que hace tolerable el scroll anidado
+        en el celular. La altura se deja corta a propósito para que siempre
+        quede página visible alrededor de la card y se pueda seguir scrolleando.
+
+        Se usa <table> nativa en vez del componente <Table>: ése envuelve todo
+        en un div con overflow-auto, que se convertiría en el contenedor de
+        scroll del thead sticky y lo dejaría sin efecto.
+      */}
+      <div
+        className={
+          scrolls
+            ? "max-h-[360px] sm:max-h-[520px] overflow-y-auto overscroll-contain rounded-md border"
+            : ""
+        }
+      >
+        <table className="w-full caption-bottom text-sm">
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead className={`${RANKING_CELL} w-10`}>#</TableHead>
+              <TableHead className={RANKING_CELL}>Cliente</TableHead>
+              <TableHead className={`${RANKING_CELL} text-right whitespace-nowrap`}>
+                {metricLabel}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={r.id}>
+                <TableCell className={`${RANKING_CELL} w-10 text-muted-foreground tabular-nums`}>
+                  {i + 1}
+                </TableCell>
+                {/* max-w-0 + w-full deja que `truncate` funcione dentro de una celda */}
+                <TableCell className={`${RANKING_CELL} w-full max-w-0`}>
+                  <Link
+                    href={`/admin/customers/${r.id}`}
+                    className="font-medium hover:underline block truncate"
+                  >
+                    {r.commercial_name}
+                  </Link>
+                  <div className="text-xs text-muted-foreground truncate">{r.code}</div>
+                </TableCell>
+                <TableCell
+                  className={`${RANKING_CELL} text-right font-semibold whitespace-nowrap tabular-nums`}
+                >
+                  {metric(r)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </table>
+      </div>
+
+      {scrolls && (
+        <p className="text-xs text-muted-foreground text-right">{rows.length} clientes</p>
+      )}
+    </div>
   )
 }
 
 export default async function CustomerStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ inactiveDays?: string; page?: string }>
+  searchParams: Promise<{ inactiveDays?: string; page?: string; top?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -96,11 +156,12 @@ export default async function CustomerStatsPage({
 
   const inactiveDays = Math.max(1, parseInt(params.inactiveDays || "") || DEFAULT_INACTIVE_DAYS)
   const page = Math.max(1, parseInt(params.page || "1") || 1)
+  const topN = parseTopN(params.top)
 
   const service = createCustomerStatsService(supabase)
   const [kpis, rankings, composition, inactive] = await Promise.all([
     service.getKpis(inactiveDays),
-    service.getRankings(10),
+    service.getRankings(topN),
     service.getComposition(inactiveDays),
     service.getInactiveCustomers(inactiveDays, page),
   ])
@@ -224,6 +285,9 @@ export default async function CustomerStatsPage({
             storageKey="stats-rankings"
             icon={<Trophy className="h-5 w-5 text-amber-500" />}
           >
+          <div className="mb-4">
+            <TopRankingFilter value={topN} />
+          </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
@@ -233,7 +297,11 @@ export default async function CustomerStatsPage({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <RankingTable rows={rankings.topRevenue} metric={(r) => `$${formatARS(r.total_spent)}`} />
+                <RankingTable
+                  rows={rankings.topRevenue}
+                  metricLabel="Facturado"
+                  metric={(r) => `$${formatARS(r.total_spent)}`}
+                />
               </CardContent>
             </Card>
             <Card>
@@ -244,7 +312,11 @@ export default async function CustomerStatsPage({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <RankingTable rows={rankings.topOrders} metric={(r) => `${r.orders_count} pedidos`} />
+                <RankingTable
+                  rows={rankings.topOrders}
+                  metricLabel="Pedidos"
+                  metric={(r) => `${r.orders_count}`}
+                />
               </CardContent>
             </Card>
             <Card>
@@ -256,7 +328,11 @@ export default async function CustomerStatsPage({
                 <CardDescription className="text-xs">Mínimo 2 entregas</CardDescription>
               </CardHeader>
               <CardContent>
-                <RankingTable rows={rankings.topTicket} metric={(r) => `$${formatARS(r.avg_ticket)}`} />
+                <RankingTable
+                  rows={rankings.topTicket}
+                  metricLabel="Ticket prom."
+                  metric={(r) => `$${formatARS(r.avg_ticket)}`}
+                />
               </CardContent>
             </Card>
             <Card>
@@ -270,6 +346,7 @@ export default async function CustomerStatsPage({
               <CardContent>
                 <RankingTable
                   rows={rankings.leastActive}
+                  metricLabel="Sin pedir"
                   metric={(r) => `${r.days_since_last_order}d`}
                 />
               </CardContent>

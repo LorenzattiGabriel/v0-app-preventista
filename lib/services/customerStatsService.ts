@@ -4,6 +4,20 @@ import { getLocalDateString } from "@/lib/utils/dates"
 export const CUSTOMER_STATS_PER_PAGE = 25
 export const DEFAULT_INACTIVE_DAYS = 15
 
+/** Tamaños de ranking que ofrece la UI. */
+export const TOP_N_OPTIONS = [10, 20, 50, 100] as const
+export const DEFAULT_TOP_N = 10
+
+/**
+ * Sanea el Top N que llega por querystring. Sólo se aceptan los valores de
+ * TOP_N_OPTIONS: evita que un `?top=99999` dispare cuatro consultas enormes
+ * contra la vista.
+ */
+export function parseTopN(raw: string | undefined): number {
+  const n = parseInt(raw || "")
+  return (TOP_N_OPTIONS as readonly number[]).includes(n) ? n : DEFAULT_TOP_N
+}
+
 export interface CustomerStatRow {
   id: string
   code: string
@@ -46,11 +60,30 @@ export interface CustomerKpis {
   avgTicketGlobal: number
 }
 
+/**
+ * Sólo lo que necesita una fila de ranking: identidad + las cuatro métricas
+ * ordenables. La vista tiene ~20 columnas y traerlas todas cuatro veces se
+ * vuelve caro al ampliar el top a 100.
+ */
+export interface CustomerRankingRow {
+  id: string
+  code: string
+  commercial_name: string
+  total_spent: number
+  orders_count: number
+  avg_ticket: number
+  days_since_last_order: number | null
+}
+
+/** Columnas que pide cada consulta de ranking. */
+const RANKING_COLUMNS =
+  "id, code, commercial_name, total_spent, orders_count, avg_ticket, days_since_last_order"
+
 export interface CustomerRankings {
-  topRevenue: CustomerStatRow[]
-  topOrders: CustomerStatRow[]
-  topTicket: CustomerStatRow[]
-  leastActive: CustomerStatRow[]
+  topRevenue: CustomerRankingRow[]
+  topOrders: CustomerRankingRow[]
+  topTicket: CustomerRankingRow[]
+  leastActive: CustomerRankingRow[]
 }
 
 export interface CustomerComposition {
@@ -65,6 +98,17 @@ const toNum = (v: any) => {
   const n = typeof v === "number" ? v : parseFloat(v)
   return Number.isFinite(n) ? n : 0
 }
+
+/** Los DECIMAL de Supabase llegan como strings: hay que coercer antes de ordenar/mostrar. */
+const mapRankingRow = (r: any): CustomerRankingRow => ({
+  id: r.id,
+  code: r.code,
+  commercial_name: r.commercial_name,
+  total_spent: toNum(r.total_spent),
+  orders_count: toNum(r.orders_count),
+  avg_ticket: toNum(r.avg_ticket),
+  days_since_last_order: r.days_since_last_order == null ? null : toNum(r.days_since_last_order),
+})
 
 const mapRow = (r: any): CustomerStatRow => ({
   ...r,
@@ -149,41 +193,41 @@ class CustomerStatsService {
     }
   }
 
-  async getRankings(limit = 10): Promise<CustomerRankings> {
+  async getRankings(limit: number = DEFAULT_TOP_N): Promise<CustomerRankings> {
     const [topRevenue, topOrders, topTicket, leastActive] = await Promise.all([
       this.supabase
         .from("customer_stats")
-        .select("*")
+        .select(RANKING_COLUMNS)
         .gt("total_spent", 0)
         .order("total_spent", { ascending: false })
         .limit(limit),
       this.supabase
         .from("customer_stats")
-        .select("*")
+        .select(RANKING_COLUMNS)
         .gt("orders_count", 0)
         .order("orders_count", { ascending: false })
         .limit(limit),
       // Ticket promedio: pedir mínimo 2 entregas para evitar distorsión de 1 pedido grande
       this.supabase
         .from("customer_stats")
-        .select("*")
+        .select(RANKING_COLUMNS)
         .gte("delivered_count", 2)
         .order("avg_ticket", { ascending: false })
         .limit(limit),
       // Los que más hace que no piden (pero alguna vez pidieron)
       this.supabase
         .from("customer_stats")
-        .select("*")
+        .select(RANKING_COLUMNS)
         .not("days_since_last_order", "is", null)
         .order("days_since_last_order", { ascending: false })
         .limit(limit),
     ])
 
     return {
-      topRevenue: (topRevenue.data || []).map(mapRow),
-      topOrders: (topOrders.data || []).map(mapRow),
-      topTicket: (topTicket.data || []).map(mapRow),
-      leastActive: (leastActive.data || []).map(mapRow),
+      topRevenue: (topRevenue.data || []).map(mapRankingRow),
+      topOrders: (topOrders.data || []).map(mapRankingRow),
+      topTicket: (topTicket.data || []).map(mapRankingRow),
+      leastActive: (leastActive.data || []).map(mapRankingRow),
     }
   }
 
