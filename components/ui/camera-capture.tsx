@@ -4,6 +4,13 @@ import React, { useRef, useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Camera, RefreshCw, X, Check, FlipHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  computeScaledSize,
+  createPreviewUrl,
+  revokePreviewUrl,
+  DEFAULT_MAX_DIMENSION,
+  DEFAULT_QUALITY,
+} from "@/lib/utils/image-compression"
 
 interface CameraCaptureProps {
   onCapture: (file: File) => void
@@ -16,6 +23,8 @@ export function CameraCapture({ onCapture, className }: CameraCaptureProps) {
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  // Espejo del objectURL vigente: permite revocarlo sin efectos dentro de setState.
+  const previewUrlRef = useRef<string | null>(null)
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [activeDeviceId, setActiveDeviceId] = useState<string>("")
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -82,6 +91,14 @@ export function CameraCapture({ onCapture, className }: CameraCaptureProps) {
     }
   }, [isCameraOpen, stream, getDevices])
 
+  // Liberar el objectURL del preview al desmontar (evita leak de memoria en la ruta).
+  useEffect(() => {
+    return () => {
+      revokePreviewUrl(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+  }, [])
+
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop())
@@ -98,29 +115,29 @@ export function CameraCapture({ onCapture, className }: CameraCaptureProps) {
       const context = canvas.getContext("2d")
 
       if (context) {
-        // Set canvas dimensions to match video
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+        // Dibujar ya reescalado: evita generar un frame de 12MP para después tirarlo.
+        const target = computeScaledSize(video.videoWidth, video.videoHeight, DEFAULT_MAX_DIMENSION)
+        canvas.width = target.width
+        canvas.height = target.height
 
-        // Draw video frame to canvas
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        context.drawImage(video, 0, 0, target.width, target.height)
 
-        // Convert to data URL for preview
-        const dataUrl = canvas.toDataURL("image/jpeg")
-        setCapturedImage(dataUrl)
-
-        // Convert to File object for upload
         canvas.toBlob(
           (blob) => {
             if (blob) {
               const file = new File([blob], `delivery_${Date.now()}.jpg`, {
                 type: "image/jpeg",
               })
+              // objectURL en vez de toDataURL: sin base64 de MBs en memoria ni freeze.
+              revokePreviewUrl(previewUrlRef.current)
+              const previewUrl = createPreviewUrl(blob)
+              previewUrlRef.current = previewUrl
+              setCapturedImage(previewUrl)
               onCapture(file)
             }
           },
           "image/jpeg",
-          0.8, // Quality
+          DEFAULT_QUALITY,
         )
       }
       stopCamera()
@@ -128,6 +145,8 @@ export function CameraCapture({ onCapture, className }: CameraCaptureProps) {
   }
 
   const handleRetake = () => {
+    revokePreviewUrl(previewUrlRef.current)
+    previewUrlRef.current = null
     setCapturedImage(null)
     startCamera(activeDeviceId)
   }

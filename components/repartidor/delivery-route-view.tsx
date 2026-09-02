@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -45,6 +45,8 @@ import { ReceiptButton } from "./receipt-button"
 import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
+import { usePhotoUpload, type PhotoSlot } from "@/hooks/use-photo-upload"
+import { createDeliveryMediaService } from "@/lib/services/deliveryMediaService"
 import { PAYMENT_METHODS, type PaymentMethod, type PaymentLine } from "@/lib/types/database"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import { 
@@ -120,12 +122,47 @@ function SortableStopItem({
   )
 }
 
+/** Claves de los slots de foto que maneja usePhotoUpload. */
+const DELIVERY_PHOTO_SLOT = "delivery"
+const NO_DELIVERY_PHOTO_SLOT = "no_delivery"
+const transferSlotKey = (lineId: string) => `transfer:${lineId}`
+
+/**
+ * Estado de la foto sobre el preview. La subida corre en background, así que el
+ * repartidor tiene que ver si ya terminó — sin esto la pantalla parece colgada.
+ */
+function PhotoStatusBadge({ slot }: { slot: PhotoSlot }) {
+  const base = "px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white"
+
+  switch (slot.status) {
+    case "processing":
+      return <span className={`${base} bg-slate-500`}>Procesando…</span>
+    case "uploading":
+      return <span className={`${base} bg-blue-600 animate-pulse`}>Subiendo…</span>
+    case "error":
+      return <span className={`${base} bg-destructive`}>Error</span>
+    case "ready":
+      return slot.bucketMissing
+        ? <span className={`${base} bg-amber-500`}>Sin guardar</span>
+        : <span className={`${base} bg-green-500`}>✓ Guardada</span>
+    default:
+      return null
+  }
+}
+
 export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false, repartidorName }: DeliveryRouteViewProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [showDeliveryDialog, setShowDeliveryDialog] = useState(false)
+
+  // 📸 Fotos de la entrega: se comprimen y suben en background al capturarlas,
+  // así al confirmar ya están arriba y el repartidor no espera frente al cliente.
+  const mediaService = useMemo(() => createDeliveryMediaService(createClient()), [])
+  const photos = usePhotoUpload(mediaService)
+  const deliverySlot = photos.getSlot(DELIVERY_PHOTO_SLOT)
+  const noDeliverySlot = photos.getSlot(NO_DELIVERY_PHOTO_SLOT)
 
   // 🆕 Reordenar ruta: "Ir ahora" con motivo
   const [showReorderDialog, setShowReorderDialog] = useState(false)
@@ -157,26 +194,26 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   // Doble confirmación: paso de resumen antes de registrar la entrega
   const [showDeliveryConfirmStep, setShowDeliveryConfirmStep] = useState(false)
 
-  // Payment lines para split payment (múltiples métodos de pago)
+  // Payment lines para split payment (múltiples métodos de pago).
+  // La foto del comprobante NO vive acá: la maneja usePhotoUpload por slot.
   interface PaymentLineState {
     id: string
     method: PaymentMethod
     amount: string
-    transferProof: File | null
-    transferProofPreview: string | null
   }
   const [paymentLines, setPaymentLines] = useState<PaymentLineState[]>([
-    { id: "1", method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+    { id: "1", method: "Efectivo", amount: "" }
   ])
 
   const addPaymentLine = () => {
     setPaymentLines(prev => [
       ...prev,
-      { id: Date.now().toString(), method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+      { id: Date.now().toString(), method: "Efectivo", amount: "" }
     ])
   }
 
   const removePaymentLine = (id: string) => {
+    photos.clear(transferSlotKey(id))
     setPaymentLines(prev => prev.filter(line => line.id !== id))
   }
 
@@ -190,19 +227,40 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     (sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0
   )
 
+  /**
+   * Reglas de las líneas de pago. Devuelve el mensaje de error, o null si están OK.
+   * Se usa tanto antes del paso de resumen como antes de persistir.
+   */
+  const validatePaymentLines = (): string | null => {
+    if (!wasCollected) return null
+    if (totalCollected <= 0) return "Debe ingresar al menos un monto cobrado válido (mayor a $0)"
+
+    for (const line of paymentLines) {
+      if ((Number.parseFloat(line.amount) || 0) <= 0) {
+        return "Cada línea de pago debe tener un monto mayor a $0"
+      }
+      if (line.method !== "Transferencia") continue
+
+      const slot = photos.getSlot(transferSlotKey(line.id))
+      if (slot.status === "processing") {
+        return "Esperá un instante: el comprobante todavía se está procesando"
+      }
+      if (!slot.file) {
+        return "Debe adjuntar el comprobante de transferencia para cada pago con transferencia"
+      }
+      if (slot.status === "error") {
+        return `No se pudo subir el comprobante de transferencia: ${slot.error ?? "error desconocido"}`
+      }
+    }
+    return null
+  }
 
   // New states for delivery evidence and non-delivery
-  const [deliveryPhoto, setDeliveryPhoto] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [receivedByName, setReceivedByName] = useState("")
   const [cannotDeliver, setCannotDeliver] = useState(false)
   const [noDeliveryReason, setNoDeliveryReason] = useState("")
   const [noDeliveryNotes, setNoDeliveryNotes] = useState("")
 
-  // Foto de comprobante cuando no se puede entregar
-  const [noDeliveryPhoto, setNoDeliveryPhoto] = useState<File | null>(null)
-  const [noDeliveryPhotoPreview, setNoDeliveryPhotoPreview] = useState<string | null>(null)
-  
   // 🆕 Estado para expandir/colapsar segmentos de ruta
   const [segmentsExpanded, setSegmentsExpanded] = useState(false)
 
@@ -431,66 +489,35 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   }
 
   const handleOpenDeliveryDialog = (order: any) => {
+    // Libera los previews de la parada anterior y descarta subidas huérfanas.
+    photos.reset()
+
     setSelectedOrder(order)
     setWasCollected(false)
     setDeliveryNotes("")
     // Reset payment lines a una sola línea por defecto
     setPaymentLines([
-      { id: "1", method: "Efectivo", amount: "", transferProof: null, transferProofPreview: null }
+      { id: "1", method: "Efectivo", amount: "" }
     ])
     // Reset delivery evidence fields
-    setDeliveryPhoto(null)
-    setPhotoPreview(null)
     setReceivedByName("")
     setCannotDeliver(false)
     setNoDeliveryReason("")
     setNoDeliveryNotes("")
-    setNoDeliveryPhoto(null)
-    setNoDeliveryPhotoPreview(null)
     setShowDeliveryConfirmStep(false)
     setShowDeliveryDialog(true)
   }
 
-  // 🆕 Handle photo selection
+  // 🆕 Handle photo selection — comprime y arranca la subida en background
   const handlePhotoCapture = (file: File) => {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError("Por favor selecciona una imagen válida")
-        return
-      }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError("La imagen no puede ser mayor a 5MB")
-        return
-      }
-      setDeliveryPhoto(file)
-      // Create preview
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!selectedOrder) return
+    void photos.capture(DELIVERY_PHOTO_SLOT, file, "delivery", { orderId: selectedOrder.id })
   }
-  
+
   // 🆕 Handle no-delivery photo selection
   const handleNoDeliveryPhotoCapture = (file: File) => {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError("Por favor selecciona una imagen válida")
-        return
-      }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError("La imagen no puede ser mayor a 5MB")
-        return
-      }
-      setNoDeliveryPhoto(file)
-      // Create preview
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setNoDeliveryPhotoPreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!selectedOrder) return
+    void photos.capture(NO_DELIVERY_PHOTO_SLOT, file, "no_delivery", { orderId: selectedOrder.id })
   }
   
   // 🆕 Send receipt via WhatsApp
@@ -532,22 +559,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       return
     }
 
-    if (wasCollected) {
-      if (totalCollected <= 0) {
-        setError("Debe ingresar al menos un monto cobrado válido (mayor a $0)")
-        return
-      }
-      for (const line of paymentLines) {
-        const lineAmount = Number.parseFloat(line.amount) || 0
-        if (lineAmount <= 0) {
-          setError("Cada línea de pago debe tener un monto mayor a $0")
-          return
-        }
-        if (line.method === "Transferencia" && !line.transferProof) {
-          setError("Debe adjuntar el comprobante de transferencia para cada pago con transferencia")
-          return
-        }
-      }
+    const paymentError = validatePaymentLines()
+    if (paymentError) {
+      setError(paymentError)
+      return
     }
 
     setError(null)
@@ -564,39 +579,19 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         return
       }
       
-      // 🆕 Validar foto de no-entrega (opcional pero recomendada)
-      // Si hay foto, la subimos
-
+      // La foto de no-entrega es opcional y ya se subió en background al sacarla.
       setIsLoading(true)
       setError(null)
 
       try {
         const supabase = createClient()
-        
-        // 🆕 Upload no-delivery photo if provided
-        let noDeliveryPhotoUrl: string | null = null
-        if (noDeliveryPhoto) {
-          const fileExt = noDeliveryPhoto.name.split(".").pop() || "jpg"
-          const fileName = `no_delivery_${selectedOrder.id}_${Date.now()}.${fileExt}`
-          
-          const { error: uploadError } = await supabase.storage
-            .from("delivery")
-            .upload(fileName, noDeliveryPhoto, {
-              cacheControl: "3600",
-              upsert: false,
-            })
-          
-          if (uploadError) {
-            console.warn("[v0] Error uploading no-delivery photo:", uploadError)
-            // Continue without photo if bucket doesn't exist
-            if (!uploadError.message.includes("Bucket not found")) {
-              throw uploadError
-            }
-          } else {
-            const { data: publicData } = supabase.storage.from("delivery").getPublicUrl(fileName)
-            noDeliveryPhotoUrl = publicData.publicUrl
-          }
+
+        const settled = await photos.settle()
+        const noDeliverySettled = settled[NO_DELIVERY_PHOTO_SLOT]
+        if (noDeliverySettled?.status === "error") {
+          throw new Error(`Error al subir la foto de comprobante: ${noDeliverySettled.error}`)
         }
+        const noDeliveryPhotoUrl: string | null = noDeliverySettled?.remoteUrl ?? null
 
         // Update order with non-delivery info and reset status to PENDIENTE_ENTREGA
         const { error: orderError } = await supabase
@@ -646,22 +641,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     }
 
     // Validate payment lines if marked as collected
-    if (wasCollected) {
-      if (totalCollected <= 0) {
-        setError("Debe ingresar al menos un monto cobrado válido (mayor a $0)")
-        return
-      }
-      for (const line of paymentLines) {
-        const lineAmount = Number.parseFloat(line.amount) || 0
-        if (lineAmount <= 0) {
-          setError("Cada línea de pago debe tener un monto mayor a $0")
-          return
-        }
-        if (line.method === "Transferencia" && !line.transferProof) {
-          setError("Debe adjuntar el comprobante de transferencia para cada pago con transferencia")
-          return
-        }
-      }
+    const paymentError = validatePaymentLines()
+    if (paymentError) {
+      setError(paymentError)
+      return
     }
 
     setIsLoading(true)
@@ -670,92 +653,28 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     try {
       const supabase = createClient()
 
-      // 1. Upload photo to Supabase Storage
-      let publicUrl = ""
-      let bucketNotFound = false
-      
-      // Helper function to get file extension safely
-      const getFileExtension = (file: File): string => {
-        const nameParts = file.name.split('.')
-        if (nameParts.length > 1) {
-          return nameParts.pop() || 'jpg'
-        }
-        // Fallback based on MIME type
-        if (file.type.includes('png')) return 'png'
-        if (file.type.includes('gif')) return 'gif'
-        if (file.type.includes('webp')) return 'webp'
-        return 'jpg' // Default to jpg
+      // 1. Las fotos ya se subieron en background al capturarlas: acá sólo se
+      //    espera lo que quede en vuelo y se leen las URLs ya resueltas.
+      const settled = await photos.settle()
+
+      const deliverySettled = settled[DELIVERY_PHOTO_SLOT]
+      if (deliverySettled?.status === "error") {
+        throw new Error(`Error al subir la foto de entrega: ${deliverySettled.error}`)
       }
+      const publicUrl = deliverySettled?.remoteUrl ?? ""
 
-      // Upload delivery photo (opcional — saltar si no se cargó)
-      if (deliveryPhoto) {
-        try {
-          const fileExt = getFileExtension(deliveryPhoto)
-          const fileName = `${selectedOrder.id}_${Date.now()}.${fileExt}`
-
-          const { error: uploadError } = await supabase.storage
-            .from('delivery')
-            .upload(fileName, deliveryPhoto, {
-              cacheControl: '3600',
-              upsert: false
-            })
-
-          if (uploadError) {
-            console.error("Error uploading photo:", uploadError)
-            // Si el bucket no existe, marcamos para continuar sin fotos
-            if (uploadError.message?.includes("Bucket not found") || uploadError.message?.includes("not found")) {
-              console.warn("[v0] Storage bucket 'delivery' not found - continuing without photos")
-              bucketNotFound = true
-            } else {
-              throw new Error(`Error al subir la foto de entrega: ${uploadError.message}`)
-            }
-          } else {
-            // Get public URL only if upload succeeded
-            const { data } = supabase.storage
-              .from('delivery')
-              .getPublicUrl(fileName)
-            publicUrl = data.publicUrl
-          }
-        } catch (photoError: any) {
-          // Re-throw if it's not a bucket error - this is a real error
-          if (!photoError.message?.includes("Bucket not found")) {
-            throw photoError
-          }
-          console.warn("[v0] Storage error for delivery photo:", photoError)
-          bucketNotFound = true
-        }
-      }
-
-      // Upload transfer proofs para cada línea de pago con Transferencia
-      if (wasCollected && !bucketNotFound) {
+      // URL del comprobante por línea de pago. Sin entrada = sin comprobante
+      // subido (bucket faltante), nunca un blob: local.
+      const transferProofUrlByLine = new Map<string, string>()
+      if (wasCollected) {
         for (const line of paymentLines) {
-          if (line.method === "Transferencia" && line.transferProof) {
-            try {
-              const proofExt = getFileExtension(line.transferProof)
-              const proofFileName = `${selectedOrder.id}_transfer_proof_${line.id}_${Date.now()}.${proofExt}`
-
-              const { error: proofUploadError } = await supabase.storage
-                .from('delivery')
-                .upload(proofFileName, line.transferProof, {
-                  cacheControl: '3600',
-                  upsert: false
-                })
-
-              if (proofUploadError) {
-                throw new Error(`Error al subir comprobante de transferencia: ${proofUploadError.message}`)
-              }
-
-              const { data: proofData } = supabase.storage
-                .from('delivery')
-                .getPublicUrl(proofFileName)
-
-              // Guardar URL en la línea para uso posterior
-              updatePaymentLine(line.id, { transferProofPreview: proofData.publicUrl })
-              // También guardar en variable local para el JSON
-              line.transferProofPreview = proofData.publicUrl
-            } catch (proofError: any) {
-              throw new Error(`Error al subir comprobante de transferencia: ${proofError.message || 'Error desconocido'}`)
-            }
+          if (line.method !== "Transferencia") continue
+          const slot = settled[transferSlotKey(line.id)]
+          if (slot?.status === "error") {
+            throw new Error(`Error al subir comprobante de transferencia: ${slot.error}`)
+          }
+          if (slot?.remoteUrl) {
+            transferProofUrlByLine.set(line.id, slot.remoteUrl)
           }
         }
       }
@@ -775,13 +694,15 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         ? paymentLines.map(line => ({
             method: line.method,
             amount: Number.parseFloat(line.amount) || 0,
-            transferProofUrl: line.method === "Transferencia" ? (line.transferProofPreview || undefined) : undefined,
+            transferProofUrl: line.method === "Transferencia" ? transferProofUrlByLine.get(line.id) : undefined,
           }))
         : null
 
       // Primera URL de comprobante de transferencia (backward compat)
       const firstTransferProofUrl = wasCollected
-        ? paymentLines.find(l => l.method === "Transferencia" && l.transferProofPreview)?.transferProofPreview || ""
+        ? paymentLines
+            .map(l => (l.method === "Transferencia" ? transferProofUrlByLine.get(l.id) : undefined))
+            .find(Boolean) || ""
         : ""
 
       const orderUpdateData: any = {
@@ -830,7 +751,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           for (const line of paymentLines) {
             const lineAmount = Number.parseFloat(line.amount) || 0
             if (lineAmount > 0) {
-              const proofUrl = line.method === "Transferencia" ? (line.transferProofPreview || undefined) : undefined
+              const proofUrl = line.method === "Transferencia" ? transferProofUrlByLine.get(line.id) : undefined
               await accountService.recordDebtPayment({
                 orderId: selectedOrder.id,
                 amount: lineAmount,
@@ -1991,26 +1912,26 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                     Toma una foto como evidencia (ej: local cerrado, dirección vacía)
                   </p>
                   <CameraCapture onCapture={handleNoDeliveryPhotoCapture} />
-                  {noDeliveryPhotoPreview && (
+                  {noDeliverySlot.previewUrl && (
                     <div className="space-y-3">
                       <div className="relative">
                         <img
-                          src={noDeliveryPhotoPreview}
+                          src={noDeliverySlot.previewUrl}
                           alt="Preview"
                           className="w-full max-w-xs mx-auto rounded-lg border-2 border-orange-500"
                         />
-                        <div className="absolute top-2 right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                          ✓ Foto cargada
+                        <div className="absolute top-2 right-2">
+                          <PhotoStatusBadge slot={noDeliverySlot} />
                         </div>
                       </div>
+                      {noDeliverySlot.error && (
+                        <p className="text-xs text-destructive text-center">{noDeliverySlot.error}</p>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setNoDeliveryPhoto(null)
-                          setNoDeliveryPhotoPreview(null)
-                        }}
+                        onClick={() => photos.clear(NO_DELIVERY_PHOTO_SLOT)}
                         className="w-full"
                       >
                         Eliminar foto
@@ -2031,26 +1952,26 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                     Podés tomar una foto del pedido entregado como respaldo
                   </p>
                   <CameraCapture onCapture={handlePhotoCapture} />
-                  {photoPreview && (
+                  {deliverySlot.previewUrl && (
                     <div className="space-y-3">
                       <div className="relative">
-                      <img
-                        src={photoPreview}
-                        alt="Preview"
+                        <img
+                          src={deliverySlot.previewUrl}
+                          alt="Preview"
                           className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
                         />
-                        <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                          ✓ Foto cargada
+                        <div className="absolute top-2 right-2">
+                          <PhotoStatusBadge slot={deliverySlot} />
                         </div>
                       </div>
+                      {deliverySlot.error && (
+                        <p className="text-xs text-destructive text-center">{deliverySlot.error}</p>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setDeliveryPhoto(null)
-                          setPhotoPreview(null)
-                        }}
+                        onClick={() => photos.clear(DELIVERY_PHOTO_SLOT)}
                         className="w-full"
                       >
                         🔄 Cambiar foto
@@ -2081,8 +2002,10 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                     onCheckedChange={(checked) => {
                       setWasCollected(checked as boolean)
                       if (checked && selectedOrder?.total) {
+                        // Se pisan las líneas existentes: liberar sus comprobantes primero.
+                        paymentLines.forEach((line) => photos.clear(transferSlotKey(line.id)))
                         setPaymentLines([
-                          { id: "1", method: "Efectivo", amount: selectedOrder.total.toFixed(2), transferProof: null, transferProofPreview: null }
+                          { id: "1", method: "Efectivo", amount: selectedOrder.total.toFixed(2) }
                         ])
                       }
                     }}
@@ -2126,8 +2049,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                                 onValueChange={(val) => {
                                   const updates: Partial<PaymentLineState> = { method: val as PaymentMethod }
                                   if (val !== "Transferencia") {
-                                    updates.transferProof = null
-                                    updates.transferProofPreview = null
+                                    photos.clear(transferSlotKey(line.id))
                                   }
                                   updatePaymentLine(line.id, updates)
                                 }}
@@ -2158,12 +2080,14 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                           </div>
 
                           {/* Comprobante de transferencia por línea */}
-                          {line.method === "Transferencia" && (
+                          {line.method === "Transferencia" && (() => {
+                            const proofSlot = photos.getSlot(transferSlotKey(line.id))
+                            return (
                             <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-300 dark:border-blue-700 rounded-lg">
                               <Label className="text-xs font-bold text-blue-900 dark:text-blue-100">
                                 Comprobante de Transferencia *
                               </Label>
-                              {!line.transferProofPreview ? (
+                              {!proofSlot.previewUrl ? (
                                 <div className="space-y-2">
                                   <label
                                     htmlFor={`transfer-proof-${line.id}`}
@@ -2177,43 +2101,43 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                                     accept="image/*"
                                     capture="environment"
                                     onChange={(e) => {
-                                      const file = e.target.files?.[0]
-                                      if (file) {
-                                        if (!file.type.startsWith('image/')) return
-                                        if (file.size > 5 * 1024 * 1024) {
-                                          setError("El comprobante no debe superar 5MB")
-                                          return
-                                        }
-                                        const reader = new FileReader()
-                                        reader.onload = (ev) => {
-                                          updatePaymentLine(line.id, {
-                                            transferProof: file,
-                                            transferProofPreview: ev.target?.result as string,
-                                          })
-                                        }
-                                        reader.readAsDataURL(file)
-                                      }
+                                      const input = e.target
+                                      const file = input.files?.[0]
+                                      // Permite volver a elegir el mismo archivo tras un error.
+                                      input.value = ""
+                                      if (!file || !selectedOrder) return
+
+                                      void photos.capture(transferSlotKey(line.id), file, "transfer_proof", {
+                                        orderId: selectedOrder.id,
+                                        lineId: line.id,
+                                      })
                                     }}
                                     className="hidden"
                                   />
+                                  {proofSlot.status === "error" && (
+                                    <p className="text-xs text-destructive">{proofSlot.error}</p>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="space-y-2">
                                   <div className="relative">
                                     <img
-                                      src={line.transferProofPreview}
+                                      src={proofSlot.previewUrl}
                                       alt="Comprobante"
                                       className="w-full max-w-[200px] mx-auto rounded-lg border-2 border-green-500"
                                     />
-                                    <div className="absolute top-1 right-1 bg-green-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                                      Cargado
+                                    <div className="absolute top-1 right-1">
+                                      <PhotoStatusBadge slot={proofSlot} />
                                     </div>
                                   </div>
+                                  {proofSlot.error && (
+                                    <p className="text-xs text-destructive text-center">{proofSlot.error}</p>
+                                  )}
                                   <Button
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => updatePaymentLine(line.id, { transferProof: null, transferProofPreview: null })}
+                                    onClick={() => photos.clear(transferSlotKey(line.id))}
                                     className="w-full text-xs"
                                   >
                                     Cambiar comprobante
@@ -2221,7 +2145,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                                 </div>
                               )}
                             </div>
-                          )}
+                            )
+                          })()}
                         </div>
                       ))}
 
