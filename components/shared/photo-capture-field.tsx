@@ -42,6 +42,7 @@ interface PhotoCaptureFieldProps {
    */
   children: ReactNode
   clearLabel?: string
+  /** Clases del contenedor del preview (por ej. `max-w-[200px]` para achicarlo). */
   previewClassName?: string
   className?: string
 }
@@ -71,11 +72,16 @@ export function PhotoCaptureField({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="relative">
+      {/*
+        El ancho máximo va en el contenedor, no en la imagen: el badge se
+        posiciona contra este div, así que si la imagen fuera más angosta que
+        él quedaría flotando en el vacío al costado de la foto.
+      */}
+      <div className={cn("relative w-full max-w-xs mx-auto", previewClassName)}>
         <img
           src={slot.previewUrl}
           alt="Foto capturada"
-          className={cn("w-full max-w-xs mx-auto rounded-lg border-2 border-green-500", previewClassName)}
+          className="w-full rounded-lg border-2 border-green-500"
         />
         <div className="absolute top-2 right-2">
           <PhotoStatusBadge slot={slot} />
