@@ -24,6 +24,13 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { DollarSign, Loader2, Paperclip, X, FileText, CreditCard, Wallet } from "lucide-react"
+import {
+  compressImage,
+  createPreviewUrl,
+  revokePreviewUrl,
+  isImageFile,
+  MAX_SOURCE_FILE_BYTES,
+} from "@/lib/utils/image-compression"
 
 type PaymentScope = "order" | "account"
 
@@ -68,22 +75,23 @@ export function RegisterPaymentDialog({
     ? (selectedOrderData?.balance_due ?? undefined)
     : undefined  // sin límite en pago a cuenta
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) { setError("El archivo no puede superar 5MB"); return }
-    setProofFile(file)
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader()
-      reader.onloadend = () => setProofPreview(reader.result as string)
-      reader.readAsDataURL(file)
-    } else {
-      setProofPreview(null)
-    }
+    if (file.size > MAX_SOURCE_FILE_BYTES) { setError("El archivo no puede superar 25MB"); return }
+
+    // Las imágenes se achican; los PDFs y documentos pasan intactos.
+    const prepared = await compressImage(file)
+    if (prepared.size > 5 * 1024 * 1024) { setError("El archivo no puede superar 5MB"); return }
+
+    setProofFile(prepared)
+    revokePreviewUrl(proofPreview)
+    setProofPreview(isImageFile(prepared) ? createPreviewUrl(prepared) : null)
   }
 
   const removeFile = () => {
     setProofFile(null)
+    revokePreviewUrl(proofPreview)
     setProofPreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
@@ -160,6 +168,7 @@ export function RegisterPaymentDialog({
     setPaymentMethod("transferencia")
     setNotes("")
     setProofFile(null)
+    revokePreviewUrl(proofPreview)
     setProofPreview(null)
     setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ""

@@ -28,6 +28,13 @@ import {
   ShieldCheck,
   ArrowLeft,
 } from "lucide-react"
+import {
+  compressImage,
+  createPreviewUrl,
+  revokePreviewUrl,
+  isImageFile,
+  MAX_SOURCE_FILE_BYTES,
+} from "@/lib/utils/image-compression"
 
 type AdjustmentDirection = "debit" | "credit"
 type Step = "form" | "confirm"
@@ -61,25 +68,29 @@ export function AdjustBalanceDialog({
   const amountNum = parseFloat(amount) || 0
   const newBalance = direction === "debit" ? currentBalance + amountNum : currentBalance - amountNum
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_SOURCE_FILE_BYTES) {
+      setError("El archivo no puede superar 25MB")
+      return
+    }
+
+    // Las imágenes se achican; los PDFs y documentos pasan intactos.
+    const prepared = await compressImage(file)
+    if (prepared.size > 5 * 1024 * 1024) {
       setError("El archivo no puede superar 5MB")
       return
     }
-    setProofFile(file)
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader()
-      reader.onloadend = () => setProofPreview(reader.result as string)
-      reader.readAsDataURL(file)
-    } else {
-      setProofPreview(null)
-    }
+
+    setProofFile(prepared)
+    revokePreviewUrl(proofPreview)
+    setProofPreview(isImageFile(prepared) ? createPreviewUrl(prepared) : null)
   }
 
   const removeFile = () => {
     setProofFile(null)
+    revokePreviewUrl(proofPreview)
     setProofPreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
@@ -166,6 +177,7 @@ export function AdjustBalanceDialog({
     setReason("")
     setConfirmText("")
     setProofFile(null)
+    revokePreviewUrl(proofPreview)
     setProofPreview(null)
     setError(null)
     setSuccess(false)

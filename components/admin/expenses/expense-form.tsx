@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Upload, X, FileText, Plus } from "lucide-react"
+import { compressImage, MAX_SOURCE_FILE_BYTES } from "@/lib/utils/image-compression"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { QuickSupplierDialog } from "./quick-supplier-dialog"
@@ -55,21 +56,32 @@ export function ExpenseForm({ expense, categories, suppliers: initialSuppliers }
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target
+    const file = input.files?.[0]
     if (!file) return
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error("El archivo supera los 5MB")
-      e.target.value = ""
-      return
-    }
+
     const ok = file.type.startsWith("image/") || file.type === "application/pdf"
     if (!ok) {
       toast.error("Solo se permiten imágenes o PDF")
-      e.target.value = ""
+      input.value = ""
       return
     }
-    setProofFile(file)
+    if (file.size > MAX_SOURCE_FILE_BYTES) {
+      toast.error("El archivo supera los 25MB")
+      input.value = ""
+      return
+    }
+
+    // Las fotos de comprobantes se achican; los PDFs pasan intactos.
+    const prepared = await compressImage(file)
+    if (prepared.size > MAX_FILE_SIZE) {
+      toast.error("El archivo supera los 5MB")
+      input.value = ""
+      return
+    }
+
+    setProofFile(prepared)
   }
 
   async function uploadProof(): Promise<string | null> {

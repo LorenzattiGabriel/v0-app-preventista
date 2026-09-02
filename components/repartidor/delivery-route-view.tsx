@@ -45,7 +45,8 @@ import { ReceiptButton } from "./receipt-button"
 import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
-import { usePhotoUpload, type PhotoSlot } from "@/hooks/use-photo-upload"
+import { usePhotoUpload } from "@/hooks/use-photo-upload"
+import { PhotoCaptureField } from "@/components/shared/photo-capture-field"
 import { createDeliveryMediaService } from "@/lib/services/deliveryMediaService"
 import { PAYMENT_METHODS, type PaymentMethod, type PaymentLine } from "@/lib/types/database"
 import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
@@ -126,29 +127,6 @@ function SortableStopItem({
 const DELIVERY_PHOTO_SLOT = "delivery"
 const NO_DELIVERY_PHOTO_SLOT = "no_delivery"
 const transferSlotKey = (lineId: string) => `transfer:${lineId}`
-
-/**
- * Estado de la foto sobre el preview. La subida corre en background, así que el
- * repartidor tiene que ver si ya terminó — sin esto la pantalla parece colgada.
- */
-function PhotoStatusBadge({ slot }: { slot: PhotoSlot }) {
-  const base = "px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white"
-
-  switch (slot.status) {
-    case "processing":
-      return <span className={`${base} bg-slate-500`}>Procesando…</span>
-    case "uploading":
-      return <span className={`${base} bg-blue-600 animate-pulse`}>Subiendo…</span>
-    case "error":
-      return <span className={`${base} bg-destructive`}>Error</span>
-    case "ready":
-      return slot.bucketMissing
-        ? <span className={`${base} bg-amber-500`}>Sin guardar</span>
-        : <span className={`${base} bg-green-500`}>✓ Guardada</span>
-    default:
-      return null
-  }
-}
 
 export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false, repartidorName }: DeliveryRouteViewProps) {
   const router = useRouter()
@@ -1911,33 +1889,14 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   <p className="text-sm text-orange-700 dark:text-orange-300 mb-2">
                     Toma una foto como evidencia (ej: local cerrado, dirección vacía)
                   </p>
-                  <CameraCapture onCapture={handleNoDeliveryPhotoCapture} />
-                  {noDeliverySlot.previewUrl && (
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <img
-                          src={noDeliverySlot.previewUrl}
-                          alt="Preview"
-                          className="w-full max-w-xs mx-auto rounded-lg border-2 border-orange-500"
-                        />
-                        <div className="absolute top-2 right-2">
-                          <PhotoStatusBadge slot={noDeliverySlot} />
-                        </div>
-                      </div>
-                      {noDeliverySlot.error && (
-                        <p className="text-xs text-destructive text-center">{noDeliverySlot.error}</p>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => photos.clear(NO_DELIVERY_PHOTO_SLOT)}
-                        className="w-full"
-                      >
-                        Eliminar foto
-                      </Button>
-                    </div>
-                  )}
+                  <PhotoCaptureField
+                    slot={noDeliverySlot}
+                    onClear={() => photos.clear(NO_DELIVERY_PHOTO_SLOT)}
+                    clearLabel="Eliminar foto"
+                    previewClassName="border-orange-500"
+                  >
+                    <CameraCapture onCapture={handleNoDeliveryPhotoCapture} />
+                  </PhotoCaptureField>
                 </div>
               </>
             ) : (
@@ -1951,33 +1910,13 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
                     Podés tomar una foto del pedido entregado como respaldo
                   </p>
-                  <CameraCapture onCapture={handlePhotoCapture} />
-                  {deliverySlot.previewUrl && (
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <img
-                          src={deliverySlot.previewUrl}
-                          alt="Preview"
-                          className="w-full max-w-xs mx-auto rounded-lg border-2 border-green-500"
-                        />
-                        <div className="absolute top-2 right-2">
-                          <PhotoStatusBadge slot={deliverySlot} />
-                        </div>
-                      </div>
-                      {deliverySlot.error && (
-                        <p className="text-xs text-destructive text-center">{deliverySlot.error}</p>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => photos.clear(DELIVERY_PHOTO_SLOT)}
-                        className="w-full"
-                      >
-                        🔄 Cambiar foto
-                      </Button>
-                    </div>
-                  )}
+                  <PhotoCaptureField
+                    slot={deliverySlot}
+                    onClear={() => photos.clear(DELIVERY_PHOTO_SLOT)}
+                    clearLabel="🔄 Cambiar foto"
+                  >
+                    <CameraCapture onCapture={handlePhotoCapture} />
+                  </PhotoCaptureField>
                 </div>
 
                 {/* 🆕 Received By Name */}
@@ -2087,63 +2026,38 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                               <Label className="text-xs font-bold text-blue-900 dark:text-blue-100">
                                 Comprobante de Transferencia *
                               </Label>
-                              {!proofSlot.previewUrl ? (
-                                <div className="space-y-2">
-                                  <label
-                                    htmlFor={`transfer-proof-${line.id}`}
-                                    className="flex items-center justify-center gap-2 w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors text-center text-sm font-medium"
-                                  >
-                                    Fotografiar Comprobante
-                                  </label>
-                                  <input
-                                    id={`transfer-proof-${line.id}`}
-                                    type="file"
-                                    accept="image/*"
-                                    capture="environment"
-                                    onChange={(e) => {
-                                      const input = e.target
-                                      const file = input.files?.[0]
-                                      // Permite volver a elegir el mismo archivo tras un error.
-                                      input.value = ""
-                                      if (!file || !selectedOrder) return
+                              <PhotoCaptureField
+                                slot={proofSlot}
+                                onClear={() => photos.clear(transferSlotKey(line.id))}
+                                clearLabel="Cambiar comprobante"
+                                previewClassName="max-w-[200px]"
+                              >
+                                <label
+                                  htmlFor={`transfer-proof-${line.id}`}
+                                  className="flex items-center justify-center gap-2 w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition-colors text-center text-sm font-medium"
+                                >
+                                  Fotografiar Comprobante
+                                </label>
+                                <input
+                                  id={`transfer-proof-${line.id}`}
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  onChange={(e) => {
+                                    const input = e.target
+                                    const file = input.files?.[0]
+                                    // Permite volver a elegir el mismo archivo tras un error.
+                                    input.value = ""
+                                    if (!file || !selectedOrder) return
 
-                                      void photos.capture(transferSlotKey(line.id), file, "transfer_proof", {
-                                        orderId: selectedOrder.id,
-                                        lineId: line.id,
-                                      })
-                                    }}
-                                    className="hidden"
-                                  />
-                                  {proofSlot.status === "error" && (
-                                    <p className="text-xs text-destructive">{proofSlot.error}</p>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div className="relative">
-                                    <img
-                                      src={proofSlot.previewUrl}
-                                      alt="Comprobante"
-                                      className="w-full max-w-[200px] mx-auto rounded-lg border-2 border-green-500"
-                                    />
-                                    <div className="absolute top-1 right-1">
-                                      <PhotoStatusBadge slot={proofSlot} />
-                                    </div>
-                                  </div>
-                                  {proofSlot.error && (
-                                    <p className="text-xs text-destructive text-center">{proofSlot.error}</p>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => photos.clear(transferSlotKey(line.id))}
-                                    className="w-full text-xs"
-                                  >
-                                    Cambiar comprobante
-                                  </Button>
-                                </div>
-                              )}
+                                    void photos.capture(transferSlotKey(line.id), file, "transfer_proof", {
+                                      orderId: selectedOrder.id,
+                                      lineId: line.id,
+                                    })
+                                  }}
+                                  className="hidden"
+                                />
+                              </PhotoCaptureField>
                             </div>
                             )
                           })()}

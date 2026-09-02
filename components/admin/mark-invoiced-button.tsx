@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2, Paperclip, Receipt, X } from "lucide-react"
+import { compressImage, MAX_SOURCE_FILE_BYTES } from "@/lib/utils/image-compression"
 
 interface MarkInvoicedButtonProps {
   orderId: string
@@ -43,14 +44,22 @@ export function MarkInvoicedButton({
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (!f) return
-    if (f.size > 5 * 1024 * 1024) {
+    if (f.size > MAX_SOURCE_FILE_BYTES) {
+      setError("El archivo no puede superar 25MB")
+      return
+    }
+
+    // Las facturas fotografiadas se achican; los PDFs pasan intactos.
+    const prepared = await compressImage(f)
+    if (prepared.size > 5 * 1024 * 1024) {
       setError("El archivo no puede superar 5MB")
       return
     }
-    setFile(f)
+
+    setFile(prepared)
     setError(null)
   }
 
