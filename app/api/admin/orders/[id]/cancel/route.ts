@@ -128,6 +128,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         console.error("Error reversing debt:", debtError)
         // Continue with cancellation even if debt reversal fails
       }
+    } else {
+      // Pedido cancelado antes de armarse: no hay deuda que reversar, pero el
+      // registro de pago (creado por trigger al salir de BORRADOR) sigue con
+      // balance_due > 0 y se cuela en el KPI de deuda vencida de reportes.
+      const { error: pendingPaymentError } = await supabase
+        .from("order_payments")
+        .update({
+          balance_due: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("order_id", orderId)
+
+      if (pendingPaymentError) {
+        console.error("Error cerrando order_payments del pedido cancelado:", pendingPaymentError)
+      }
     }
 
     // Update order status to CANCELADO

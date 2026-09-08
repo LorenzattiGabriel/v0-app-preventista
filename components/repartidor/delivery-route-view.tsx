@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil, Info, Search } from "lucide-react"
+import { ArrowLeft, MapPin, Package, CheckCircle, Play, Flag, Calendar, Truck, Clock, CircleDollarSign, FileText, ChevronDown, ChevronUp, GripVertical, Pencil, Info, Search, AlertTriangle } from "lucide-react"
 import {
   DndContext,
   closestCenter,
@@ -132,6 +132,8 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Aviso persistente: la entrega se guardó pero la cuenta corriente no.
+  const [accountWarning, setAccountWarning] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [showDeliveryDialog, setShowDeliveryDialog] = useState(false)
 
@@ -724,6 +726,15 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       try {
         const accountService = createAccountMovementsService(supabase)
 
+        // 🛡️ Red de seguridad: si la deuda no se registró al confirmar el armado
+        // (conexión caída del armador), la generamos acá. Sin esto, el cobro de
+        // abajo crea un "saldo a favor" fantasma y el pedido nunca aparece en la
+        // cuenta corriente del cliente.
+        const debtWasMissing = await accountService.ensureOrderDebt(selectedOrder.id, userId)
+        if (debtWasMissing) {
+          console.warn(`[repartidor] Deuda faltante generada para pedido ${selectedOrder.order_number}`)
+        }
+
         // Registrar un pago por cada línea de pago
         if (wasCollected && collectedAmountNum > 0) {
           for (const line of paymentLines) {
@@ -744,7 +755,14 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           console.log(`✅ Pagos registrados: $${collectedAmountNum} (${paymentLines.length} línea(s)) para pedido ${selectedOrder.order_number}`)
         }
       } catch (accountError) {
-        console.warn("[v0] Account system not available (tables may not exist):", accountError)
+        // La entrega YA quedó registrada, pero la cuenta corriente no. No lo
+        // tapamos: el repartidor tiene que avisar para que lo corrijan a mano.
+        console.error("[repartidor] Error registrando cuenta corriente:", accountError)
+        setAccountWarning(
+          `⚠️ El pedido ${selectedOrder.order_number} se entregó, pero NO se pudo actualizar la cuenta corriente del cliente` +
+            `${wasCollected ? ` (cobro de $${collectedAmountNum.toFixed(2)})` : ""}. ` +
+            `Avisale al administrador para que lo cargue a mano.`,
+        )
       }
 
       // Create history entry
@@ -1189,6 +1207,19 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-md border border-destructive/20">{error}</div>
+      )}
+
+      {accountWarning && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-500 rounded-md p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900 dark:text-amber-200">Cuenta corriente no actualizada</p>
+            <p className="text-sm text-amber-800 dark:text-amber-300 mt-1">{accountWarning}</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setAccountWarning(null)}>
+            Entendido
+          </Button>
+        </div>
       )}
 
       {/* Info banner for active route */}

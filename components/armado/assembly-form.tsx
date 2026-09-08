@@ -16,7 +16,6 @@ import Link from "next/link"
 import { downloadAssemblyReceipt, generateAssemblyReceipt } from "@/lib/receipt-generator"
 import { shareOnWhatsApp } from "@/lib/share-utils"
 import { toast } from "sonner"
-import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
 import { releaseOrderAction } from "@/app/armado/actions"
 import {
   AlertDialog,
@@ -299,7 +298,6 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
     setError(null)
 
     try {
-      const supabase = createClient()
       const { newTotal, hasShortages } = calculateTotals()
 
       // Check if all items have shortage
@@ -318,98 +316,43 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
         return
       }
 
-      // Update order (solo si sigue EN_ARMADO — evita re-confirmaciones concurrentes)
-      const { data: updatedRows, error: orderError } = await supabase
-        .from("orders")
-        .update({
-          status: "PENDIENTE_ENTREGA",
-          total: newTotal,
-          has_shortages: hasShortages,
-          assembled_by: userId,
-          assembly_completed_at: new Date().toISOString(),
-          assembly_notes: assemblyNotes,
-        })
-        .eq("id", order.id)
-        .eq("status", "EN_ARMADO")
-        .select("id")
-
-      if (orderError) throw orderError
-
-      // Si no se actualizó ninguna fila, el pedido ya fue confirmado por otra vía.
-      // Abortar para no duplicar deuda ni descontar stock de nuevo.
-      if (!updatedRows || updatedRows.length === 0) {
-        setError("Este pedido ya fue confirmado. Actualizá la página.")
-        setShowConfirmDialog(false)
-        setIsLoading(false)
-        return
-      }
-
-      // Update order items and product stock
-      for (const item of assemblyItems) {
-        const { error: itemError } = await supabase
-          .from("order_items")
-          .update({
-            quantity_assembled: item.quantityAssembled,
-            is_shortage: item.isShortage,
-            shortage_reason: item.shortageReason,
-            shortage_notes: item.shortageNotes,
-            is_substituted: item.isSubstituted,
-            substituted_product_id: item.substitutedProductId,
-            assembled_weight_kg: item.assembledWeightKg,
-          })
-          .eq("id", item.id)
-
-        if (itemError) throw itemError
-
-        // Update product stock - decrease by assembled quantity
-        if (item.quantityAssembled > 0) {
-          const productIdToUpdate = item.isSubstituted && item.substitutedProductId 
-            ? item.substitutedProductId 
-            : item.productId
-
-          // Get current stock
-          const { data: product, error: productFetchError } = await supabase
-            .from("products")
-            .select("current_stock")
-            .eq("id", productIdToUpdate)
-            .single()
-
-          if (productFetchError) {
-            console.error("Error fetching product stock:", productFetchError)
-            continue // Don't fail the whole operation if stock update fails
-          }
-
-          // Update stock — current_stock es DECIMAL (string desde supabase)
-          const newStock = Math.max(0, (Number(product?.current_stock) || 0) - item.quantityAssembled)
-          const { error: stockError } = await supabase
-            .from("products")
-            .update({ current_stock: newStock })
-            .eq("id", productIdToUpdate)
-
-          if (stockError) {
-            console.error("Error updating product stock:", stockError)
-            // Don't fail the whole operation if stock update fails
-          }
-        }
-      }
-
-      // Create order history entry
-      await supabase.from("order_history").insert({
-        order_id: order.id,
-        previous_status: "EN_ARMADO",
-        new_status: "PENDIENTE_ENTREGA",
-        changed_by: userId,
-        change_reason: hasShortages ? "Armado completado con faltantes" : "Armado completado",
+      // 🆕 Toda la confirmación (items + stock + deuda en cuenta corriente +
+      // historial) se hace server-side en UNA request. Antes eran ~13 requests
+      // desde el navegador y la deuda se registraba al final con el error
+      // silenciado: si se cortaba la conexión, el pedido quedaba armado y
+      // entregado pero SIN deuda en la cuenta corriente del cliente.
+      const response = await fetch(`/api/armado/orders/${order.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assemblyNotes,
+          newTotal,
+          hasShortages,
+          items: assemblyItems.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            quantityAssembled: item.quantityAssembled,
+            isShortage: item.isShortage,
+            shortageReason: item.shortageReason ?? null,
+            shortageNotes: item.shortageNotes ?? null,
+            isSubstituted: item.isSubstituted,
+            substitutedProductId: item.substitutedProductId ?? null,
+            assembledWeightKg: item.assembledWeightKg,
+          })),
+        }),
       })
 
-      // 🆕 Generar deuda en cuenta corriente del cliente
-      try {
-        const accountService = createAccountMovementsService(supabase)
-        await accountService.recordOrderAssembled(order.id, newTotal, userId)
-        console.log(`✅ Deuda registrada para pedido ${order.order_number}: $${newTotal}`)
-      } catch (debtError) {
-        console.error("Error al registrar deuda en cuenta corriente:", debtError)
-        // No fallar toda la operación si falla el registro de deuda
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result?.error || "Error al confirmar el armado")
+      }
+
+      // El armado se confirmó, pero algo secundario (stock) falló: avisamos.
+      if (Array.isArray(result.warnings) && result.warnings.length > 0) {
+        for (const warning of result.warnings) {
+          toast.warning(warning, { duration: 15000 })
+        }
       }
 
       // 🆕 Mostrar diálogo de éxito con opción de compartir
@@ -421,8 +364,13 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
       setShowConfirmDialog(false)
       setShowSuccessDialog(true)
     } catch (err) {
-      console.error("[v0] Error confirming assembly:", err)
-      setError(err instanceof Error ? err.message : "Error al confirmar el armado")
+      console.error("[armado] Error confirming assembly:", err)
+      const message =
+        err instanceof Error
+          ? err.message
+          : "No se pudo confirmar el armado. Revisá la conexión y reintentá."
+      setError(message)
+      toast.error(message, { duration: 15000 })
       setShowConfirmDialog(false)
     } finally {
       setIsLoading(false)

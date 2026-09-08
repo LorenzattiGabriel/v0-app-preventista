@@ -335,6 +335,29 @@ export async function POST(request: Request) {
       )
     }
 
+    // 8.b Sincronizar el registro de pago del pedido superviviente con el total
+    // fusionado. Sin esto queda con el total viejo (pre-fusión) y los reportes
+    // de deuda vencida muestran un monto que no corresponde.
+    const { data: survivingPayment } = await supabase
+      .from("order_payments")
+      .select("total_paid")
+      .eq("order_id", survivingOrder.id)
+      .maybeSingle()
+
+    const survivingPaidSoFar = Number(survivingPayment?.total_paid) || 0
+    const { error: survivingPaymentError } = await supabase
+      .from("order_payments")
+      .update({
+        order_total: newTotal,
+        balance_due: Math.max(0, newTotal - survivingPaidSoFar),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", survivingOrder.id)
+
+    if (survivingPaymentError) {
+      console.error("[merge] Error sincronizando order_payments del superviviente:", survivingPaymentError)
+    }
+
     // 9. Cancel absorbed orders (sus items ya fueron borrados en paso 6)
     for (const absorbed of absorbedOrders) {
       const { error: cancelError } = await supabase
@@ -347,6 +370,23 @@ export async function POST(request: Request) {
 
       if (cancelError) {
         console.error(`[merge] Error cancelling absorbed order ${absorbed.order_number}:`, cancelError)
+      }
+
+      // El pedido absorbido queda CANCELADO: su registro de pago no debe seguir
+      // contando como deuda pendiente (se conserva la fila por historial).
+      const { error: absorbedPaymentError } = await supabase
+        .from("order_payments")
+        .update({
+          balance_due: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("order_id", absorbed.id)
+
+      if (absorbedPaymentError) {
+        console.error(
+          `[merge] Error cerrando order_payments de ${absorbed.order_number}:`,
+          absorbedPaymentError
+        )
       }
 
       // Create history entry for absorbed order

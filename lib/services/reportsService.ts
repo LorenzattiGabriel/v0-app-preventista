@@ -600,13 +600,16 @@ class ReportsService {
 
     // Get overdue debt (orders with due_date < today and balance_due > 0)
     const today = getLocalDateString()
+    // ⚠️ Excluir pedidos CANCELADOS: su order_payments queda por historial y si
+    // se cuenta acá infla la deuda vencida con plata que nadie debe.
     const { data: overduePayments } = await this.supabase
       .from("order_payments")
-      .select("balance_due, due_date")
+      .select("balance_due, due_date, orders!inner(status)")
       .lt("due_date", today)
       .gt("balance_due", 0)
+      .neq("orders.status", "CANCELADO")
 
-    const overdueDebt = overduePayments?.reduce((sum, p) => sum + (p.balance_due || 0), 0) || 0
+    const overdueDebt = overduePayments?.reduce((sum, p) => sum + (Number(p.balance_due) || 0), 0) || 0
 
     // Get recent payments (last 30 days)
     const thirtyDaysAgo = new Date()

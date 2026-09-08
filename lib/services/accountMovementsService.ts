@@ -119,6 +119,46 @@ export class AccountMovementsService {
   }
 
   /**
+   * 🛡️ Red de seguridad: garantiza que el pedido tenga su DEUDA_PEDIDO cargada.
+   *
+   * La deuda se crea al confirmar el armado. Si ese registro falló (conexión
+   * caída del armador, pedido armado por una vía vieja, etc.) el pedido llega a
+   * la entrega sin deuda: el cobro posterior genera un "saldo a favor" fantasma
+   * y el pedido nunca aparece en la cuenta corriente del cliente.
+   *
+   * Devuelve true si la deuda faltaba y se creó, false si ya existía.
+   * Es idempotente: recordOrderAssembled ya chequea duplicados.
+   */
+  async ensureOrderDebt(orderId: string, createdBy?: string): Promise<boolean> {
+    const { data: existingDebt, error: debtError } = await this.supabase
+      .from("customer_account_movements")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("movement_type", "DEUDA_PEDIDO")
+      .limit(1)
+
+    if (debtError) throw debtError
+    if (existingDebt && existingDebt.length > 0) return false
+
+    const { data: order, error: orderError } = await this.supabase
+      .from("orders")
+      .select("total, order_number")
+      .eq("id", orderId)
+      .single()
+
+    if (orderError || !order) throw orderError || new Error("Pedido no encontrado")
+
+    const total = Number(order.total) || 0
+    if (total <= 0) return false
+
+    console.warn(
+      `[accountMovements] El pedido ${order.order_number} no tenía deuda registrada. Se genera ahora ($${total}).`,
+    )
+    await this.recordOrderAssembled(orderId, total, createdBy || "")
+    return true
+  }
+
+  /**
    * Registra un pago POSTERIOR de deuda existente
    * Usar cuando el cliente viene a pagar una deuda que ya tiene
    * NO usar para cobros al momento de la entrega (usar updateOrderPayment)
