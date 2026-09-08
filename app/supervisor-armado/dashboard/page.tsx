@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation"
-import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { NavButton } from "@/components/shared/action-button"
 import { LogoutButton } from "@/components/logout-button"
 import { ClipboardList, UserCheck, Package, ChevronRight } from "lucide-react"
 
@@ -96,11 +95,9 @@ export default async function SupervisorArmadoDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild className="w-full">
-                  <Link href="/supervisor-armado/asignar">
+                <NavButton href="/supervisor-armado/asignar" className="w-full">
                     Ir a asignación <ChevronRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -117,11 +114,9 @@ export default async function SupervisorArmadoDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild className="w-full" variant="outline">
-                  <Link href="/supervisor-armado/control">
+                <NavButton href="/supervisor-armado/control" className="w-full" variant="outline">
                     Ver tablero <ChevronRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -138,11 +133,9 @@ export default async function SupervisorArmadoDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild className="w-full" variant="outline">
-                  <Link href="/armado/dashboard">
+                <NavButton href="/armado/dashboard" className="w-full" variant="outline">
                     Ir a armado <ChevronRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
           </div>

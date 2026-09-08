@@ -11,12 +11,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ShortageReason } from "@/lib/types/database"
-import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download } from "lucide-react"
+import { ArrowLeft, AlertTriangle, CheckCircle, Package, MessageCircle, Download, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { downloadAssemblyReceipt, generateAssemblyReceipt } from "@/lib/receipt-generator"
 import { shareOnWhatsApp } from "@/lib/share-utils"
 import { toast } from "sonner"
 import { releaseOrderAction } from "@/app/armado/actions"
+import { ActionButton } from "@/components/shared/action-button"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -871,14 +872,16 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
             >
               Pausar Armado
             </Button>
-            <Button
+            <ActionButton
               onClick={() => setShowConfirmDialog(true)}
-              disabled={isLoading || isLocked || itemsMissingWeight.length > 0}
+              disabled={isLocked || itemsMissingWeight.length > 0}
+              pending={isLoading}
+              pendingText="Confirmando armado…"
               size="lg"
             >
               <CheckCircle className="mr-2 h-4 w-4" />
               Confirmar Armado
-            </Button>
+            </ActionButton>
           </div>
         </CardContent>
       </Card>
@@ -901,8 +904,26 @@ export function AssemblyForm({ order, userId, isLocked, lockedByUser }: Assembly
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmAssembly}>Confirmar</AlertDialogAction>
+            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                // El dialogo se cierra recien cuando termina la operacion (lo
+                // hace handleConfirmAssembly), asi el armador ve "Procesando..."
+                // en vez de quedarse mirando la pantalla sin saber que pasa.
+                e.preventDefault()
+                handleConfirmAssembly()
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando…
+                </>
+              ) : (
+                "Confirmar"
+              )}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

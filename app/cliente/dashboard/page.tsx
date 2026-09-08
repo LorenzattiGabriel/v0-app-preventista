@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
 import { Package, Clock, CheckCircle, Truck, AlertTriangle } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
@@ -174,9 +175,7 @@ export default async function ClienteDashboardPage() {
                   <CardTitle>Pedidos Recientes</CardTitle>
                   <CardDescription>Tus últimos 5 pedidos</CardDescription>
                 </div>
-                <Button asChild variant="outline">
-                  <Link href="/cliente/orders">Ver Todos</Link>
-                </Button>
+                <NavButton href="/cliente/orders" variant="outline">Ver Todos</NavButton>
               </div>
             </CardHeader>
             <CardContent>

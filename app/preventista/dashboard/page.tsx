@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import { NavButton } from "@/components/shared/action-button"
 import { Package, FileText, Clock, Calendar } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 
@@ -118,21 +117,13 @@ export default async function PreventistaDashboardPage() {
                 <CardDescription className="text-xs md:text-sm">Gestiona pedidos y clientes</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild className="w-full" size="lg">
-                  <Link href="/preventista/orders/new">
+                <NavButton href="/preventista/orders/new" className="w-full" size="lg">
                     <Package className="mr-2 h-4 w-4" />
                     Crear Nuevo Pedido
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/preventista/customers/new">Registrar Nuevo Cliente</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/preventista/orders">Ver Mis Pedidos</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/preventista/customers">Ver Clientes</Link>
-                </Button>
+                  </NavButton>
+                <NavButton href="/preventista/customers/new" variant="outline" className="w-full bg-transparent">Registrar Nuevo Cliente</NavButton>
+                <NavButton href="/preventista/orders" variant="outline" className="w-full bg-transparent">Ver Mis Pedidos</NavButton>
+                <NavButton href="/preventista/customers" variant="outline" className="w-full bg-transparent">Ver Clientes</NavButton>
               </CardContent>
             </Card>
 
@@ -143,12 +134,10 @@ export default async function PreventistaDashboardPage() {
               </CardHeader>
               <CardContent>
                 {draftOrders && draftOrders > 0 ? (
-                  <Button asChild variant="outline" className="w-full bg-transparent" size="lg">
-                    <Link href="/preventista/orders/drafts">
+                  <NavButton href="/preventista/orders/drafts" variant="outline" className="w-full bg-transparent" size="lg">
                       <FileText className="mr-2 h-4 w-4" />
                       Ver Borradores ({draftOrders})
-                    </Link>
-                  </Button>
+                    </NavButton>
                 ) : (
                   <p className="text-xs md:text-sm text-muted-foreground text-center py-4">No hay borradores pendientes</p>
                 )}

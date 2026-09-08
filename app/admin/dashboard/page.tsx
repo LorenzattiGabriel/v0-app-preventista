@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
 import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
@@ -275,15 +275,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Genera y administra rutas de entrega optimizadas</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild className="w-full" size="lg">
-                  <Link href="/admin/routes/generate-smart">
+                <NavButton href="/admin/routes/generate-smart" className="w-full" size="lg">
                     <span className="hidden sm:inline">Generar Rutas Inteligentes</span>
                     <span className="sm:hidden">Generar Rutas</span>
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/routes">Ver Todas las Rutas</Link>
-                </Button>
+                  </NavButton>
+                <NavButton href="/admin/routes" variant="outline" className="w-full bg-transparent">Ver Todas las Rutas</NavButton>
               </CardContent>
             </Card>
 
@@ -293,22 +289,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Administra todos los pedidos del sistema</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/orders">Ver Todos los Pedidos</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/orders?status=PENDIENTE_ENTREGA">Pedidos Pendientes</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/orders/assign">Asignar a Armadores</Link>
-                </Button>
+                <NavButton href="/admin/orders" variant="outline" className="w-full bg-transparent">Ver Todos los Pedidos</NavButton>
+                <NavButton href="/admin/orders?status=PENDIENTE_ENTREGA" variant="outline" className="w-full bg-transparent">Pedidos Pendientes</NavButton>
+                <NavButton href="/admin/orders/assign" variant="outline" className="w-full bg-transparent">Asignar a Armadores</NavButton>
                 {delayedOrdersCount > 0 && (
-                  <Button asChild variant="destructive" className="w-full">
-                    <Link href="/admin/orders/delayed">
+                  <NavButton href="/admin/orders/delayed" variant="destructive" className="w-full">
                       <AlertTriangle className="mr-2 h-4 w-4" />
                       Pedidos Retrasados ({delayedOrdersCount})
-                    </Link>
-                  </Button>
+                    </NavButton>
                 )}
               </CardContent>
             </Card>
@@ -319,12 +307,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Análisis y métricas del sistema</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/reports">
+                <NavButton href="/admin/reports" variant="outline" className="w-full bg-transparent">
                     <FileText className="mr-2 h-4 w-4" />
                     Ver Reportes
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -342,14 +328,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Pedidos armados o entregados pendientes de factura</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/orders?requires_invoice=true">
+                <NavButton href="/admin/orders?requires_invoice=true" variant="outline" className="w-full bg-transparent">
                     <Receipt className="mr-2 h-4 w-4" />
                     {pendingBillingCount
                       ? `Ver Pendientes (${pendingBillingCount})`
                       : "Sin Pendientes"}
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -367,27 +351,21 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Administra productos e inventario</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/products">
+                <NavButton href="/admin/products" variant="outline" className="w-full bg-transparent">
                     <Package className="mr-2 h-4 w-4" />
                     Ver Productos
-                  </Link>
-                </Button>
+                  </NavButton>
                 {productStats.outOfStockProducts > 0 && (
-                  <Button asChild variant="destructive" className="w-full">
-                    <Link href="/admin/products?low_stock=true">
+                  <NavButton href="/admin/products?low_stock=true" variant="destructive" className="w-full">
                       <AlertTriangle className="mr-2 h-4 w-4" />
                       Sin Stock ({productStats.outOfStockProducts})
-                    </Link>
-                  </Button>
+                    </NavButton>
                 )}
                 {productStats.lowStockProducts > 0 && (
-                  <Button asChild variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">
-                    <Link href="/admin/products?low_stock=true">
+                  <NavButton href="/admin/products?low_stock=true" variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">
                       <AlertTriangle className="mr-2 h-4 w-4" />
                       Stock Bajo ({productStats.lowStockProducts})
-                    </Link>
-                  </Button>
+                    </NavButton>
                 )}
               </CardContent>
             </Card>
@@ -398,36 +376,24 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Administra usuarios y permisos</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/users">Ver Usuarios</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/customers">Ver Clientes</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/customers/estadisticas">
+                <NavButton href="/admin/users" variant="outline" className="w-full bg-transparent">Ver Usuarios</NavButton>
+                <NavButton href="/admin/customers" variant="outline" className="w-full bg-transparent">Ver Clientes</NavButton>
+                <NavButton href="/admin/customers/estadisticas" variant="outline" className="w-full bg-transparent">
                     <BarChart3 className="mr-2 h-4 w-4" />
                     Estadísticas de Clientes
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/cuentas-corrientes">
+                  </NavButton>
+                <NavButton href="/admin/cuentas-corrientes" variant="outline" className="w-full bg-transparent">
                     <Wallet className="mr-2 h-4 w-4" />
                     Cuentas Corrientes
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/cuentas-corrientes/movimientos">
+                  </NavButton>
+                <NavButton href="/admin/cuentas-corrientes/movimientos" variant="outline" className="w-full bg-transparent">
                     <ArrowDownRight className="mr-2 h-4 w-4" />
                     Movimientos financieros
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/credit-notes">
+                  </NavButton>
+                <NavButton href="/admin/credit-notes" variant="outline" className="w-full bg-transparent">
                     <Receipt className="mr-2 h-4 w-4" />
                     Notas de Crédito
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -440,24 +406,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Gestión de egresos y proveedores</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/egresos">
+                <NavButton href="/admin/egresos" variant="outline" className="w-full bg-transparent">
                     <ArrowDownRight className="mr-2 h-4 w-4" />
                     Ver Egresos
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/egresos/proveedores">
+                  </NavButton>
+                <NavButton href="/admin/egresos/proveedores" variant="outline" className="w-full bg-transparent">
                     <Users2 className="mr-2 h-4 w-4" />
                     Proveedores
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/admin/egresos/categorias">
+                  </NavButton>
+                <NavButton href="/admin/egresos/categorias" variant="outline" className="w-full bg-transparent">
                     <Tags className="mr-2 h-4 w-4" />
                     Categorías
-                  </Link>
-                </Button>
+                  </NavButton>
               </CardContent>
             </Card>
 
@@ -470,12 +430,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <CardDescription className="text-xs md:text-sm">Ajustes del sistema</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button asChild variant="default" className="w-full">
-                  <Link href="/admin/settings/depot">
+                <NavButton href="/admin/settings/depot" variant="default" className="w-full">
                     <Building2 className="mr-2 h-4 w-4" />
                     Punto Base / Distribuidora
-                  </Link>
-                </Button>
+                  </NavButton>
                 <p className="text-xs text-muted-foreground mt-2">
                   Configura el punto de inicio y fin para todas las rutas
                 </p>
