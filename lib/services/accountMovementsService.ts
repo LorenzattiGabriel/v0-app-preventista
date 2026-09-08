@@ -77,17 +77,69 @@ export class AccountMovementsService {
    * Crea un movimiento en la cuenta corriente del cliente
    * Actualiza automáticamente el current_balance del cliente
    */
+  /**
+   * Recalcula el saldo del cliente sumando TODO el ledger y lo persiste.
+   *
+   * 🚨 Por qué sumar todo en vez de hacer `saldo += monto`:
+   * el saldo se guardaba con un read-modify-write (leer current_balance, sumar,
+   * escribir). Si dos movimientos del mismo cliente se creaban casi a la vez
+   * (repartidor que toca "Confirmar entrega" dos veces, doble confirmación de
+   * armado) los dos leían el mismo saldo previo, calculaban el mismo
+   * balance_after y el segundo pisaba al primero: el movimiento quedaba en la
+   * lista pero su efecto se perdía del saldo. De ahí salían los saldos que no
+   * cierran contra la suma de las boletas (casos RAQUEL VARELA y SUSSI CABRAL).
+   *
+   * Al derivar el saldo del ledger completo, un movimiento perdido se corrige
+   * solo en el siguiente movimiento del cliente.
+   */
+  async recalculateCustomerBalance(customerId: string): Promise<number> {
+    let total = 0
+    let from = 0
+    const PAGE = 1000
+
+    while (true) {
+      const { data, error } = await this.supabase
+        .from("customer_account_movements")
+        .select("debit_amount, credit_amount")
+        .eq("customer_id", customerId)
+        .range(from, from + PAGE - 1)
+
+      if (error) throw error
+      if (!data || data.length === 0) break
+
+      for (const m of data) {
+        total += (Number(m.debit_amount) || 0) - (Number(m.credit_amount) || 0)
+      }
+
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+
+    // Redondeo a 2 decimales: evita arrastrar 99527.44999 por punto flotante
+    const balance = Math.round(total * 100) / 100
+
+    const { error: updateError } = await this.supabase
+      .from("customers")
+      .update({ current_balance: balance })
+      .eq("id", customerId)
+
+    if (updateError) throw updateError
+
+    return balance
+  }
+
   async createMovement(params: CreateMovementParams): Promise<CustomerAccountMovement> {
     const { customerId, movementType, description, amount, orderId, routeId, createdBy, notes, proofUrl } = params
 
-    // Obtener saldo actual
-    const currentBalance = await this.getCustomerBalance(customerId)
-
     // Determinar si es débito o crédito según el tipo
     const isDebit = ["DEUDA_PEDIDO", "AJUSTE_DEBITO"].includes(movementType)
-    const debitAmount = isDebit ? amount : 0
-    const creditAmount = isDebit ? 0 : amount
-    const balanceAfter = currentBalance + debitAmount - creditAmount
+    const debitAmount = isDebit ? Number(amount) || 0 : 0
+    const creditAmount = isDebit ? 0 : Number(amount) || 0
+
+    // Saldo provisorio: se corrige abajo con el recálculo sobre el ledger ya
+    // con esta fila adentro.
+    const previousBalance = Number(await this.getCustomerBalance(customerId)) || 0
+    const provisionalBalance = previousBalance + debitAmount - creditAmount
 
     const { data, error } = await this.supabase
       .from("customer_account_movements")
@@ -97,7 +149,7 @@ export class AccountMovementsService {
         description,
         debit_amount: debitAmount,
         credit_amount: creditAmount,
-        balance_after: balanceAfter,
+        balance_after: provisionalBalance,
         order_id: orderId,
         route_id: routeId,
         created_by: createdBy,
@@ -108,14 +160,19 @@ export class AccountMovementsService {
       .single()
 
     if (error) throw error
-    
-    // 🆕 Actualizar el saldo del cliente
-    await this.supabase
-      .from("customers")
-      .update({ current_balance: balanceAfter })
-      .eq("id", customerId)
 
-    return data
+    // 🆕 El saldo real sale de sumar el ledger completo (ver comentario en
+    // recalculateCustomerBalance), no de incrementar el valor cacheado.
+    const balanceAfter = await this.recalculateCustomerBalance(customerId)
+
+    if (balanceAfter !== provisionalBalance) {
+      await this.supabase
+        .from("customer_account_movements")
+        .update({ balance_after: balanceAfter })
+        .eq("id", data.id)
+    }
+
+    return { ...data, balance_after: balanceAfter }
   }
 
   /**
@@ -392,6 +449,10 @@ export class AccountMovementsService {
       .insert(newRows)
 
     if (insertError) throw insertError
+
+    // Acá se borran e insertan filas a mano (sin pasar por createMovement), así
+    // que resincronizamos el saldo contra el ledger.
+    await this.recalculateCustomerBalance(order.customer_id)
   }
 
   /**

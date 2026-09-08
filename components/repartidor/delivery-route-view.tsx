@@ -701,12 +701,32 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
         orderUpdateData.transfer_proof_url = firstTransferProofUrl
       }
 
-      const { error: orderError } = await supabase
+      // 🛡️ Update CONDICIONAL: sólo pasa a ENTREGADO si todavía está en
+      // reparto. Si el repartidor tocó "Confirmar" dos veces (conexión lenta,
+      // recarga de la página), la segunda pasada no actualiza ninguna fila y
+      // cortamos acá: sin esto se registraban DOS pagos por el mismo pedido y
+      // el cliente quedaba con un saldo a favor fantasma.
+      const { data: deliveredRows, error: orderError } = await supabase
         .from("orders")
         .update(orderUpdateData)
         .eq("id", selectedOrder.id)
+        .eq("status", "EN_REPARTICION")
+        .select("id")
 
       if (orderError) throw orderError
+
+      if (!deliveredRows || deliveredRows.length === 0) {
+        setError(
+          `El pedido ${selectedOrder.order_number} ya figura como entregado. ` +
+            `No se registró de nuevo para no duplicar el cobro.`,
+        )
+        setShowDeliveryConfirmStep(false)
+        setShowDeliveryDialog(false)
+        setSelectedOrder(null)
+        setIsLoading(false)
+        router.refresh()
+        return
+      }
 
       // Update route_orders (solo tiempo de llegada, datos de pago ya no van aquí)
       const { error: routeOrderError } = await supabase
