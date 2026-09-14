@@ -84,7 +84,12 @@ export default async function AdminCustomerDetailPage({
   }
 
   // Get customer orders with payment details
-  const { data: orders } = await supabase
+  // ⚠️ NO agregar columnas acá sin verificar que existan en la tabla: si el
+  // select pide una columna inexistente, PostgREST devuelve 400, `orders` queda
+  // en null y la página muestra "No hay pedidos registrados" como si el cliente
+  // no tuviera nada. Pasó con `last_payment_date`, que nunca existió en
+  // order_payments (ver supabase/migrations/add_customer_account_system.sql).
+  const { data: orders, error: ordersError } = await supabase
     .from("orders")
     .select(`
       *,
@@ -92,13 +97,16 @@ export default async function AdminCustomerDetailPage({
         id,
         order_total,
         total_paid,
-        balance_due,
-        last_payment_date
+        balance_due
       )
     `)
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
     .limit(20)
+
+  if (ordersError) {
+    console.error("[admin/customers/[id]] Error cargando pedidos del cliente:", ordersError)
+  }
 
   // Get customer ratings
   const { data: ratings } = await supabase
@@ -195,10 +203,24 @@ export default async function AdminCustomerDetailPage({
     })),
   }))
 
+  // Estadísticas sobre TODOS los pedidos del cliente.
+  // ⚠️ No calcularlas sobre `orders`: esa lista está limitada a los últimos 20
+  // para mostrar, así que un cliente con más pedidos mostraba "Total Pedidos 20"
+  // y un gasto total recortado.
+  const { data: allOrdersForStats, error: statsError } = await supabase
+    .from("orders")
+    .select("status, total")
+    .eq("customer_id", customer.id)
+
+  if (statsError) {
+    console.error("[admin/customers/[id]] Error calculando estadísticas:", statsError)
+  }
+
   // Calculate stats
-  const totalOrders = orders?.length || 0
-  const deliveredOrders = orders?.filter((o) => o.status === "ENTREGADO").length || 0
-  const totalSpent = orders?.reduce((sum, o) => sum + parseFloat(o.total), 0) || 0
+  const statsOrders = allOrdersForStats || []
+  const totalOrders = statsOrders.length
+  const deliveredOrders = statsOrders.filter((o) => o.status === "ENTREGADO").length
+  const totalSpent = statsOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0)
   const avgRating = ratings?.length
     ? (ratings.reduce((sum, r) => sum + r.overall_rating, 0) / ratings.length).toFixed(1)
     : null
@@ -472,6 +494,13 @@ export default async function AdminCustomerDetailPage({
                           </div>
                         )
                       })}
+                    </div>
+                  ) : ordersError ? (
+                    <div className="text-center py-8 space-y-1">
+                      <p className="text-destructive font-medium">No se pudieron cargar los pedidos</p>
+                      <p className="text-sm text-muted-foreground">
+                        Hubo un error al consultar la base. Recargá la página; si sigue igual, avisale al soporte.
+                      </p>
                     </div>
                   ) : (
                     <p className="text-center text-muted-foreground py-8">No hay pedidos registrados</p>
