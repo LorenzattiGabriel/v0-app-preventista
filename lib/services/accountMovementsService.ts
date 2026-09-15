@@ -56,6 +56,23 @@ interface CreateCashClosureParams {
   notes?: string
 }
 
+/** Un pedido viejo, ya entregado, que todavía tiene saldo pendiente. */
+export interface CollectibleOrder {
+  orderId: string
+  orderNumber: string
+  orderTotal: number
+  balanceDue: number
+  deliveredAt: string | null
+}
+
+/** Lo que el repartidor cobró en una ruta, separado por origen. */
+export interface RouteCollectionBreakdown {
+  routeCollected: number
+  debtCollected: number
+  debtPaymentsCount: number
+  byMethod: Record<string, number>
+}
+
 export class AccountMovementsService {
   constructor(private supabase: SupabaseClient) {}
 
@@ -581,47 +598,190 @@ export class AccountMovementsService {
   /**
    * Crea cierre de caja de una ruta
    */
+  /**
+   * Pedidos viejos del cliente que el repartidor puede cobrar: ya entregados y
+   * con saldo pendiente.
+   *
+   * ⚠️ El tope es el saldo de cuenta corriente del cliente, NO la suma de los
+   * saldos por pedido. Los dos números no coinciden: históricamente los pagos a
+   * cuenta y los sobrepagos bajaron el saldo del cliente sin descontar de ningún
+   * pedido, así que la suma por pedido está inflada (llegó a mostrar $1,17M de
+   * deuda en un cliente cuyo saldo real era $0). Si cobráramos contra esa suma,
+   * le cobraríamos de más al cliente en la calle.
+   */
+  async getCollectibleOrders(
+    customerId: string,
+    excludeOrderIds: string[] = [],
+  ): Promise<{ balance: number; orders: CollectibleOrder[] }> {
+    const balance = Number(await this.getCustomerBalance(customerId)) || 0
+
+    // Si según la cuenta corriente no debe nada, no hay nada que cobrar.
+    if (balance <= 0.005) return { balance, orders: [] }
+
+    const { data, error } = await this.supabase
+      .from("order_payments")
+      .select("order_id, order_total, balance_due, orders!inner(id, order_number, status, customer_id, delivered_at)")
+      .eq("orders.customer_id", customerId)
+      .eq("orders.status", "ENTREGADO")
+      .gt("balance_due", 0)
+      .order("balance_due", { ascending: false })
+
+    if (error) throw error
+
+    const excluded = new Set(excludeOrderIds)
+    const orders: CollectibleOrder[] = (data || [])
+      .filter((row: any) => !excluded.has(row.order_id))
+      .map((row: any) => ({
+        orderId: row.order_id,
+        orderNumber: row.orders?.order_number || "",
+        orderTotal: Number(row.order_total) || 0,
+        balanceDue: Number(row.balance_due) || 0,
+        deliveredAt: row.orders?.delivered_at ?? null,
+      }))
+      .sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || ""))
+
+    return { balance, orders }
+  }
+
+  /**
+   * Reconstruye desde el ledger lo que se cobró en una ruta, separando los
+   * pedidos de la ruta de la deuda anterior.
+   *
+   * No hace falta una tabla nueva: los movimientos de pago ya guardan `route_id`
+   * (la ruta en la que se cobraron) y `order_id` (a qué pedido se imputaron).
+   * Si el pedido no pertenece a la ruta — o no hay pedido, porque fue un pago a
+   * cuenta — entonces es deuda anterior.
+   */
+  async getRouteCollectionBreakdown(routeId: string): Promise<RouteCollectionBreakdown> {
+    const { data: routeOrders, error: roError } = await this.supabase
+      .from("route_orders")
+      .select("order_id")
+      .eq("route_id", routeId)
+
+    if (roError) throw roError
+    const routeOrderIds = new Set((routeOrders || []).map((r: any) => r.order_id))
+
+    const { data: movements, error: mError } = await this.supabase
+      .from("customer_account_movements")
+      .select("order_id, credit_amount, movement_type")
+      .eq("route_id", routeId)
+      .in("movement_type", [
+        "PAGO_EFECTIVO",
+        "PAGO_TRANSFERENCIA",
+        "PAGO_TARJETA",
+        "PAGO_CHEQUE",
+        "PAGO_CUENTA_CORRIENTE",
+        "PAGO_OTRO",
+      ])
+
+    if (mError) throw mError
+
+    const result: RouteCollectionBreakdown = {
+      routeCollected: 0,
+      debtCollected: 0,
+      debtPaymentsCount: 0,
+      byMethod: {},
+    }
+
+    for (const m of movements || []) {
+      const amount = Number(m.credit_amount) || 0
+      if (amount <= 0) continue
+
+      const isFromRoute = m.order_id && routeOrderIds.has(m.order_id)
+      if (isFromRoute) {
+        result.routeCollected += amount
+      } else {
+        result.debtCollected += amount
+        result.debtPaymentsCount += 1
+      }
+
+      result.byMethod[m.movement_type] = (result.byMethod[m.movement_type] || 0) + amount
+    }
+
+    return result
+  }
+
   async createCashClosure(params: CreateCashClosureParams): Promise<RouteCashClosure> {
     const { routeId, driverId, orders, notes } = params
 
-    const totalExpected = orders.reduce((sum, o) => sum + o.total, 0)
-    const totalCollected = orders.reduce((sum, o) => sum + (o.wasCollected ? o.collectedAmount : 0), 0)
+    const totalExpected = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0)
     const ordersDelivered = orders.length
-    const ordersCollected = orders.filter(o => o.wasCollected).length
+    const ordersCollected = orders.filter((o) => o.wasCollected).length
 
-    // Desglose por método de pago
-    const cashCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "Efectivo")
-      .reduce((sum, o) => sum + o.collectedAmount, 0)
-    const transferCollected = orders
-      .filter(o => o.wasCollected && o.paymentMethod === "Transferencia")
-      .reduce((sum, o) => sum + o.collectedAmount, 0)
-    const cardCollected = orders
-      .filter(o => o.wasCollected && (o.paymentMethod === "Tarjeta de Débito" || o.paymentMethod === "Tarjeta de Crédito"))
-      .reduce((sum, o) => sum + o.collectedAmount, 0)
+    // 🆕 Lo cobrado sale del ledger, no de los pedidos de la ruta.
+    //
+    // Por qué: (1) el repartidor ahora puede cobrar deuda anterior, que no está
+    // en ningún pedido de la ruta pero sí vuelve en su bolsillo; (2) el desglose
+    // viejo sólo tenía efectivo/transferencia/tarjeta y usaba el método
+    // "principal" de cada pedido, así que con pagos divididos o con Cheque /
+    // Cuenta Corriente la plata se contaba en el total pero desaparecía del
+    // desglose (5 de los últimos 20 cierres tenían ese agujero).
+    const breakdown = await this.getRouteCollectionBreakdown(routeId)
+
+    const routeCollected = breakdown.routeCollected
+    const debtCollected = breakdown.debtCollected
+    const totalCollected = routeCollected + debtCollected
+
+    const byMethod = breakdown.byMethod
+
+    // Columnas que existen desde siempre
+    const basePayload = {
+      route_id: routeId,
+      driver_id: driverId,
+      total_expected: totalExpected,
+      // Total a rendir: todo lo que cobró, sea de la ruta o de deuda anterior
+      total_collected: totalCollected,
+      // La diferencia es lo que quedó fiado DE ESTA RUTA: no puede mezclarse
+      // con la deuda anterior cobrada o daría un descuadre falso.
+      total_difference: totalExpected - routeCollected,
+      total_orders: orders.length,
+      orders_delivered: ordersDelivered,
+      orders_collected: ordersCollected,
+      cash_collected: byMethod["PAGO_EFECTIVO"] || 0,
+      transfer_collected: byMethod["PAGO_TRANSFERENCIA"] || 0,
+      card_collected: byMethod["PAGO_TARJETA"] || 0,
+      closure_date: getLocalDateString(),
+      notes,
+    }
+
+    // Columnas que agrega add_debt_collection_to_cash_closure.sql
+    const extendedPayload = {
+      ...basePayload,
+      route_collected: routeCollected,
+      debt_collected: debtCollected,
+      debt_payments_count: breakdown.debtPaymentsCount,
+      cheque_collected: byMethod["PAGO_CHEQUE"] || 0,
+      account_collected: byMethod["PAGO_CUENTA_CORRIENTE"] || 0,
+      other_collected: byMethod["PAGO_OTRO"] || 0,
+    }
 
     const { data, error } = await this.supabase
       .from("route_cash_closures")
-      .insert({
-        route_id: routeId,
-        driver_id: driverId,
-        total_expected: totalExpected,
-        total_collected: totalCollected,
-        total_difference: totalExpected - totalCollected,
-        total_orders: orders.length,
-        orders_delivered: ordersDelivered,
-        orders_collected: ordersCollected,
-        cash_collected: cashCollected,
-        transfer_collected: transferCollected,
-        card_collected: cardCollected,
-        closure_date: getLocalDateString(),
-        notes,
-      })
+      .insert(extendedPayload)
       .select()
       .single()
 
-    if (error) throw error
-    return data
+    if (!error) return data
+
+    // 🛡️ El deploy es automático pero la migración se corre a mano: si el código
+    // llega antes que las columnas nuevas, guardamos el cierre con el formato
+    // viejo en vez de hacerle explotar el cierre de ruta al repartidor.
+    if (error.code === "42703") {
+      console.warn(
+        "[accountMovements] Faltan las columnas de add_debt_collection_to_cash_closure.sql. " +
+          "Se guarda el cierre sin el desglose de deuda anterior — corré la migración.",
+      )
+      const { data: legacyData, error: legacyError } = await this.supabase
+        .from("route_cash_closures")
+        .insert(basePayload)
+        .select()
+        .single()
+
+      if (legacyError) throw legacyError
+      return legacyData
+    }
+
+    throw error
   }
 
   /**

@@ -49,7 +49,11 @@ import { usePhotoUpload } from "@/hooks/use-photo-upload"
 import { PhotoCaptureField } from "@/components/shared/photo-capture-field"
 import { createDeliveryMediaService } from "@/lib/services/deliveryMediaService"
 import { PAYMENT_METHODS, type PaymentMethod, type PaymentLine } from "@/lib/types/database"
-import { createAccountMovementsService } from "@/lib/services/accountMovementsService"
+import {
+  createAccountMovementsService,
+  type CollectibleOrder,
+  type RouteCollectionBreakdown,
+} from "@/lib/services/accountMovementsService"
 import { 
   calculateRouteSummary, 
   calculateRouteCollectedTotal,
@@ -127,6 +131,7 @@ function SortableStopItem({
 const DELIVERY_PHOTO_SLOT = "delivery"
 const NO_DELIVERY_PHOTO_SLOT = "no_delivery"
 const transferSlotKey = (lineId: string) => `transfer:${lineId}`
+const debtTransferSlotKey = (orderId: string) => `debt-transfer:${orderId}`
 
 export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute = false, repartidorName }: DeliveryRouteViewProps) {
   const router = useRouter()
@@ -166,6 +171,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   
   // 🆕 MEDIUM-3: Route summary state
   const [showSummaryDialog, setShowSummaryDialog] = useState(false)
+  // Cobros reales de la ruta según el ledger (incluye la deuda anterior cobrada,
+  // que no está en ningún pedido de la ruta pero sí vuelve con el repartidor).
+  const [routeCollection, setRouteCollection] = useState<RouteCollectionBreakdown | null>(null)
   const [routeSummary, setRouteSummary] = useState<any>(null)
 
   // Delivery form state
@@ -206,6 +214,68 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const totalCollected = paymentLines.reduce(
     (sum, line) => sum + (Number.parseFloat(line.amount) || 0), 0
   )
+
+  // ── Cobro de deuda anterior ────────────────────────────────────────────
+  // El repartidor está en el domicilio del cliente: si además del pedido de hoy
+  // le paga un pedido viejo, hay que poder imputarlo a ESE pedido. Antes la
+  // única salida era cargar el excedente en el pedido actual, lo que generaba
+  // saldos negativos (477 pedidos con amount_paid > total, $25,2M mal imputados).
+  type DebtLineState = { amount: string; method: PaymentMethod }
+  const [collectibleDebt, setCollectibleDebt] = useState<{
+    balance: number
+    orders: CollectibleOrder[]
+  } | null>(null)
+  const [loadingDebt, setLoadingDebt] = useState(false)
+  const [collectDebt, setCollectDebt] = useState(false)
+  const [debtLines, setDebtLines] = useState<Record<string, DebtLineState>>({})
+
+  const debtTotal = Object.values(debtLines).reduce(
+    (sum, l) => sum + (Number.parseFloat(l.amount) || 0), 0
+  )
+
+  const updateDebtLine = (orderId: string, updates: Partial<DebtLineState>) => {
+    setDebtLines(prev => {
+      const current: DebtLineState = prev[orderId] ?? { amount: "", method: "Efectivo" }
+      return { ...prev, [orderId]: { ...current, ...updates } }
+    })
+  }
+
+  /**
+   * Reglas del cobro de deuda anterior. Devuelve el mensaje de error, o null.
+   */
+  const validateDebtLines = (): string | null => {
+    if (!collectDebt || debtTotal <= 0) return null
+
+    for (const [orderId, line] of Object.entries(debtLines)) {
+      const amount = Number.parseFloat(line.amount) || 0
+      if (amount <= 0) continue
+
+      const target = collectibleDebt?.orders.find(o => o.orderId === orderId)
+      if (target && amount > target.balanceDue + 0.005) {
+        return `No podés cobrar más de $${target.balanceDue.toFixed(2)} en el pedido ${target.orderNumber}`
+      }
+      if (line.method !== "Transferencia") continue
+
+      const slot = photos.getSlot(debtTransferSlotKey(orderId))
+      if (slot.status === "processing") {
+        return "Esperá un instante: el comprobante de la deuda todavía se está procesando"
+      }
+      if (!slot.file) {
+        return `Adjuntá el comprobante de transferencia del pedido ${target?.orderNumber ?? ""}`
+      }
+      if (slot.status === "error") {
+        return `No se pudo subir el comprobante de la deuda: ${slot.error ?? "error desconocido"}`
+      }
+    }
+
+    // 🛡️ Tope por el saldo REAL de cuenta corriente, no por la suma de los
+    // saldos por pedido: esa suma está inflada por los pagos a cuenta históricos
+    // que bajaron el saldo del cliente sin descontar de ningún pedido.
+    if (collectibleDebt && debtTotal > collectibleDebt.balance + 0.005) {
+      return `El cliente debe $${collectibleDebt.balance.toFixed(2)} en total. No podés cobrar más que eso.`
+    }
+    return null
+  }
 
   /**
    * Reglas de las líneas de pago. Devuelve el mensaje de error, o null si están OK.
@@ -486,6 +556,27 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setNoDeliveryNotes("")
     setShowDeliveryConfirmStep(false)
     setShowDeliveryDialog(true)
+
+    // Traer la deuda anterior cobrable de este cliente (excluyendo los pedidos
+    // de esta misma ruta, que se cobran por la vía normal de arriba).
+    setCollectibleDebt(null)
+    setCollectDebt(false)
+    setDebtLines({})
+    const customerId = order?.customers?.id ?? order?.customer_id
+    if (customerId) {
+      setLoadingDebt(true)
+      const supabase = createClient()
+      const accountService = createAccountMovementsService(supabase)
+      const routeOrderIds = route.route_orders.map((ro: any) => ro.orders.id)
+      accountService
+        .getCollectibleOrders(customerId, routeOrderIds)
+        .then(setCollectibleDebt)
+        .catch((err) => {
+          console.error("[repartidor] No se pudo cargar la deuda anterior:", err)
+          setCollectibleDebt(null)
+        })
+        .finally(() => setLoadingDebt(false))
+    }
   }
 
   // 🆕 Handle photo selection — comprime y arranca la subida en background
@@ -542,6 +633,12 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     const paymentError = validatePaymentLines()
     if (paymentError) {
       setError(paymentError)
+      return
+    }
+
+    const debtError = validateDebtLines()
+    if (debtError) {
+      setError(debtError)
       return
     }
 
@@ -624,6 +721,12 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     const paymentError = validatePaymentLines()
     if (paymentError) {
       setError(paymentError)
+      return
+    }
+
+    const debtError = validateDebtLines()
+    if (debtError) {
+      setError(debtError)
       return
     }
 
@@ -774,6 +877,31 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           }
           console.log(`✅ Pagos registrados: $${collectedAmountNum} (${paymentLines.length} línea(s)) para pedido ${selectedOrder.order_number}`)
         }
+
+        // 🆕 Cobro de deuda anterior: se imputa a CADA pedido viejo, no al de hoy.
+        if (collectDebt && debtTotal > 0) {
+          for (const [debtOrderId, line] of Object.entries(debtLines)) {
+            const amount = Number.parseFloat(line.amount) || 0
+            if (amount <= 0) continue
+
+            const proofUrl =
+              line.method === "Transferencia"
+                ? settled[debtTransferSlotKey(debtOrderId)]?.remoteUrl ?? undefined
+                : undefined
+
+            const target = collectibleDebt?.orders.find(o => o.orderId === debtOrderId)
+            await accountService.recordDebtPayment({
+              orderId: debtOrderId,
+              amount,
+              paymentMethod: line.method,
+              routeId: route.id,
+              createdBy: userId,
+              notes: `Deuda anterior cobrada en la entrega de ${selectedOrder.order_number} por ${repartidorName || "Repartidor"}`,
+              proofUrl,
+            })
+            console.log(`✅ Deuda anterior cobrada: $${amount} del pedido ${target?.orderNumber ?? debtOrderId}`)
+          }
+        }
       } catch (accountError) {
         // La entrega YA quedó registrada, pero la cuenta corriente no. No lo
         // tapamos: el repartidor tiene que avisar para que lo corrijan a mano.
@@ -827,10 +955,21 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
   // 🆕 MEDIUM-3: Show route summary before completing
   // Uses centralized calculation service for consistency
-  const handleShowRouteSummary = () => {
+  const handleShowRouteSummary = async () => {
     const summary = calculateRouteSummary(route.route_orders as RouteOrderData[])
     setRouteSummary(summary)
     setShowSummaryDialog(true)
+
+    // Lo realmente cobrado sale del ledger, que es lo único que ve la deuda
+    // anterior: calculateRouteSummary sólo mira los pedidos de esta ruta.
+    try {
+      const supabase = createClient()
+      const accountService = createAccountMovementsService(supabase)
+      setRouteCollection(await accountService.getRouteCollectionBreakdown(route.id))
+    } catch (err) {
+      console.error("[repartidor] No se pudo calcular el cobro de la ruta:", err)
+      setRouteCollection(null)
+    }
   }
 
   const handleCompleteRoute = async () => {
@@ -2154,6 +2293,134 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   )
                 })()}
 
+                {/* 🆕 Cobro de deuda anterior del mismo cliente */}
+                {loadingDebt && (
+                  <p className="text-sm text-muted-foreground">Buscando deuda anterior…</p>
+                )}
+
+                {!loadingDebt && collectibleDebt && collectibleDebt.orders.length > 0 && (
+                  <div className="border-2 border-amber-300 dark:border-amber-700 rounded-lg p-3 space-y-3 bg-amber-50/50 dark:bg-amber-950/30">
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="collect-debt"
+                        checked={collectDebt}
+                        onCheckedChange={(checked) => {
+                          setCollectDebt(checked as boolean)
+                          if (!checked) {
+                            Object.keys(debtLines).forEach((oid) => photos.clear(debtTransferSlotKey(oid)))
+                            setDebtLines({})
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="collect-debt" className="font-medium">
+                          Cobrar deuda anterior
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Este cliente debe{" "}
+                          <strong className="text-amber-700 dark:text-amber-400">
+                            ${collectibleDebt.balance.toFixed(2)}
+                          </strong>{" "}
+                          en cuenta corriente, de {collectibleDebt.orders.length} pedido(s) anterior(es).
+                        </p>
+                      </div>
+                    </div>
+
+                    {collectDebt && (
+                      <div className="space-y-3">
+                        {collectibleDebt.orders.map((old) => {
+                          const line = debtLines[old.orderId]
+                          const amount = Number.parseFloat(line?.amount || "") || 0
+                          return (
+                            <div key={old.orderId} className="border rounded-lg p-2 space-y-2 bg-background">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm">{old.orderNumber}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Debe ${old.balanceDue.toFixed(2)}
+                                    {old.deliveredAt
+                                      ? ` · entregado ${new Date(old.deliveredAt).toLocaleDateString("es-AR")}`
+                                      : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    updateDebtLine(old.orderId, { amount: old.balanceDue.toFixed(2) })
+                                  }
+                                >
+                                  Todo
+                                </Button>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={line?.amount ?? ""}
+                                  onChange={(e) => updateDebtLine(old.orderId, { amount: e.target.value })}
+                                  className="flex-1"
+                                />
+                                <Select
+                                  value={line?.method ?? "Efectivo"}
+                                  onValueChange={(v) =>
+                                    updateDebtLine(old.orderId, { method: v as PaymentMethod })
+                                  }
+                                >
+                                  <SelectTrigger className="w-[150px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Efectivo">Efectivo</SelectItem>
+                                    <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                    <SelectItem value="Cheque">Cheque</SelectItem>
+                                    <SelectItem value="Otro">Otro</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {line?.method === "Transferencia" && amount > 0 && (
+                                <PhotoCaptureField
+                                  slot={photos.getSlot(debtTransferSlotKey(old.orderId))}
+                                  onClear={() => photos.clear(debtTransferSlotKey(old.orderId))}
+                                  clearLabel="🔄 Cambiar comprobante"
+                                >
+                                  <CameraCapture
+                                    onCapture={(file) =>
+                                      void photos.capture(
+                                        debtTransferSlotKey(old.orderId),
+                                        file,
+                                        "transfer_proof",
+                                        { orderId: old.orderId },
+                                      )
+                                    }
+                                  />
+                                </PhotoCaptureField>
+                              )}
+                            </div>
+                          )
+                        })}
+
+                        <div className="flex justify-between text-sm pt-2 border-t">
+                          <span>Deuda anterior a cobrar:</span>
+                          <span className="font-bold">${debtTotal.toFixed(2)}</span>
+                        </div>
+                        {debtTotal > collectibleDebt.balance + 0.005 && (
+                          <p className="text-xs text-destructive">
+                            No podés cobrar más de ${collectibleDebt.balance.toFixed(2)}, que es lo que
+                            debe según la cuenta corriente.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Info si NO se marca como cobrado */}
                 {!wasCollected && (
                   <div className="bg-orange-50 dark:bg-orange-950 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
@@ -2304,21 +2571,81 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Total Cobrado</CardTitle>
+                    <CardTitle className="text-sm font-medium">Total a Rendir</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-green-600">
-                      ${routeSummary.totalCollected.toFixed(2)}
+                      ${(routeCollection
+                        ? routeCollection.routeCollected + routeCollection.debtCollected
+                        : routeSummary.totalCollected
+                      ).toFixed(2)}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      de ${routeSummary.totalExpected.toFixed(2)} esperado
+                      es lo que tenés que entregar en el depósito
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
+              {/* 🆕 De dónde salió la plata: pedidos de esta ruta vs deuda anterior */}
+              {routeCollection && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Origen de lo Cobrado</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border bg-muted/40">
+                      <div>
+                        <p className="text-sm font-medium">Pedidos de esta ruta</p>
+                        <p className="text-xs text-muted-foreground">
+                          de ${routeSummary.totalExpected.toFixed(2)} entregado
+                        </p>
+                      </div>
+                      <span className="text-base font-bold">
+                        ${routeCollection.routeCollected.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800">
+                      <div>
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                          Deuda anterior cobrada
+                        </p>
+                        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                          {routeCollection.debtPaymentsCount} cobro(s) de pedidos viejos
+                        </p>
+                      </div>
+                      <span className="text-base font-bold text-amber-900 dark:text-amber-200">
+                        ${routeCollection.debtCollected.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border-2 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/40">
+                      <span className="text-sm font-bold text-green-900 dark:text-green-200">
+                        Total a rendir
+                      </span>
+                      <span className="text-lg font-bold text-green-900 dark:text-green-200">
+                        ${(routeCollection.routeCollected + routeCollection.debtCollected).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {routeSummary.totalExpected - routeCollection.routeCollected > 0.005 && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Quedó fiado de esta ruta:{" "}
+                        <strong>
+                          ${(routeSummary.totalExpected - routeCollection.routeCollected).toFixed(2)}
+                        </strong>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Payment Breakdown */}
-              {routeSummary.paymentBreakdown && Object.keys(routeSummary.paymentBreakdown).length > 0 && (() => {
+              {(routeCollection
+                ? Object.keys(routeCollection.byMethod).length > 0
+                : routeSummary.paymentBreakdown && Object.keys(routeSummary.paymentBreakdown).length > 0
+              ) && (() => {
                 const paymentIcon = (method: string) => {
                   const m = method.toLowerCase()
                   if (m.includes("efectivo")) return { icon: "💵", color: "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-200" }
@@ -2328,7 +2655,22 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   if (m.includes("cuenta")) return { icon: "📋", color: "bg-gray-50 dark:bg-gray-950/40 border-gray-200 dark:border-gray-800", text: "text-gray-800 dark:text-gray-200" }
                   return { icon: "💰", color: "bg-gray-50 dark:bg-gray-950/40 border-gray-200 dark:border-gray-800", text: "text-gray-800 dark:text-gray-200" }
                 }
-                const entries = Object.entries(routeSummary.paymentBreakdown)
+                // Preferir el desglose del ledger: es el único que incluye la
+                // deuda anterior cobrada y los métodos que el cálculo por
+                // pedidos no contemplaba (Cheque, Cuenta Corriente, Otro).
+                const MOVEMENT_LABELS: Record<string, string> = {
+                  PAGO_EFECTIVO: "Efectivo",
+                  PAGO_TRANSFERENCIA: "Transferencia",
+                  PAGO_TARJETA: "Tarjeta",
+                  PAGO_CHEQUE: "Cheque",
+                  PAGO_CUENTA_CORRIENTE: "Cuenta Corriente",
+                  PAGO_OTRO: "Otro",
+                }
+                const entries = routeCollection
+                  ? Object.entries(routeCollection.byMethod).map(
+                      ([k, v]) => [MOVEMENT_LABELS[k] ?? k, v] as [string, number],
+                    )
+                  : Object.entries(routeSummary.paymentBreakdown)
                 const total = entries.reduce((s, [, v]) => s + Number(v), 0)
                 return (
                   <Card>

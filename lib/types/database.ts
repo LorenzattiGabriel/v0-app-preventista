@@ -424,7 +424,14 @@ export interface RouteCashClosure {
   route_id: string
   driver_id: string
   total_expected: number
+  /** Total a rendir: route_collected + debt_collected */
   total_collected: number
+  /** Cobrado por los pedidos de esta ruta */
+  route_collected: number
+  /** Cobrado por deuda anterior (pedidos viejos o pago a cuenta) */
+  debt_collected: number
+  debt_payments_count: number
+  /** total_expected - route_collected: lo que quedó fiado de ESTA ruta */
   total_difference: number
   total_orders: number
   orders_delivered: number
@@ -432,6 +439,9 @@ export interface RouteCashClosure {
   cash_collected: number
   transfer_collected: number
   card_collected: number
+  cheque_collected: number
+  account_collected: number
+  other_collected: number
   closure_date: string
   created_at: string
   is_locked: boolean
