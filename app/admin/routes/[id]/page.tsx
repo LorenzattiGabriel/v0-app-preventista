@@ -4,17 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import {
-  ArrowLeft,
-  MapPin,
-  Package,
-  Clock,
-  Calendar,
-  User,
-  Navigation,
-  CheckCircle,
-  Truck,
-} from "lucide-react"
+import { ArrowLeft, MapPin, Package, Clock, Calendar, User, Navigation, CheckCircle, Truck, Wallet } from "lucide-react"
 import { RouteMapView } from "@/components/admin/route-map-view"
 import { CancelRouteButton } from "@/components/admin/cancel-route-button"
 import { RouteStopsList } from "@/components/admin/route-stops-list"
@@ -115,6 +105,57 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
     )
     .eq("route_id", id)
     .order("changed_at", { ascending: true })
+
+  // 🆕 Cierre de caja de la ruta (arqueo con el que volvió el repartidor)
+  const { data: cashClosure } = await supabase
+    .from("route_cash_closures")
+    .select("*")
+    .eq("route_id", id)
+    .maybeSingle()
+
+  // Detalle de la deuda anterior cobrada en esta ruta.
+  // Un pago hecho en esta ruta que apunta a un pedido que NO es de la ruta (o a
+  // ningún pedido) es cobro de deuda vieja. No hace falta tabla aparte: los
+  // movimientos ya guardan route_id y order_id.
+  const routeOrderIdSet = new Set((route.route_orders || []).map((ro: any) => ro.order_id))
+  const { data: routePayments } = await supabase
+    .from("customer_account_movements")
+    .select(`
+      id,
+      credit_amount,
+      movement_type,
+      created_at,
+      order_id,
+      orders ( order_number ),
+      customers ( commercial_name )
+    `)
+    .eq("route_id", id)
+    .in("movement_type", [
+      "PAGO_EFECTIVO",
+      "PAGO_TRANSFERENCIA",
+      "PAGO_TARJETA",
+      "PAGO_CHEQUE",
+      "PAGO_CUENTA_CORRIENTE",
+      "PAGO_OTRO",
+    ])
+    .order("created_at", { ascending: true })
+
+  const debtPayments = (routePayments || []).filter(
+    (m: any) => !m.order_id || !routeOrderIdSet.has(m.order_id),
+  )
+  const debtCollectedTotal = debtPayments.reduce(
+    (sum: number, m: any) => sum + (Number(m.credit_amount) || 0),
+    0,
+  )
+
+  const movementLabels: Record<string, string> = {
+    PAGO_EFECTIVO: "Efectivo",
+    PAGO_TRANSFERENCIA: "Transferencia",
+    PAGO_TARJETA: "Tarjeta",
+    PAGO_CHEQUE: "Cheque",
+    PAGO_CUENTA_CORRIENTE: "Cuenta Corriente",
+    PAGO_OTRO: "Otro",
+  }
 
   const statusLabels = {
     PLANIFICADO: "Planificado",
@@ -323,6 +364,156 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
               </CardContent>
             </Card>
           </div>
+
+          {/* 🆕 Cierre de caja */}
+          {cashClosure && (() => {
+            // Los cierres anteriores a add_debt_collection_to_cash_closure.sql no
+            // tienen el desglose: ahí todo lo cobrado fue de pedidos de la ruta.
+            const routeCollected = Number(
+              cashClosure.route_collected ?? cashClosure.total_collected ?? 0,
+            )
+            const debtCollected = Number(cashClosure.debt_collected ?? debtCollectedTotal ?? 0)
+            const totalToSettle = routeCollected + debtCollected
+            const expected = Number(cashClosure.total_expected) || 0
+            const pending = expected - routeCollected
+
+            const methodRows = [
+              ["Efectivo", cashClosure.cash_collected],
+              ["Transferencia", cashClosure.transfer_collected],
+              ["Tarjeta", cashClosure.card_collected],
+              ["Cheque", cashClosure.cheque_collected],
+              ["Cuenta Corriente", cashClosure.account_collected],
+              ["Otro", cashClosure.other_collected],
+            ].filter(([, v]) => Number(v) > 0) as [string, number][]
+
+            return (
+              <Card className="border-green-200 dark:border-green-900">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5" />
+                    Cierre de Caja
+                  </CardTitle>
+                  <CardDescription>
+                    Arqueo del {new Date(cashClosure.closure_date + "T00:00:00").toLocaleDateString("es-AR")}
+                    {" · "}
+                    {cashClosure.orders_collected} de {cashClosure.orders_delivered} pedidos entregados fueron cobrados
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="p-3 rounded-lg border bg-muted/40">
+                      <p className="text-xs text-muted-foreground">Pedidos de esta ruta</p>
+                      <p className="text-xl font-bold">${routeCollected.toFixed(2)}</p>
+                      <p className="text-xs text-muted-foreground">de ${expected.toFixed(2)} entregado</p>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                      <p className="text-xs text-amber-800 dark:text-amber-300">Deuda anterior cobrada</p>
+                      <p className="text-xl font-bold text-amber-900 dark:text-amber-200">
+                        ${debtCollected.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                        {debtPayments.length} cobro(s) de pedidos viejos
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg border-2 border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30">
+                      <p className="text-xs text-green-800 dark:text-green-300">Total rendido</p>
+                      <p className="text-xl font-bold text-green-900 dark:text-green-200">
+                        ${totalToSettle.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-green-800/80 dark:text-green-300/80">
+                        con lo que volvió el repartidor
+                      </p>
+                    </div>
+                  </div>
+
+                  {pending > 0.005 && (
+                    <p className="text-sm text-muted-foreground">
+                      Quedó fiado de esta ruta: <strong className="text-amber-600 dark:text-amber-400">${pending.toFixed(2)}</strong>
+                    </p>
+                  )}
+
+                  {methodRows.length > 0 && (() => {
+                    // Los cierres previos al fix del desglose sólo tenían baldes
+                    // para efectivo/transferencia/tarjeta y usaban el método
+                    // "principal" de cada pedido, así que lo cobrado con Cheque,
+                    // Cuenta Corriente u Otro se contaba en el total pero no
+                    // aparecía acá. Lo avisamos en vez de mostrar números que no
+                    // cierran sin explicación.
+                    const methodsSum = methodRows.reduce((sum, [, v]) => sum + Number(v), 0)
+                    const unaccounted = totalToSettle - methodsSum
+                    return (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Arqueo por método</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+                        {methodRows.map(([label, amount]) => (
+                          <div key={label} className="flex flex-col p-2 rounded-md bg-muted/50">
+                            <span className="text-xs text-muted-foreground">{label}</span>
+                            <span className="font-bold">${Number(amount).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {Math.abs(unaccounted) > 0.01 && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          ${Math.abs(unaccounted).toFixed(2)} no están discriminados por método: es un
+                          cierre anterior al arreglo del desglose, que no contemplaba Cheque ni Cuenta
+                          Corriente. El total rendido sí es correcto.
+                        </p>
+                      )}
+                    </div>
+                    )
+                  })()}
+
+                  {debtPayments.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Deuda anterior cobrada en esta ruta</p>
+                      <div className="space-y-2">
+                        {debtPayments.map((m: any) => (
+                          <div
+                            key={m.id}
+                            className="flex items-center justify-between gap-3 p-2 rounded-md border bg-amber-50/50 dark:bg-amber-950/20 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">
+                                {m.customers?.commercial_name || "Cliente"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {m.orders?.order_number
+                                  ? `Pedido ${m.orders.order_number}`
+                                  : "Pago a cuenta"}
+                                {" · "}
+                                {movementLabels[m.movement_type] || m.movement_type}
+                              </p>
+                            </div>
+                            <span className="font-bold shrink-0">
+                              ${(Number(m.credit_amount) || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {cashClosure.notes && (
+                    <p className="text-sm text-muted-foreground border-t pt-3">
+                      <span className="font-medium">Notas del repartidor:</span> {cashClosure.notes}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
+
+          {/* Aviso: ruta completada sin cierre de caja */}
+          {!cashClosure && route.status === "COMPLETADO" && (
+            <Card className="border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/10">
+              <CardContent className="py-4">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Esta ruta se completó sin generar cierre de caja. Suele pasar cuando no se entregó
+                  ningún pedido, o cuando la ruta se cerró antes de que existiera el arqueo.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Desglose por método de pago + duración */}
           {(Object.keys(paymentBreakdown).length > 0 || realDurationMin !== null) && (
