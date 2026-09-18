@@ -10,6 +10,8 @@ export interface OrderFilters {
   search?: string
   page?: number
   requires_invoice?: boolean
+  /** UUID del cliente: lista sólo sus pedidos (lo usa "Ver Todos" desde la ficha) */
+  customer?: string
 }
 
 /**
@@ -33,7 +35,7 @@ export class OrdersService {
    * Fetch orders with filters and pagination
    */
   async getOrders(filters: OrderFilters = {}): Promise<PaginatedOrders> {
-    const { status, priority, search, page = 1, requires_invoice } = filters
+    const { status, priority, search, page = 1, requires_invoice, customer } = filters
     const from = (page - 1) * ORDERS_PER_PAGE
     const to = from + ORDERS_PER_PAGE - 1
 
@@ -69,7 +71,7 @@ export class OrdersService {
       )
 
     // Apply filters
-    query = this.applyFilters(query, { status, priority, search, requires_invoice }, matchingCustomerIds)
+    query = this.applyFilters(query, { status, priority, search, requires_invoice, customer }, matchingCustomerIds)
 
     // Execute query with pagination
     const { data: orders, error, count } = await query
@@ -95,10 +97,17 @@ export class OrdersService {
   /**
    * Get order statistics by status
    */
-  async getOrderStats() {
-    const { data: orders } = await this.supabase
-      .from('orders')
-      .select('status')
+  async getOrderStats(customerId?: string) {
+    let statsQuery = this.supabase.from('orders').select('status')
+
+    // Si la lista está filtrada por cliente, los contadores de arriba tienen que
+    // acompañar: si no, muestran el total del sistema y no coinciden con lo que
+    // se ve abajo.
+    if (customerId) {
+      statsQuery = statsQuery.eq('customer_id', customerId)
+    }
+
+    const { data: orders } = await statsQuery
 
     if (!orders) return {}
 
@@ -116,7 +125,11 @@ export class OrdersService {
     filters: Omit<OrderFilters, 'page'>,
     matchingCustomerIds: string[] | null = null
   ) {
-    const { status, priority, search, requires_invoice } = filters
+    const { status, priority, search, requires_invoice, customer } = filters
+
+    if (customer) {
+      query = query.eq('customer_id', customer)
+    }
 
     if (status && status !== 'all') {
       query = query.eq('status', status)

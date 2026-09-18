@@ -32,8 +32,22 @@ export function OrdersFilters({ basePath = '/admin/orders' }: OrdersFiltersProps
   const [status, setStatus] = useState(searchParams.get('status') || 'all')
   const [priority, setPriority] = useState(searchParams.get('priority') || 'all')
 
-  const handleFilter = () => {
+  // Filtros de contexto que NO maneja este componente y hay que preservar:
+  // `customer` llega desde "Ver Todos" en la ficha del cliente y
+  // `requires_invoice` desde el acceso de pendientes de facturación. Al
+  // construir los params de cero se perdían, y elegir un estado te devolvía a
+  // la lista de todos los pedidos sin avisar.
+  const preservedParams = () => {
     const params = new URLSearchParams()
+    const customer = searchParams.get('customer')
+    const requiresInvoice = searchParams.get('requires_invoice')
+    if (customer) params.set('customer', customer)
+    if (requiresInvoice) params.set('requires_invoice', requiresInvoice)
+    return params
+  }
+
+  const handleFilter = () => {
+    const params = preservedParams()
 
     if (search.trim()) params.set('search', search.trim())
     if (status && status !== 'all') params.set('status', status)
@@ -52,8 +66,13 @@ export function OrdersFilters({ basePath = '/admin/orders' }: OrdersFiltersProps
     setStatus('all')
     setPriority('all')
 
+    // Limpiar los filtros no saca del contexto del cliente: para eso está
+    // "Quitar filtro" en el banner de arriba.
+    const params = preservedParams()
+    const query = params.toString()
+
     startTransition(() => {
-      router.push(basePath)
+      router.push(query ? `${basePath}?${query}` : basePath)
     })
   }
 

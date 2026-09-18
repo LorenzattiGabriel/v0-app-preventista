@@ -16,6 +16,8 @@ interface SearchParams {
   search?: string
   page?: string
   requires_invoice?: string
+  /** UUID del cliente: llega desde "Ver Todos" en la ficha del cliente */
+  customer?: string
 }
 
 interface PageProps {
@@ -58,10 +60,22 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
     search: params.search,
     page: params.page ? parseInt(params.page) : 1,
     requires_invoice: params.requires_invoice === 'true' ? true : undefined,
+    customer: params.customer,
   })
 
   // Fetch statistics
-  const statusCounts = await ordersService.getOrderStats()
+  const statusCounts = await ordersService.getOrderStats(params.customer)
+
+  // Cliente por el que se está filtrando (viene de "Ver Todos" en su ficha).
+  // Sin esto la lista se veía igual que la general y no había forma de saber
+  // que estaba filtrada, ni de volver a la ficha.
+  const { data: filteredCustomer } = params.customer
+    ? await supabase
+        .from('customers')
+        .select('id, commercial_name')
+        .eq('id', params.customer)
+        .maybeSingle()
+    : { data: null }
 
   // Fetch delayed orders count
   const delayedService = createDelayedOrdersService(supabase)
@@ -163,14 +177,36 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
           {/* Orders List with Filters */}
           <Card>
             <CardHeader>
-              <CardTitle>Todos los Pedidos</CardTitle>
+              <CardTitle>
+                {filteredCustomer ? `Pedidos de ${filteredCustomer.commercial_name}` : 'Todos los Pedidos'}
+              </CardTitle>
               <CardDescription>
-                Gestiona y visualiza todos los pedidos del sistema
+                {filteredCustomer
+                  ? 'Historial completo de pedidos de este cliente'
+                  : 'Gestiona y visualiza todos los pedidos del sistema'}
                 {totalCount > 0 && ` - ${totalCount} pedidos encontrados`}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Filtrado por cliente: hay que poder verlo y poder salir */}
+                {filteredCustomer && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+                    <p className="text-sm">
+                      Filtrando por cliente:{' '}
+                      <strong>{filteredCustomer.commercial_name}</strong>
+                    </p>
+                    <div className="flex gap-2">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/admin/customers/${filteredCustomer.id}`}>Ver ficha</Link>
+                      </Button>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href="/admin/orders">Quitar filtro</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Filters */}
                 <OrdersFilters />
 
