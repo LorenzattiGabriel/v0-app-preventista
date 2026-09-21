@@ -229,9 +229,23 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
   const [collectDebt, setCollectDebt] = useState(false)
   const [debtLines, setDebtLines] = useState<Record<string, DebtLineState>>({})
 
-  const debtTotal = Object.values(debtLines).reduce(
+  // Cómo imputa el repartidor lo que el cliente le paga de deuda vieja:
+  //  - "orders":  contra pedidos puntuales (queda registrado cuál se cancela)
+  //  - "account": un monto libre contra el saldo, sin pedido específico.
+  // El cliente muchas veces entrega "lo que tiene" sin querer cerrar un pedido
+  // concreto; forzar la imputación llevaba a inventar a qué pedido asignarlo.
+  type DebtMode = "orders" | "account"
+  const [debtMode, setDebtMode] = useState<DebtMode>("orders")
+  const [accountAmount, setAccountAmount] = useState("")
+  const [accountMethod, setAccountMethod] = useState<PaymentMethod>("Efectivo")
+
+  const ACCOUNT_SLOT = "debt-account-transfer"
+
+  const ordersDebtTotal = Object.values(debtLines).reduce(
     (sum, l) => sum + (Number.parseFloat(l.amount) || 0), 0
   )
+  const accountDebtTotal = Number.parseFloat(accountAmount) || 0
+  const debtTotal = debtMode === "orders" ? ordersDebtTotal : accountDebtTotal
 
   const updateDebtLine = (orderId: string, updates: Partial<DebtLineState>) => {
     setDebtLines(prev => {
@@ -245,6 +259,25 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
    */
   const validateDebtLines = (): string | null => {
     if (!collectDebt || debtTotal <= 0) return null
+
+    if (debtMode === "account") {
+      if (accountMethod === "Transferencia") {
+        const slot = photos.getSlot(ACCOUNT_SLOT)
+        if (slot.status === "processing") {
+          return "Esperá un instante: el comprobante todavía se está procesando"
+        }
+        if (!slot.file) {
+          return "Adjuntá el comprobante de la transferencia del pago a cuenta"
+        }
+        if (slot.status === "error") {
+          return `No se pudo subir el comprobante: ${slot.error ?? "error desconocido"}`
+        }
+      }
+      if (collectibleDebt && accountDebtTotal > collectibleDebt.balance + 0.005) {
+        return `El cliente debe $${collectibleDebt.balance.toFixed(2)} en total. No podés cobrar más que eso.`
+      }
+      return null
+    }
 
     for (const [orderId, line] of Object.entries(debtLines)) {
       const amount = Number.parseFloat(line.amount) || 0
@@ -562,6 +595,9 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
     setCollectibleDebt(null)
     setCollectDebt(false)
     setDebtLines({})
+    setDebtMode("orders")
+    setAccountAmount("")
+    setAccountMethod("Efectivo")
     const customerId = order?.customers?.id ?? order?.customer_id
     if (customerId) {
       setLoadingDebt(true)
@@ -570,7 +606,11 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       const routeOrderIds = route.route_orders.map((ro: any) => ro.orders.id)
       accountService
         .getCollectibleOrders(customerId, routeOrderIds)
-        .then(setCollectibleDebt)
+        .then((debt) => {
+          setCollectibleDebt(debt)
+          // Sin pedidos con saldo abierto, lo único posible es cobrar a cuenta.
+          if (debt.orders.length === 0) setDebtMode("account")
+        })
         .catch((err) => {
           console.error("[repartidor] No se pudo cargar la deuda anterior:", err)
           setCollectibleDebt(null)
@@ -878,8 +918,28 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
           console.log(`✅ Pagos registrados: $${collectedAmountNum} (${paymentLines.length} línea(s)) para pedido ${selectedOrder.order_number}`)
         }
 
-        // 🆕 Cobro de deuda anterior: se imputa a CADA pedido viejo, no al de hoy.
-        if (collectDebt && debtTotal > 0) {
+        // 🆕 Cobro de deuda anterior. Nunca se imputa al pedido de hoy:
+        // o va contra los pedidos viejos elegidos, o a cuenta del cliente.
+        if (collectDebt && debtMode === "account" && accountDebtTotal > 0) {
+          const proofUrl =
+            accountMethod === "Transferencia"
+              ? settled[ACCOUNT_SLOT]?.remoteUrl ?? undefined
+              : undefined
+
+          await accountService.recordGeneralPayment({
+            customerId: selectedOrder.customers?.id ?? selectedOrder.customer_id,
+            amount: accountDebtTotal,
+            paymentMethod: accountMethod,
+            // Sin routeId el cierre de caja no vería esta plata
+            routeId: route.id,
+            createdBy: userId,
+            notes: `Pago a cuenta cobrado en la entrega de ${selectedOrder.order_number} por ${repartidorName || "Repartidor"}`,
+            proofUrl,
+          })
+          console.log(`✅ Pago a cuenta registrado: $${accountDebtTotal}`)
+        }
+
+        if (collectDebt && debtMode === "orders" && ordersDebtTotal > 0) {
           for (const [debtOrderId, line] of Object.entries(debtLines)) {
             const amount = Number.parseFloat(line.amount) || 0
             if (amount <= 0) continue
@@ -2298,7 +2358,7 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                   <p className="text-sm text-muted-foreground">Buscando deuda anterior…</p>
                 )}
 
-                {!loadingDebt && collectibleDebt && collectibleDebt.orders.length > 0 && (
+                {!loadingDebt && collectibleDebt && collectibleDebt.balance > 0.005 && (
                   <div className="border-2 border-amber-300 dark:border-amber-700 rounded-lg p-3 space-y-3 bg-amber-50/50 dark:bg-amber-950/30">
                     <div className="flex items-start gap-2">
                       <Checkbox
@@ -2321,14 +2381,120 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
                           <strong className="text-amber-700 dark:text-amber-400">
                             ${collectibleDebt.balance.toFixed(2)}
                           </strong>{" "}
-                          en cuenta corriente, de {collectibleDebt.orders.length} pedido(s) anterior(es).
+                          en cuenta corriente
+                          {collectibleDebt.orders.length > 0
+                            ? `, de ${collectibleDebt.orders.length} pedido(s) anterior(es).`
+                            : ". No hay pedidos con saldo abierto, así que se cobra a cuenta."}
                         </p>
                       </div>
                     </div>
 
                     {collectDebt && (
                       <div className="space-y-3">
-                        {collectibleDebt.orders.map((old) => {
+                        {/* Elegir cómo se imputa: contra pedidos o a cuenta.
+                            Si no hay pedidos con saldo abierto no hay nada que
+                            elegir: sólo se puede cobrar a cuenta. */}
+                        <div
+                          className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-muted"
+                          hidden={collectibleDebt.orders.length === 0}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setDebtMode("orders")}
+                            className={`text-xs font-medium py-2 px-2 rounded-md transition-colors ${
+                              debtMode === "orders"
+                                ? "bg-background shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Pagar pedidos
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDebtMode("account")}
+                            className={`text-xs font-medium py-2 px-2 rounded-md transition-colors ${
+                              debtMode === "account"
+                                ? "bg-background shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Pago a cuenta
+                          </button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          {debtMode === "orders"
+                            ? "Elegí qué pedidos viejos paga. Podés cobrar una parte de cada uno."
+                            : "El cliente entrega un monto y se descuenta del saldo, sin asignarlo a un pedido."}
+                        </p>
+
+                        {debtMode === "account" && (
+                          <div className="border rounded-lg p-2 space-y-2 bg-background">
+                            <div className="flex gap-2">
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                value={accountAmount}
+                                onChange={(e) => setAccountAmount(e.target.value)}
+                                className="flex-1"
+                              />
+                              <Select
+                                value={accountMethod}
+                                onValueChange={(v) => setAccountMethod(v as PaymentMethod)}
+                              >
+                                <SelectTrigger className="w-[150px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Efectivo">Efectivo</SelectItem>
+                                  <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                  <SelectItem value="Cheque">Cheque</SelectItem>
+                                  <SelectItem value="Otro">Otro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => setAccountAmount(collectibleDebt.balance.toFixed(2))}
+                            >
+                              Paga todo el saldo (${collectibleDebt.balance.toFixed(2)})
+                            </Button>
+
+                            {accountMethod === "Transferencia" && accountDebtTotal > 0 && (
+                              <PhotoCaptureField
+                                slot={photos.getSlot(ACCOUNT_SLOT)}
+                                onClear={() => photos.clear(ACCOUNT_SLOT)}
+                                clearLabel="🔄 Cambiar comprobante"
+                              >
+                                <CameraCapture
+                                  onCapture={(file) =>
+                                    void photos.capture(ACCOUNT_SLOT, file, "transfer_proof", {
+                                      orderId: selectedOrder.id,
+                                    })
+                                  }
+                                />
+                              </PhotoCaptureField>
+                            )}
+
+                            {accountDebtTotal > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Saldo después del pago:{" "}
+                                <strong>
+                                  ${Math.max(0, collectibleDebt.balance - accountDebtTotal).toFixed(2)}
+                                </strong>
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {debtMode === "orders" && collectibleDebt.orders.map((old) => {
                           const line = debtLines[old.orderId]
                           const amount = Number.parseFloat(line?.amount || "") || 0
                           return (

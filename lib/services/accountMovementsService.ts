@@ -37,6 +37,12 @@ interface RecordGeneralPaymentParams {
   createdBy?: string
   notes?: string
   proofUrl?: string
+  /**
+   * Ruta en la que se cobró. Obligatorio si lo cobra el repartidor: sin esto el
+   * movimiento queda sin route_id y el cierre de caja no ve esa plata, aunque
+   * el repartidor la traiga en el bolsillo.
+   */
+  routeId?: string
 }
 
 interface UpdateOrderPaymentParams {
@@ -310,7 +316,7 @@ export class AccountMovementsService {
    * Reduce el current_balance del cliente (o genera saldo a favor si balance era 0).
    */
   async recordGeneralPayment(params: RecordGeneralPaymentParams): Promise<CustomerAccountMovement> {
-    const { customerId, amount, paymentMethod, createdBy, notes, proofUrl } = params
+    const { customerId, amount, paymentMethod, createdBy, notes, proofUrl, routeId } = params
 
     const movementType = this.methodToMovementType(paymentMethod)
 
@@ -320,6 +326,7 @@ export class AccountMovementsService {
       description: "Pago a cuenta corriente (sin pedido específico)",
       amount,
       orderId: undefined,
+      routeId,
       createdBy,
       notes,
       proofUrl,
