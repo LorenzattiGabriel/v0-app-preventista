@@ -421,7 +421,9 @@ export default async function AdminCustomerDetailPage({
                 </CardHeader>
                 <CardContent>
                   {orders && orders.length > 0 ? (
-                    <div className="space-y-3">
+                    // Scroll propio: con 20 pedidos la tarjeta estiraba la página
+                    // y había que bajar hasta el final para seguir leyendo la ficha.
+                    <div className="max-h-[30rem] overflow-y-auto pr-1 space-y-3">
                       {orders.map((order: any) => {
                         const payment = order.order_payments?.[0]
                         const isPaid = payment ? payment.balance_due <= 0 : order.payment_status === "PAGADO"
@@ -525,7 +527,9 @@ export default async function AdminCustomerDetailPage({
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    {/* Scroll propio: la paginación queda visible abajo en vez de
+                        empujarse fuera de la pantalla con 20 movimientos. */}
+                    <div className="max-h-[30rem] overflow-y-auto pr-1 space-y-2">
                       {accountMovements.map((movement: any) => {
                         const isDebit = movement.debit_amount > 0
                         return (
