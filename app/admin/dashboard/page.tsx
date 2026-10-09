@@ -382,6 +382,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     <BarChart3 className="mr-2 h-4 w-4" />
                     Estadísticas de Clientes
                   </NavButton>
+                <NavButton href="/admin/zones" variant="outline" className="w-full bg-transparent">
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Zonas
+                </NavButton>
                 <NavButton href="/admin/cuentas-corrientes" variant="outline" className="w-full bg-transparent">
                     <Wallet className="mr-2 h-4 w-4" />
                     Cuentas Corrientes
