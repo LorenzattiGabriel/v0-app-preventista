@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Customer } from "@/types/customer"
 import { Button } from "../ui/button"
 import { MoreHorizontal } from "lucide-react"
@@ -76,6 +77,11 @@ export default function CustomersTable({ customers, onSelectCustomer }: Customer
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => onSelectCustomer(customer)}>Ver Detalles</DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/preventista/customers/${customer.id}/historial`}>
+                        Ver Historial de Pedidos
+                      </Link>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </td>

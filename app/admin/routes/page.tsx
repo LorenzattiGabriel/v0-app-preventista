@@ -53,7 +53,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
       id, route_code, status, scheduled_date, scheduled_start_time, scheduled_end_time,
       total_distance, estimated_duration, created_at,
       driver:profiles!routes_driver_id_fkey ( full_name ),
-      route_orders ( id )
+      route_orders ( id, orders ( total, status ) )
     `,
       { count: "exact" }
     )
@@ -78,6 +78,109 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
 
   const totalCount = count ?? 0
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+
+  // Cierres de caja de las rutas de esta página: aportan lo efectivamente
+  // cobrado, que no se puede deducir de los pedidos.
+  const routeIds = (routes || []).map((r: any) => r.id)
+  const { data: closures } = routeIds.length
+    ? await supabase
+        .from("route_cash_closures")
+        .select("route_id, route_collected, total_collected, debt_collected")
+        .in("route_id", routeIds)
+    : { data: [] }
+
+  const closureByRoute = new Map(
+    (closures || []).map((c: any) => [
+      c.route_id,
+      {
+        // route_collected no existe en los cierres anteriores a la migración
+        // add_debt_collection_to_cash_closure: ahí todo lo cobrado fue de la ruta.
+        collected: Number(c.route_collected ?? c.total_collected ?? 0),
+        debtCollected: Number(c.debt_collected ?? 0),
+      },
+    ]),
+  )
+
+  /** Monto de una ruta: lo despachado, lo entregado y lo cobrado. */
+  function routeAmounts(route: any) {
+    let dispatched = 0
+    let delivered = 0
+    for (const ro of route.route_orders || []) {
+      const total = Number(ro.orders?.total) || 0
+      dispatched += total
+      if (ro.orders?.status === "ENTREGADO") delivered += total
+    }
+    const closure = closureByRoute.get(route.id)
+    return {
+      dispatched,
+      delivered,
+      collected: closure?.collected ?? 0,
+      debtCollected: closure?.debtCollected ?? 0,
+      hasClosure: Boolean(closure),
+    }
+  }
+
+  // Subtotales por día: la mitad de los días tiene más de una ruta, y el admin
+  // necesita el total del día, no el de cada reparto por separado.
+  //
+  // ⚠️ Se recalcula con TODAS las rutas de esas fechas, no con las de la página:
+  // con 12 por página un día puede quedar partido entre dos páginas y el
+  // subtotal saldría incompleto sin ninguna señal de que falta algo.
+  const visibleDates = [...new Set((routes || []).map((r: any) => r.scheduled_date))]
+
+  const { data: routesOfVisibleDates } = visibleDates.length
+    ? await supabase
+        .from("routes")
+        .select("id, scheduled_date, route_orders ( id, orders ( total, status ) )")
+        .in("scheduled_date", visibleDates)
+    : { data: [] }
+
+  const dayRouteIds = (routesOfVisibleDates || []).map((r: any) => r.id)
+  const { data: dayClosures } = dayRouteIds.length
+    ? await supabase
+        .from("route_cash_closures")
+        .select("route_id, route_collected, total_collected")
+        .in("route_id", dayRouteIds)
+    : { data: [] }
+
+  const dayCollectedByRoute = new Map(
+    (dayClosures || []).map((c: any) => [
+      c.route_id,
+      Number(c.route_collected ?? c.total_collected ?? 0),
+    ]),
+  )
+
+  const dayTotals = new Map<
+    string,
+    { routes: number; stops: number; dispatched: number; delivered: number; collected: number }
+  >()
+
+  for (const route of (routesOfVisibleDates || []) as any[]) {
+    let dispatched = 0
+    let delivered = 0
+    for (const ro of (route.route_orders || []) as any[]) {
+      const total = Number(ro.orders?.total) || 0
+      dispatched += total
+      if (ro.orders?.status === "ENTREGADO") delivered += total
+    }
+
+    const current = dayTotals.get(route.scheduled_date) ?? {
+      routes: 0,
+      stops: 0,
+      dispatched: 0,
+      delivered: 0,
+      collected: 0,
+    }
+    current.routes += 1
+    current.stops += route.route_orders?.length ?? 0
+    current.dispatched += dispatched
+    current.delivered += delivered
+    current.collected += dayCollectedByRoute.get(route.id) ?? 0
+    dayTotals.set(route.scheduled_date, current)
+  }
+
+  const money = (n: number) =>
+    `$${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   const buildPageUrl = (p: number) => {
     const sp = new URLSearchParams()
@@ -120,12 +223,45 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
           {/* Lista */}
           {routes && routes.length > 0 ? (
             <div className="space-y-2">
-              {routes.map((route) => {
+              {routes.map((route, index) => {
                 const ordersCount = route.route_orders?.length ?? 0
                 const status = route.status as string
+                const amounts = routeAmounts(route)
+
+                // Las rutas vienen ordenadas por fecha, así que el encabezado
+                // del día se dibuja al cambiar de fecha respecto de la anterior.
+                const previousDate = index > 0 ? routes[index - 1].scheduled_date : null
+                const isNewDay = route.scheduled_date !== previousDate
+                const day = dayTotals.get(route.scheduled_date)
+
                 return (
+                  <div key={route.id} className="space-y-2">
+                  {isNewDay && day && (
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-1 pt-4 first:pt-0">
+                      <h2 className="text-sm font-semibold">
+                        {new Date(route.scheduled_date + "T00:00:00").toLocaleDateString("es-AR", {
+                          weekday: "long", day: "numeric", month: "long",
+                        })}
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          {day.routes} {day.routes === 1 ? "ruta" : "rutas"} · {day.stops}{" "}
+                          {day.stops === 1 ? "parada" : "paradas"}
+                        </span>
+                      </h2>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Total del día: </span>
+                        <span className="font-bold">{money(day.dispatched)}</span>
+                        {day.collected > 0 && (
+                          <span className="text-muted-foreground">
+                            {" "}· cobrado{" "}
+                            <span className="font-medium text-green-600 dark:text-green-400">
+                              {money(day.collected)}
+                            </span>
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
                   <div
-                    key={route.id}
                     className="bg-background rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3 hover:shadow-sm transition-shadow"
                   >
                     {/* Left: status indicator */}
@@ -170,9 +306,28 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                       </div>
                     </div>
 
+                    {/* Monto de la ruta */}
+                    <div className="sm:text-right shrink-0">
+                      <p className="font-bold">{money(amounts.dispatched)}</p>
+                      {amounts.hasClosure ? (
+                        <p className="text-xs text-muted-foreground">
+                          cobrado{" "}
+                          <span className="font-medium text-green-600 dark:text-green-400">
+                            {money(amounts.collected)}
+                          </span>
+                          {amounts.debtCollected > 0 && (
+                            <> · deuda {money(amounts.debtCollected)}</>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">sin cierre de caja</p>
+                      )}
+                    </div>
+
                     <Button asChild size="sm" variant="outline" className="shrink-0">
                       <Link href={`/admin/routes/${route.id}`}>Ver detalle</Link>
                     </Button>
+                  </div>
                   </div>
                 )
               })}
