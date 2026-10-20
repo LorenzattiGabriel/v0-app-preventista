@@ -135,7 +135,8 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
         customers ( commercial_name )
       ),
       changed_by:profiles!route_reorder_log_changed_by_fkey (
-        full_name
+        full_name,
+        role
       )
     `
     )
@@ -737,7 +738,8 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                   ⚡ Cambios manuales del orden ({reorderLog.length})
                 </CardTitle>
                 <CardDescription>
-                  El repartidor reordenó la ruta original en estos momentos. Mostramos lo entregado vs lo propuesto.
+                  Cambios sobre el orden que propuso el sistema. Pueden venir de administración
+                  (antes de salir) o del repartidor (en el camino).
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -774,8 +776,20 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                             <span className="text-muted-foreground">Motivo:</span> {entry.reason}
                           </p>
                           {changedBy?.full_name && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                               Por: {changedBy.full_name}
+                              {/* El rol importa: un cambio de administración se
+                                  decidió en la oficina antes de salir, uno del
+                                  repartidor fue un imprevisto en el camino. */}
+                              {changedBy.role === "administrativo" ? (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Administración
+                                </Badge>
+                              ) : changedBy.role === "repartidor" ? (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                  Repartidor
+                                </Badge>
+                              ) : null}
                             </p>
                           )}
                         </div>
