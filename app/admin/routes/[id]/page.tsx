@@ -8,6 +8,7 @@ import { ArrowLeft, MapPin, Package, Clock, Calendar, User, Navigation, CheckCir
 import { RouteMapView } from "@/components/admin/route-map-view"
 import { CancelRouteButton } from "@/components/admin/cancel-route-button"
 import { RouteStopsList } from "@/components/admin/route-stops-list"
+import { RouteOrderEditor } from "@/components/admin/route-order-editor"
 
 export default async function AdminRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -64,6 +65,41 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
 
   // Sort orders by current (executed) delivery sequence
   const sortedOrders = [...(route.route_orders || [])].sort((a, b) => a.delivery_order - b.delivery_order)
+
+  // Paradas para el editor de orden. Incluye las referencias de ubicación y las
+  // restricciones horarias, que el admin necesita para decidir el orden y que el
+  // listado de solo-lectura no mostraba.
+  const editorStops = sortedOrders.map((ro: any) => {
+    const o = ro.orders
+    const c = o?.customers
+    return {
+      orderId: ro.order_id,
+      orderNumber: o?.order_number ?? "",
+      customerName: c?.commercial_name ?? "Cliente",
+      address: [c?.street, c?.street_number].filter(Boolean).join(" ") || "Sin dirección",
+      locality: c?.locality ?? "",
+      addressNotes: c?.address_notes ?? null,
+      hasTimeRestriction: Boolean(o?.has_time_restriction),
+      windowStart: o?.delivery_window_start ?? null,
+      windowEnd: o?.delivery_window_end ?? null,
+      timeRestrictionNotes: o?.time_restriction_notes ?? null,
+      total: Number(o?.total) || 0,
+      // Una parada ya visitada no se puede mover: el orden ejecutado es un hecho.
+      processed:
+        ro.actual_arrival_time !== null ||
+        ["ENTREGADO", "NO_ENTREGADO"].includes(o?.status),
+    }
+  })
+
+  // Orden sugerido originalmente por el sistema, para "Restaurar orden automático".
+  // El snapshot trae su propio delivery_order: nos guiamos por ese y no por la
+  // posición en el array, que no tiene garantía de venir ordenada.
+  const automaticOrder: string[] | null =
+    route.optimized_route?.orders && Array.isArray(route.optimized_route.orders)
+      ? [...route.optimized_route.orders]
+          .sort((a: any, b: any) => (a.delivery_order ?? 0) - (b.delivery_order ?? 0))
+          .map((o: any) => o.id)
+      : null
 
   // Pedidos que volverían a PENDIENTE_ENTREGA si se cancela la ruta (los no entregados)
   const pendingToRevertCount = sortedOrders.filter(
@@ -581,6 +617,14 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
               </CardContent>
             </Card>
           </div>
+
+          {/* Definir el orden definitivo de entrega (sólo si la ruta se puede tocar) */}
+          <RouteOrderEditor
+            routeId={route.id}
+            routeStatus={route.status}
+            stops={editorStops}
+            automaticOrder={automaticOrder}
+          />
 
           {/* Driver Info */}
           {route.profiles && (

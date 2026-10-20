@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CheckCircle, Clock, MapPin, Package, Search } from "lucide-react"
+import { CheckCircle, Clock, Info, MapPin, Package, Search } from "lucide-react"
 
 type StopFilter = "pendientes" | "entregados" | "todos"
 
@@ -146,6 +146,28 @@ export function RouteStopsList({ orders, statusLabels }: RouteStopsListProps) {
                         {order.customers.street} {order.customers.street_number}, {order.customers.locality}
                       </span>
                     </div>
+                    {/* Referencias de ubicación: el repartidor las necesita para
+                        encontrar el domicilio y el admin para ordenar la ruta. */}
+                    {order.customers.address_notes && (
+                      <div className="flex items-start gap-1 text-xs text-muted-foreground mt-1">
+                        <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        <span>{order.customers.address_notes}</span>
+                      </div>
+                    )}
+
+                    {/* Restricción horaria: condiciona en qué puesto puede ir la parada */}
+                    {order.has_time_restriction && (
+                      <div className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400 mt-1">
+                        <Clock className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        <span>
+                          {order.delivery_window_start && order.delivery_window_end
+                            ? `Entregar entre ${order.delivery_window_start.slice(0, 5)} y ${order.delivery_window_end.slice(0, 5)}`
+                            : "Tiene restricción horaria"}
+                          {order.time_restriction_notes ? ` · ${order.time_restriction_notes}` : ""}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-3 mt-2 text-xs flex-wrap">
                       <span className="text-muted-foreground">Items: {order.order_items?.length || 0}</span>
                       <span className="font-medium">Total: ${Number(order.total).toFixed(2)}</span>
