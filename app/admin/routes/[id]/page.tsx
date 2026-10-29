@@ -9,6 +9,8 @@ import { RouteMapView } from "@/components/admin/route-map-view"
 import { CancelRouteButton } from "@/components/admin/cancel-route-button"
 import { RouteStopsList } from "@/components/admin/route-stops-list"
 import { RouteOrderEditor } from "@/components/admin/route-order-editor"
+import { PrintRouteSheetButton } from "@/components/admin/print-route-sheet-button"
+import type { RouteSheetStop } from "@/lib/route-sheet-generator"
 
 export default async function AdminRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -88,6 +90,27 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
       processed:
         ro.actual_arrival_time !== null ||
         ["ENTREGADO", "NO_ENTREGADO"].includes(o?.status),
+    }
+  })
+
+  // Paradas para la hoja de ruta imprimible
+  const routeSheetStops: RouteSheetStop[] = sortedOrders.map((ro: any, idx: number) => {
+    const o = ro.orders
+    const c = o?.customers
+    return {
+      position: idx + 1,
+      orderNumber: o?.order_number ?? "",
+      customerName: c?.commercial_name ?? "Cliente",
+      address: [c?.street, c?.street_number].filter(Boolean).join(" ") || "Sin dirección",
+      locality: c?.locality ?? null,
+      phone: c?.phone ?? null,
+      hasTimeRestriction: Boolean(o?.has_time_restriction),
+      windowStart: o?.delivery_window_start ?? null,
+      windowEnd: o?.delivery_window_end ?? null,
+      total: Number(o?.total) || 0,
+      status: o?.status ?? "",
+      noDeliveryReason: o?.no_delivery_reason ?? null,
+      paymentMethod: o?.payment_method ?? null,
     }
   })
 
@@ -292,12 +315,24 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
               </Link>
             </Button>
 
-            <CancelRouteButton
-              routeId={route.id}
-              routeCode={route.route_code}
-              status={route.status}
-              pendingCount={pendingToRevertCount}
-            />
+            <div className="flex items-center gap-2">
+              <PrintRouteSheetButton
+                route={{
+                  routeCode: route.route_code,
+                  scheduledDate: route.scheduled_date,
+                  driverName: route.profiles?.full_name ?? null,
+                  zoneName: route.zones?.name ?? null,
+                  status: route.status,
+                }}
+                stops={routeSheetStops}
+              />
+              <CancelRouteButton
+                routeId={route.id}
+                routeCode={route.route_code}
+                status={route.status}
+                pendingCount={pendingToRevertCount}
+              />
+            </div>
           </div>
 
           {/* Route Header */}

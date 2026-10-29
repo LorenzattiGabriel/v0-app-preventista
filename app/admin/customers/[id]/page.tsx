@@ -30,6 +30,7 @@ import {
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
 import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
+import { PrintAccountStatementButton } from "@/components/admin/print-account-statement-button"
 
 const MOVEMENTS_PER_PAGE = 20
 
@@ -132,6 +133,14 @@ export default async function AdminCustomerDetailPage({
 
   const totalMovements = movementsCount || 0
   const totalMovementsPages = Math.max(1, Math.ceil(totalMovements / MOVEMENTS_PER_PAGE))
+
+  // Historial completo (sin paginar) para el PDF de la cuenta corriente
+  const { data: allAccountMovements } = await supabase
+    .from("customer_account_movements")
+    .select("*, orders(order_number)")
+    .eq("customer_id", customer.id)
+    .order("created_at", { ascending: false })
+    .limit(1000)
 
   // Get orders with pending debt (for payment registration)
   const { data: ordersWithDebt } = await supabase
@@ -524,6 +533,18 @@ export default async function AdminCustomerDetailPage({
                           {totalMovements} {totalMovements === 1 ? "movimiento registrado" : "movimientos registrados"}
                         </CardDescription>
                       </div>
+                      <PrintAccountStatementButton
+                        customer={{
+                          commercial_name: customer.commercial_name,
+                          code: customer.code,
+                          contact_name: customer.contact_name,
+                          tax_id: customer.tax_id,
+                          phone: customer.phone,
+                          current_balance: currentBalance,
+                          credit_limit: customer.credit_limit,
+                        }}
+                        movements={allAccountMovements || []}
+                      />
                     </div>
                   </CardHeader>
                   <CardContent>

@@ -23,6 +23,7 @@ import Link from "next/link"
 import { ArrowLeft, Wallet, Search, AlertTriangle, TrendingDown, TrendingUp, FileText } from "lucide-react"
 import { AdjustBalanceDialog } from "@/components/admin/adjust-balance-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
+import { PrintAccountsReportButton } from "@/components/admin/print-accounts-report-button"
 
 const PER_PAGE = 25
 
@@ -90,6 +91,37 @@ export default async function AdminCuentasCorrientesPage({
   const customersWithDebt = allBalances?.filter(c => toNum(c.current_balance) > 0).length || 0
   const customersWithCredit = allBalances?.filter(c => toNum(c.current_balance) < 0).length || 0
 
+  // Mismos filtros que la tabla, pero sin paginar — para el PDF del reporte general
+  let reportQuery = supabase
+    .from("customers")
+    .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
+    .eq("is_active", true)
+
+  if (params.type && params.type !== "all") {
+    reportQuery = reportQuery.eq("customer_type", params.type)
+  }
+  if (params.search) {
+    reportQuery = reportQuery.or(
+      `commercial_name.ilike.%${params.search}%,contact_name.ilike.%${params.search}%,code.ilike.%${params.search}%`,
+    )
+  }
+  if (params.balance === "debt") {
+    reportQuery = reportQuery.gt("current_balance", 0)
+  } else if (params.balance === "credit") {
+    reportQuery = reportQuery.lt("current_balance", 0)
+  } else if (params.balance === "zero") {
+    reportQuery = reportQuery.or("current_balance.eq.0,current_balance.is.null")
+  }
+
+  const { data: customersForReport } = await reportQuery.order("commercial_name", { ascending: true })
+
+  const reportFilterParts = [
+    params.type && params.type !== "all" ? `Tipo: ${params.type === "mayorista" ? "Mayorista" : "Minorista"}` : null,
+    params.balance === "debt" ? "Solo con deuda" : params.balance === "credit" ? "Solo saldo a favor" : params.balance === "zero" ? "Solo sin saldo" : null,
+    params.search ? `Búsqueda: "${params.search}"` : null,
+  ].filter(Boolean)
+  const reportFilterLabel = reportFilterParts.length ? reportFilterParts.join(" · ") : undefined
+
   const totalCount = count || 0
   const totalPages = Math.max(1, Math.ceil(totalCount / PER_PAGE))
 
@@ -124,12 +156,15 @@ export default async function AdminCuentasCorrientesPage({
                 <Link href="/admin/cuentas-corrientes/movimientos">Movimientos</Link>
               </Button>
             </div>
-            <Button variant="outline" asChild>
-              <Link href="/admin/dashboard">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Volver al Dashboard
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <PrintAccountsReportButton customers={customersForReport || []} filterLabel={reportFilterLabel} />
+              <Button variant="outline" asChild>
+                <Link href="/admin/dashboard">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Volver al Dashboard
+                </Link>
+              </Button>
+            </div>
           </div>
 
           {/* KPIs */}
