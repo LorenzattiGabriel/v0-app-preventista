@@ -79,6 +79,16 @@ export interface RouteCollectionBreakdown {
   byMethod: Record<string, number>
 }
 
+/** Tipos de movimiento que representan un cobro. */
+const PAYMENT_MOVEMENT_TYPES: AccountMovementType[] = [
+  "PAGO_EFECTIVO",
+  "PAGO_TRANSFERENCIA",
+  "PAGO_TARJETA",
+  "PAGO_CHEQUE",
+  "PAGO_CUENTA_CORRIENTE",
+  "PAGO_OTRO",
+]
+
 export class AccountMovementsService {
   constructor(private supabase: SupabaseClient) {}
 
@@ -236,6 +246,128 @@ export class AccountMovementsService {
     )
     await this.recordOrderAssembled(orderId, total, createdBy || "")
     return true
+  }
+
+  /**
+   * 🛡️ Verifica si el cobro de una entrega quedó asentado en la cuenta corriente
+   * y, si falta, lo completa.
+   *
+   * Por qué hace falta: confirmar una entrega son ~6 escrituras seguidas desde el
+   * navegador del repartidor. Si la conexión se corta en el medio, el pedido
+   * queda ENTREGADO con `amount_paid` cargado pero el movimiento de pago nunca
+   * se crea: la plata está en el bolsillo del repartidor y el cliente sigue
+   * figurando como que debe. Pasó en 8 pedidos por $447.061.
+   *
+   * ⚠️ NO usa recordDebtPayment: ese hace `total_paid += amount` y el intento
+   * fallido ya pudo haber dejado `order_payments.total_paid` actualizado (es lo
+   * que pasó en PED-5808). Acá se escriben valores ABSOLUTOS para que reintentar
+   * sea idempotente y no duplique nada.
+   *
+   * Devuelve qué encontró, para poder avisarle al repartidor.
+   */
+  async ensureOrderPaymentsRegistered(params: {
+    orderId: string
+    routeId?: string
+    createdBy?: string
+    notes?: string
+  }): Promise<{ status: "ok" | "repaired" | "nothing"; missingAmount: number }> {
+    const { orderId, routeId, createdBy, notes } = params
+
+    const { data: order, error: orderError } = await this.supabase
+      .from("orders")
+      .select(
+        "id, order_number, customer_id, total, amount_paid, was_collected_on_delivery, payment_method, payment_methods_json",
+      )
+      .eq("id", orderId)
+      .single()
+
+    if (orderError || !order) throw orderError || new Error("Pedido no encontrado")
+
+    const collected = Number(order.amount_paid) || 0
+    if (!order.was_collected_on_delivery || collected <= 0.005) {
+      return { status: "nothing", missingAmount: 0 }
+    }
+
+    // Lo que YA figura cobrado de este pedido en el ledger
+    const { data: existing, error: existingError } = await this.supabase
+      .from("customer_account_movements")
+      .select("credit_amount")
+      .eq("order_id", orderId)
+      .in("movement_type", PAYMENT_MOVEMENT_TYPES)
+
+    if (existingError) throw existingError
+
+    const alreadyRegistered = (existing || []).reduce(
+      (sum, m) => sum + (Number(m.credit_amount) || 0),
+      0,
+    )
+
+    const missing = Math.round((collected - alreadyRegistered) * 100) / 100
+    if (missing <= 0.005) {
+      return { status: "ok", missingAmount: 0 }
+    }
+
+    console.warn(
+      `[accountMovements] Al pedido ${order.order_number} le falta(n) $${missing} de cobro en la cuenta corriente. Se completa.`,
+    )
+
+    // Si no había NADA registrado, se reconstruyen las líneas tal como se
+    // cobraron. Si había algo, se asienta sólo la diferencia con el método
+    // principal: no hay forma de saber a qué línea correspondía lo que falta.
+    const lines: Array<{ method: PaymentMethod; amount: number; proofUrl?: string }> = []
+    const json = Array.isArray(order.payment_methods_json) ? order.payment_methods_json : null
+
+    if (alreadyRegistered <= 0.005 && json && json.length > 0) {
+      for (const line of json as any[]) {
+        const amount = Number(line.amount) || 0
+        if (amount <= 0) continue
+        lines.push({
+          method: line.method as PaymentMethod,
+          amount,
+          proofUrl: line.transferProofUrl || undefined,
+        })
+      }
+    }
+
+    if (lines.length === 0) {
+      lines.push({
+        method: (order.payment_method as PaymentMethod) || "Efectivo",
+        amount: missing,
+      })
+    }
+
+    for (const line of lines) {
+      await this.createMovement({
+        customerId: order.customer_id,
+        movementType: this.methodToMovementType(line.method),
+        description: `Pago pedido ${order.order_number}`,
+        amount: line.amount,
+        orderId,
+        routeId,
+        createdBy,
+        notes: notes || "Cobro completado tras un corte de conexión en la entrega",
+        proofUrl: line.proofUrl,
+      })
+    }
+
+    // order_payments con valores ABSOLUTOS: el intento fallido pudo haberlo
+    // dejado ya actualizado, así que sumar lo duplicaría.
+    const orderTotal = Number(order.total) || 0
+    const { error: paymentError } = await this.supabase
+      .from("order_payments")
+      .update({
+        order_total: orderTotal,
+        total_paid: collected,
+        balance_due: Math.max(0, orderTotal - collected),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", orderId)
+
+    if (paymentError) {
+      console.error("[accountMovements] Error sincronizando order_payments:", paymentError)
+    }
+
+    return { status: "repaired", missingAmount: missing }
   }
 
   /**

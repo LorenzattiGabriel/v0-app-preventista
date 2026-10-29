@@ -46,6 +46,7 @@ import { ShareButtons } from "./share-buttons"
 import { ReceiptActionsMenu } from "./receipt-actions-menu"
 import { CameraCapture } from "@/components/ui/camera-capture"
 import { usePhotoUpload } from "@/hooks/use-photo-upload"
+import { toast } from "sonner"
 import { PhotoCaptureField } from "@/components/shared/photo-capture-field"
 import { createDeliveryMediaService } from "@/lib/services/deliveryMediaService"
 import { PAYMENT_METHODS, type PaymentMethod, type PaymentLine } from "@/lib/types/database"
@@ -859,10 +860,39 @@ export function DeliveryRouteView({ route, userId, today, depot, hasActiveRoute 
       if (orderError) throw orderError
 
       if (!deliveredRows || deliveredRows.length === 0) {
-        setError(
-          `El pedido ${selectedOrder.order_number} ya figura como entregado. ` +
-            `No se registró de nuevo para no duplicar el cobro.`,
-        )
+        // El pedido ya figura entregado. Antes cortábamos acá, y eso dejaba sin
+        // salida al caso en que el PRIMER intento se cayó a mitad de camino: el
+        // pedido quedaba entregado pero el cobro nunca llegaba a la cuenta
+        // corriente, y reintentar no lo arreglaba (8 pedidos, $447.061).
+        // Ahora verificamos contra la base si el cobro está asentado y, si
+        // falta, se completa. El guard sigue impidiendo el cobro duplicado.
+        const orderNumber = selectedOrder.order_number
+        try {
+          const res = await fetch(`/api/repartidor/orders/${selectedOrder.id}/ensure-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ route_id: route.id }),
+          })
+          const data = await res.json()
+          if (!res.ok) throw new Error(data.error || "No se pudo verificar el cobro")
+
+          if (data.status === "repaired") {
+            toast.success(`${orderNumber}: ${data.message}`, { duration: 15000 })
+            setAccountWarning(null)
+          } else {
+            setError(
+              `El pedido ${orderNumber} ya figura como entregado y su cobro ya está registrado. ` +
+                `No se registró de nuevo para no duplicar.`,
+            )
+          }
+        } catch (ensureError: any) {
+          console.error("[repartidor] Error verificando el cobro:", ensureError)
+          setError(
+            `El pedido ${orderNumber} ya figura como entregado, pero no se pudo verificar si el ` +
+              `cobro quedó registrado. Revisá la conexión y volvé a confirmar, o avisale al administrador.`,
+          )
+        }
+
         setShowDeliveryConfirmStep(false)
         setShowDeliveryDialog(false)
         setSelectedOrder(null)
