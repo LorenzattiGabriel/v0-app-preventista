@@ -7,16 +7,6 @@ import { rutasInteligentesClient, RutasInteligentesClient, RutasInteligentesErro
 import type { Location, RouteSegment } from '@/lib/types/rutas-inteligentes.types'
 
 /**
- * Punto de partida por defecto (Córdoba Capital)
- * Puedes cambiar esto a tu depósito/base de operaciones
- */
-const DEFAULT_DEPOT = {
-  lat: -31.4201,
-  lng: -64.1888,
-  address: 'Depósito Central, Córdoba',
-}
-
-/**
  * Parámetros opcionales para cálculo de costos
  */
 export interface CostParams {
@@ -53,7 +43,7 @@ export interface VRPTWParams {
  * Genera una ruta optimizada a partir de un array de pedidos
  * 
  * @param orders - Array de pedidos con información del cliente (customers)
- * @param startLat - Latitud del punto de partida
+ * @param startLat - Latitud del punto de partida (depósito configurado — sin default: si no hay depósito activo, el caller debe bloquear la generación en vez de mandar una coordenada cualquiera)
  * @param startLng - Longitud del punto de partida
  * @param costParams - Parámetros opcionales para cálculo de costos
  * @param endLat - Latitud del punto de llegada (opcional, por defecto usa startLat)
@@ -63,8 +53,8 @@ export interface VRPTWParams {
  */
 export async function generateRouteFromOrders(
   orders: any[],
-  startLat: number = DEFAULT_DEPOT.lat,
-  startLng: number = DEFAULT_DEPOT.lng,
+  startLat: number,
+  startLng: number,
   costParams?: CostParams,
   endLat?: number,
   endLng?: number,

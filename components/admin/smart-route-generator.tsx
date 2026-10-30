@@ -32,11 +32,13 @@ import {
 import { revalidateDashboard } from "@/app/actions/revalidate"
 import { getLocalDateString } from "@/lib/utils/dates"
 
-// Coordenadas por defecto (solo si no hay depot configurado)
-const DEFAULT_COORDS = {
-  lat: -31.4201,
-  lng: -64.1888,
-  address: "Córdoba, Argentina"
+// Placeholder solo para texto en pantalla mientras no hay depósito configurado.
+// OJO: nunca se usa como coordenada real para generar una ruta — si no hay
+// depósito activo, handleGenerateRoute bloquea la generación en vez de caer
+// silenciosamente acá (antes apuntaba a Córdoba Capital por defecto, lo que
+// generaba rutas que salían desde un punto que no era la distribuidora real).
+const NO_DEPOT_PLACEHOLDER = {
+  address: "⚠️ Sin depósito configurado"
 }
 
 interface SmartRouteGeneratorProps {
@@ -88,11 +90,14 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("configurar")
 
-  // Usar depot configurado o coordenadas por defecto
+  // Depósito activo configurado en Configuración → Depósito. Sin fallback a
+  // una coordenada fija: si no hay depósito, isDepotConfigured queda en false
+  // y handleGenerateRoute bloquea la generación antes de llamar al microservicio.
+  const isDepotConfigured = Boolean(depot?.latitude && depot?.longitude)
   const startCoords = {
-    lat: depot?.latitude || DEFAULT_COORDS.lat,
-    lng: depot?.longitude || DEFAULT_COORDS.lng,
-    address: depot?.name || DEFAULT_COORDS.address
+    lat: depot?.latitude ?? null,
+    lng: depot?.longitude ?? null,
+    address: depot?.name || NO_DEPOT_PLACEHOLDER.address,
   }
 
   // Form state
@@ -264,6 +269,13 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
   }
 
   const handleGenerateRoute = async () => {
+    if (!isDepotConfigured) {
+      setError(
+        "No hay un depósito configurado. Andá a Configuración → Depósito y cargá la dirección de la distribuidora antes de generar rutas."
+      )
+      return
+    }
+
     // Validate order selection using clean validation function
     const validation = validateOrderSelection(selectedOrderIds)
     if (!validation.isValid) {
@@ -318,11 +330,12 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
         serviceTimeMinutes: avgDeliveryTime
       }
 
-      // Call microservice con coordenadas del depot configurado
+      // Call microservice con coordenadas del depot configurado.
+      // isDepotConfigured ya garantizó arriba que lat/lng no son null.
       const routeResponse = await generateRouteFromOrders(
         ordersToRoute,
-        startCoords.lat,
-        startCoords.lng,
+        startCoords.lat!,
+        startCoords.lng!,
         costParams,
         undefined, // endLat (usa startLat)
         undefined, // endLng (usa startLng)
@@ -1015,9 +1028,22 @@ export function SmartRouteGenerator({ drivers, pendingOrders, userId, depot }: S
             </CardContent>
           </Card>
 
+          {!isDepotConfigured && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No hay un depósito configurado. Andá a{" "}
+                <Link href="/admin/settings/depot" className="underline font-medium">
+                  Configuración → Depósito
+                </Link>{" "}
+                y cargá la dirección de la distribuidora antes de generar rutas.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Button
             onClick={handleGenerateRoute}
-            disabled={isGenerating || selectedOrderIds.length === 0}
+            disabled={isGenerating || selectedOrderIds.length === 0 || !isDepotConfigured}
             className="w-full"
             size="lg"
           >

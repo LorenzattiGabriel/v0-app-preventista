@@ -65,6 +65,19 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
     redirect("/admin/routes")
   }
 
+  // Depósito activo, para el mapa (RouteMapView) y la hoja de ruta.
+  // Sin esto, el mapa caía a un punto fijo hardcodeado en Córdoba Capital
+  // cuando la ruta no tenía un origen guardado (típico en rutas segmentadas).
+  const { data: activeDepot } = await supabase
+    .from("depot_configuration")
+    .select("latitude, longitude")
+    .eq("is_active", true)
+    .maybeSingle()
+  const depotCoords =
+    activeDepot?.latitude != null && activeDepot?.longitude != null
+      ? { lat: activeDepot.latitude, lng: activeDepot.longitude }
+      : null
+
   // Sort orders by current (executed) delivery sequence
   const sortedOrders = [...(route.route_orders || [])].sort((a, b) => a.delivery_order - b.delivery_order)
 
@@ -635,7 +648,7 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                 <CardDescription>Visualización de las paradas en el mapa</CardDescription>
               </CardHeader>
               <CardContent>
-                <RouteMapView route={route} orders={sortedOrders} />
+                <RouteMapView route={route} orders={sortedOrders} depot={depotCoords} />
               </CardContent>
             </Card>
 

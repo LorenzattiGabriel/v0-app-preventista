@@ -1,6 +1,6 @@
 "use client"
 
-import { MapPin, ExternalLink } from "lucide-react"
+import { AlertTriangle, MapPin, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { RouteSegment } from "@/lib/types/rutas-inteligentes.types"
@@ -8,33 +8,21 @@ import type { RouteSegment } from "@/lib/types/rutas-inteligentes.types"
 interface RouteMapViewProps {
   route: any
   orders: any[]
+  // Depósito activo configurado en Configuración → Depósito (lat/lng reales
+  // de la distribuidora). Se usa solo como último recurso: si la ruta ya
+  // tiene un origen guardado en su URL, ese tiene prioridad para no
+  // "mover" retroactivamente rutas viejas generadas con otro depósito.
+  depot?: { lat: number; lng: number } | null
 }
 
-export function RouteMapView({ route, orders }: RouteMapViewProps) {
-  // Centro de distribución por defecto (Córdoba) — sólo se usa si la ruta no
-  // tiene un origen guardado en su URL anterior.
-  const FALLBACK_LAT = -31.4190387
-  const FALLBACK_LNG = -64.1884742
-
+export function RouteMapView({ route, orders, depot }: RouteMapViewProps) {
   // 🆕 Verificar si la ruta está segmentada
   const isSegmented = route.optimized_route?.isSegmented === true
   const segments: RouteSegment[] = route.optimized_route?.segments || []
 
-  // Obtener coordenadas reales de los clientes (en el orden actual de delivery_order)
-  const locations = orders.map((routeOrder: any, index: number) => {
-    const customer = routeOrder.orders?.customers
-    return {
-      order: routeOrder.orders,
-      lat: customer?.latitude || FALLBACK_LAT,
-      lng: customer?.longitude || FALLBACK_LNG,
-      label: index + 1,
-      name: customer?.commercial_name || customer?.name || `Cliente ${index + 1}`,
-      address: customer?.street ? `${customer.street} ${customer.street_number || ''}` : 'Dirección no disponible'
-    }
-  })
-
   // Extraer el origen del URL guardado para mantener la misma distribuidora
-  // pero usar el orden actual de paradas. Si no hay URL guardada, usar fallback.
+  // pero usar el orden actual de paradas. Si no hay URL guardada, usamos el
+  // depósito activo configurado — nunca un punto fijo hardcodeado.
   function extractOrigin(url: string | null | undefined): { lat: number; lng: number } | null {
     if (!url) return null
     try {
@@ -49,12 +37,31 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
     return null
   }
 
-  const depot = extractOrigin(route.google_maps_url) || { lat: FALLBACK_LAT, lng: FALLBACK_LNG }
-  const depotLat = depot.lat
-  const depotLng = depot.lng
+  const resolvedDepot = extractOrigin(route.google_maps_url) || depot || null
+  const depotLat = resolvedDepot?.lat ?? null
+  const depotLng = resolvedDepot?.lng ?? null
+
+  // Obtener coordenadas reales de los clientes (en el orden actual de delivery_order).
+  // Si a un cliente le falta lat/lng, lo marcamos (hasCoords: false) en vez de
+  // "inventarle" una ubicación — mostrarlo en el depósito sería engañoso.
+  const locations = orders.map((routeOrder: any, index: number) => {
+    const customer = routeOrder.orders?.customers
+    const hasCoords = Boolean(customer?.latitude && customer?.longitude)
+    return {
+      order: routeOrder.orders,
+      lat: hasCoords ? customer.latitude : depotLat,
+      lng: hasCoords ? customer.longitude : depotLng,
+      hasCoords,
+      label: index + 1,
+      name: customer?.commercial_name || customer?.name || `Cliente ${index + 1}`,
+      address: customer?.street ? `${customer.street} ${customer.street_number || ''}` : 'Dirección no disponible'
+    }
+  })
+  const locationsWithCoords = locations.filter((l) => l.hasCoords)
+  const locationsMissingCoords = locations.filter((l) => !l.hasCoords)
 
   function buildGoogleMapsUrl(locs: typeof locations) {
-    if (locs.length === 0) return ''
+    if (locs.length === 0 || depotLat === null || depotLng === null) return ''
     const waypoints = locs.map(loc => `${loc.lat},${loc.lng}`).join('|')
     return `https://www.google.com/maps/dir/?api=1&origin=${depotLat},${depotLng}&destination=${depotLat},${depotLng}&waypoints=${waypoints}`
   }
@@ -68,7 +75,7 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
 
   // Construir URL para el iframe embed
   const buildEmbedUrl = () => {
-    if (locations.length === 0) return ''
+    if (locations.length === 0 || depotLat === null || depotLng === null) return ''
 
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     if (!apiKey) return ''
@@ -80,6 +87,28 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
 
   return (
     <div className="space-y-4">
+      {/* Sin depósito configurado: no inventamos un origen para el mapa */}
+      {depotLat === null && (
+        <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            No hay un depósito configurado y esta ruta no tiene un origen guardado. El mapa no puede mostrar el
+            punto de partida — cargalo en Configuración → Depósito.
+          </span>
+        </div>
+      )}
+
+      {locationsMissingCoords.length > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            {locationsMissingCoords.length} parada{locationsMissingCoords.length !== 1 ? "s" : ""} sin coordenadas
+            cargadas en el cliente ({locationsMissingCoords.map((l) => l.name).join(", ")}). Se muestran en el
+            depósito como referencia, no es su ubicación real.
+          </span>
+        </div>
+      )}
+
       {/* Mapa Embebido de Google Maps */}
       {embedUrl && (
         <div className="relative w-full h-[400px] rounded-lg overflow-hidden border-2 border-blue-300 dark:border-blue-700">
@@ -105,15 +134,21 @@ export function RouteMapView({ route, orders }: RouteMapViewProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           {locations.map((loc, index) => (
             <div key={index} className="flex items-start gap-2 p-3 bg-background rounded border">
-              <div className="flex-shrink-0 h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+              <div className={`flex-shrink-0 h-7 w-7 rounded-full text-white flex items-center justify-center font-bold text-sm ${loc.hasCoords ? "bg-blue-600" : "bg-amber-500"}`}>
                 {loc.label}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{loc.name}</p>
                 <p className="text-muted-foreground text-xs mt-0.5">{loc.address}</p>
-                <p className="text-muted-foreground text-xs mt-1">
-                  📍 {loc.lat.toFixed(6)}, {loc.lng.toFixed(6)}
-                </p>
+                {loc.hasCoords ? (
+                  <p className="text-muted-foreground text-xs mt-1">
+                    📍 {loc.lat.toFixed(6)}, {loc.lng.toFixed(6)}
+                  </p>
+                ) : (
+                  <p className="text-amber-700 dark:text-amber-400 text-xs mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Cliente sin coordenadas cargadas
+                  </p>
+                )}
               </div>
             </div>
           ))}

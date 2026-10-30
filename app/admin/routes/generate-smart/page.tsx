@@ -44,12 +44,15 @@ export default async function GenerateSmartRoutesPage() {
     .eq("status", "PENDIENTE_ENTREGA")
     .order("delivery_date", { ascending: true })
 
-  // Get active depot configuration
+  // Get active depot configuration. maybeSingle (no single): si por el flujo de
+  // guardado llegan a quedar 0 o 2+ filas activas a la vez, no queremos que la
+  // query tire error y deje `depot` en null sin que el admin se entere —
+  // SmartRouteGenerator ya bloquea la generación si no hay depósito configurado.
   const { data: depot } = await supabase
     .from("depot_configuration")
     .select("*")
     .eq("is_active", true)
-    .single()
+    .maybeSingle()
 
   return (
     <div className="flex min-h-screen flex-col">
