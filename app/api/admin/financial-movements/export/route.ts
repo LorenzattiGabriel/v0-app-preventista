@@ -45,10 +45,18 @@ const CHANNEL_LABELS: Record<string, string> = {
   proveedor: "Proveedor",
 }
 
-/** Escapa un valor para CSV (comillas, comas, saltos de línea). */
+// Separador ";" en vez de "," — en Windows/Excel con locale es-AR (coma como
+// separador decimal), el separador de listas que Excel espera al abrir un
+// .csv con doble clic es ";". Con "," como separador, Excel no reconoce las
+// columnas y vuelca todo el archivo en una sola celda.
+const CSV_SEP = ";"
+
+/** Escapa un valor para CSV (comillas, separador, saltos de línea). */
 function csvCell(value: unknown): string {
   const s = value == null ? "" : String(value)
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  if (s.includes('"') || s.includes(CSV_SEP) || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`
+  }
   return s
 }
 
@@ -100,7 +108,7 @@ export async function GET(request: NextRequest) {
     "Notas",
   ]
 
-  const lines = [headers.join(",")]
+  const lines = [headers.join(CSV_SEP)]
   for (const m of all) {
     const isIngreso = m.direction === "ingreso"
     lines.push(
@@ -118,7 +126,7 @@ export async function GET(request: NextRequest) {
         csvCell(!isIngreso ? m.amount : ""),
         csvCell(m.order_number),
         csvCell(m.notes),
-      ].join(","),
+      ].join(CSV_SEP),
     )
   }
 

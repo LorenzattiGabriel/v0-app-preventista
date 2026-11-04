@@ -332,8 +332,11 @@ export function generatePriceListCSV(products: PriceListProduct[]): string {
     p.cash_price != null ? Number(p.cash_price).toFixed(2) : "-",
   ])
 
+  // ";" en vez de "," — Excel con locale es-AR usa "," como separador decimal,
+  // así que el separador de listas esperado al abrir un .csv es ";". Con ","
+  // como separador, Excel no reconoce las columnas y vuelca todo en una celda.
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
-  return [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n")
+  return [headers, ...rows].map((row) => row.map(escape).join(";")).join("\n")
 }
 
 export function downloadCSV(csv: string, filename: string) {

@@ -407,9 +407,12 @@ export class StockMovementsService {
       m.notes || "",
     ])
 
+    // ";" en vez de "," — Excel con locale es-AR usa "," como separador decimal,
+    // así que el separador de listas esperado al abrir un .csv es ";". Con ","
+    // como separador, Excel no reconoce las columnas y vuelca todo en una celda.
     const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(",")),
+      headers.join(";"),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(";")),
     ].join("\n")
 
     return csvContent
