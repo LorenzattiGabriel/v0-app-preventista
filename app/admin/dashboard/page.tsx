@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock, Target } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock, Target, Landmark } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
 import { createCustomerStatsService, DEFAULT_INACTIVE_DAYS, DEFAULT_OLD_DEBT_DAYS } from "@/lib/services/customerStatsService"
@@ -417,6 +417,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <NavButton href="/admin/objetivos-venta" variant="outline" className="w-full bg-transparent">
                     <Target className="mr-2 h-4 w-4" />
                     Objetivos de Venta
+                  </NavButton>
+                <NavButton href="/admin/bcra-cheques" variant="outline" className="w-full bg-transparent">
+                    <Landmark className="mr-2 h-4 w-4" />
+                    Cheques Rechazados (BCRA)
                   </NavButton>
                 <NavButton href="/admin/credit-notes" variant="outline" className="w-full bg-transparent">
                     <Receipt className="mr-2 h-4 w-4" />

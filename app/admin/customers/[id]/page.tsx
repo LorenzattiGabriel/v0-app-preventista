@@ -31,6 +31,9 @@ import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialo
 import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { PrintAccountStatementButton } from "@/components/admin/print-account-statement-button"
+import { BcraChequesCheck } from "@/components/admin/bcra-cheques-check"
+import { CustomerAccessCodeDialog } from "@/components/admin/customer-access-code-dialog"
+import { getCustomerPortalStatus } from "@/lib/services/clientPortalService"
 import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -288,6 +291,7 @@ export default async function AdminCustomerDetailPage({
 
   // Saldo actual del cliente (positivo = debe, negativo = a favor)
   const currentBalance = customer.current_balance || 0
+  const portalStatus = await getCustomerPortalStatus(customer.id)
 
   const statusColors = {
     BORRADOR: "secondary",
@@ -333,6 +337,11 @@ export default async function AdminCustomerDetailPage({
                   Editar Cliente
                 </Link>
               </Button>
+              <CustomerAccessCodeDialog
+                customerId={customer.id}
+                customerCode={customer.code}
+                hasAccess={portalStatus.hasAccess}
+              />
             </div>
           </div>
 
@@ -379,6 +388,13 @@ export default async function AdminCustomerDetailPage({
                       </div>
                     )}
                   </div>
+
+                  {customer.tax_id && (
+                    <div className="pt-4 border-t">
+                      <p className="text-sm font-medium text-muted-foreground mb-2">Cheques Rechazados (BCRA)</p>
+                      <BcraChequesCheck initialCuit={customer.tax_id} label="Verificar" />
+                    </div>
+                  )}
 
                   <div className="pt-4 border-t">
                     <p className="text-sm font-medium text-muted-foreground mb-2">Contacto</p>
