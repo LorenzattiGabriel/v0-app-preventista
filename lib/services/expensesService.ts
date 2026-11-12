@@ -6,6 +6,7 @@ import type {
   PaymentMethod,
 } from "@/lib/types/database"
 import { formatDateLocal } from "@/lib/utils/dates"
+import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 
 export const EXPENSES_PER_PAGE = 20
 
@@ -244,19 +245,18 @@ class ExpensesService {
    * Estadísticas resumidas para el dashboard de egresos
    */
   async getStats(from: string, to: string): Promise<ExpenseStats> {
-    const { data, error } = await this.supabase
-      .from("expenses")
-      .select(
-        `amount, category_id, supplier_id,
-         category:expense_categories(name, expense_type),
-         supplier:suppliers(name)`,
-      )
-      .gte("expense_date", from)
-      .lte("expense_date", to)
-
-    if (error) throw error
-
-    const rows = (data || []) as any[]
+    const rows = (await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+      this.supabase
+        .from("expenses")
+        .select(
+          `amount, category_id, supplier_id,
+           category:expense_categories(name, expense_type),
+           supplier:suppliers(name)`,
+        )
+        .gte("expense_date", from)
+        .lte("expense_date", to)
+        .range(rangeFrom, rangeTo),
+    )) as any[]
 
     const totalAmount = rows.reduce((acc, r) => acc + toNum(r.amount), 0)
     const totalCount = rows.length
@@ -293,13 +293,16 @@ class ExpensesService {
     const prevTo = new Date(fromDate.getTime() - 86400000)
     const prevFrom = new Date(prevTo.getTime() - diff)
 
-    const { data: prevData } = await this.supabase
-      .from("expenses")
-      .select("amount")
-      .gte("expense_date", formatDateLocal(prevFrom))
-      .lte("expense_date", formatDateLocal(prevTo))
+    const prevData = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+      this.supabase
+        .from("expenses")
+        .select("amount")
+        .gte("expense_date", formatDateLocal(prevFrom))
+        .lte("expense_date", formatDateLocal(prevTo))
+        .range(rangeFrom, rangeTo),
+    )
 
-    const previousPeriodAmount = (prevData || []).reduce(
+    const previousPeriodAmount = prevData.reduce(
       (acc, r) => acc + toNum((r as any).amount),
       0,
     )
@@ -327,18 +330,18 @@ class ExpensesService {
     const to = formatDateLocal(endDate)
     const stats = await this.getStats(from, to)
 
-    const { data, error } = await this.supabase
-      .from("expenses")
-      .select(
-        `expense_date, amount,
-         category:expense_categories(name, expense_type),
-         supplier:suppliers(name)`,
-      )
-      .gte("expense_date", from)
-      .lte("expense_date", to)
-
-    if (error) throw error
-    const rows = (data || []) as any[]
+    const rows = (await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+      this.supabase
+        .from("expenses")
+        .select(
+          `expense_date, amount,
+           category:expense_categories(name, expense_type),
+           supplier:suppliers(name)`,
+        )
+        .gte("expense_date", from)
+        .lte("expense_date", to)
+        .range(rangeFrom, rangeTo),
+    )) as any[]
 
     // By category
     const catMap: Record<

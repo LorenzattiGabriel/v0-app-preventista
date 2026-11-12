@@ -13,6 +13,7 @@ import type {
 import type { PaymentMethod } from "@/lib/types/database"
 import { toNum, calcAccountReceivable, pickPrimaryPaymentMethod } from "@/lib/utils/cart-calculations"
 import type { DirectSaleInput } from "@/lib/schemas/directSale.schema"
+import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 
 interface ConfirmSaleResult {
   orderId: string
@@ -162,23 +163,30 @@ export class DirectSalesService {
     range: DateRange
     userId?: string
   }): Promise<DirectSaleKPIs> {
-    let q = this.supabase
-      .from("orders")
-      .select("id, total, payment_method, payment_methods_json, was_collected_on_delivery, order_items(quantity_assembled, quantity_requested, quantity_delivered)")
-      .gte("created_at", opts.range.from.toISOString())
-      .lte("created_at", opts.range.to.toISOString())
-      .neq("status", "CANCELADO")
+    const buildQuery = () => {
+      let q = this.supabase
+        .from("orders")
+        .select("id, total, payment_method, payment_methods_json, was_collected_on_delivery, order_items(quantity_assembled, quantity_requested, quantity_delivered)")
+        .gte("created_at", opts.range.from.toISOString())
+        .lte("created_at", opts.range.to.toISOString())
+        .neq("status", "CANCELADO")
 
-    if (opts.channel === "venta_directa") {
-      q = q.eq("order_type", "local")
-    } else {
-      q = q.neq("order_type", "local")
+      if (opts.channel === "venta_directa") {
+        q = q.eq("order_type", "local")
+      } else {
+        q = q.neq("order_type", "local")
+      }
+
+      if (opts.userId) q = q.eq("created_by", opts.userId)
+      return q
     }
 
-    if (opts.userId) q = q.eq("created_by", opts.userId)
-
-    const { data, error } = await q
-    if (error || !data) {
+    // fetchAllRows: sin paginar, PostgREST corta en 1000 filas y los KPIs del
+    // canal quedan subcontados en períodos con mucho volumen.
+    let data
+    try {
+      data = await fetchAllRows(({ from, to }) => buildQuery().range(from, to))
+    } catch {
       return this.emptyKPIs()
     }
 
@@ -194,16 +202,20 @@ export class DirectSalesService {
       this.getKPIs({ channel: "venta_directa", range }),
     ])
 
-    // Serie diaria
-    const { data: rows } = await this.supabase
-      .from("orders")
-      .select("created_at, total, order_type")
-      .gte("created_at", range.from.toISOString())
-      .lte("created_at", range.to.toISOString())
-      .neq("status", "CANCELADO")
+    // Serie diaria. fetchAllRows: sin paginar, PostgREST corta en 1000 filas y
+    // la evolución diaria queda subcontada en períodos con mucho volumen.
+    const rows = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("created_at, total, order_type")
+        .gte("created_at", range.from.toISOString())
+        .lte("created_at", range.to.toISOString())
+        .neq("status", "CANCELADO")
+        .range(from, to),
+    )
 
     const seriesMap = new Map<string, { preventista: number; ventaDirecta: number }>()
-    for (const row of rows || []) {
+    for (const row of rows) {
       const day = (row.created_at as string).slice(0, 10)
       const cur = seriesMap.get(day) || { preventista: 0, ventaDirecta: 0 }
       const amount = toNum((row as any).total)

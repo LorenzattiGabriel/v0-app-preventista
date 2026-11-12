@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js"
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns"
 import { getLocalDateString, formatDateLocal } from "@/lib/utils/dates"
+import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 
 export interface OrdersReportData {
   totalOrders: number
@@ -108,17 +109,17 @@ class ReportsService {
     ordersByDay: OrdersByDay[]
     ordersByStatus: OrdersByStatus[]
   }> {
-    // Get orders in the date range
-    const { data: orders, error } = await this.supabase
-      .from("orders")
-      .select("*")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-
-    if (error) {
-      console.error("Error fetching orders:", error)
-      throw error
-    }
+    // Get orders in the date range. fetchAllRows: sin esto, PostgREST corta en
+    // 1000 filas y el reporte queda subcontado apenas el período supera esa
+    // cantidad de pedidos (pasa seguido con 6 meses de datos).
+    const orders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("*")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
     // Calculate previous period for comparison
     const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -126,11 +127,14 @@ class ReportsService {
     previousStartDate.setDate(previousStartDate.getDate() - daysDiff)
     const previousEndDate = new Date(startDate)
 
-    const { data: previousOrders } = await this.supabase
-      .from("orders")
-      .select("total")
-      .gte("created_at", previousStartDate.toISOString())
-      .lt("created_at", previousEndDate.toISOString())
+    const previousOrders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("total")
+        .gte("created_at", previousStartDate.toISOString())
+        .lt("created_at", previousEndDate.toISOString())
+        .range(from, to),
+    )
 
     // Calculate stats
     const totalOrders = orders?.length || 0
@@ -213,16 +217,14 @@ class ReportsService {
     driverPerformance: DriverPerformance[]
   }> {
     // Get routes in the date range (using scheduled_date for actual delivery dates)
-    const { data: routes, error: routesError } = await this.supabase
-      .from("routes")
-      .select("*, assigned_driver:profiles!driver_id(id, full_name)")
-      .gte("scheduled_date", formatDateLocal(startDate))
-      .lte("scheduled_date", formatDateLocal(endDate))
-
-    if (routesError) {
-      console.error("Error fetching routes:", routesError)
-      throw routesError
-    }
+    const routes = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("routes")
+        .select("*, assigned_driver:profiles!driver_id(id, full_name)")
+        .gte("scheduled_date", formatDateLocal(startDate))
+        .lte("scheduled_date", formatDateLocal(endDate))
+        .range(from, to),
+    )
 
     // Calculate stats
     const totalRoutes = routes?.length || 0
@@ -241,12 +243,15 @@ class ReportsService {
     let onTimeDelivery = 0
 
     if (completedRouteIds.length > 0) {
-      const { data: routeOrders } = await this.supabase
-        .from("route_orders")
-        .select("order_id, orders(delivery_date, delivered_at)")
-        .in("route_id", completedRouteIds)
+      const routeOrders = await fetchAllRows(({ from, to }) =>
+        this.supabase
+          .from("route_orders")
+          .select("order_id, orders(delivery_date, delivered_at)")
+          .in("route_id", completedRouteIds)
+          .range(from, to),
+      )
 
-      if (routeOrders && routeOrders.length > 0) {
+      if (routeOrders.length > 0) {
         const ordersWithDeliveryDate = routeOrders.filter((ro) => {
           const order = ro.orders as any
           return order?.delivery_date && order?.delivered_at
@@ -267,12 +272,15 @@ class ReportsService {
     }
 
     // Get average driver rating
-    const { data: ratings } = await this.supabase
-      .from("order_ratings")
-      .select("driver_rating")
-      .not("driver_rating", "is", null)
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
+    const ratings = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("order_ratings")
+        .select("driver_rating")
+        .not("driver_rating", "is", null)
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
     const avgRating =
       ratings && ratings.length > 0
@@ -307,14 +315,17 @@ class ReportsService {
     const routeIds = routes?.map((r) => r.id).filter(Boolean) || []
     
     if (routeIds.length > 0) {
-      const { data: routeOrdersData } = await this.supabase
-        .from("route_orders")
-        .select("order_id, route_id, routes!inner(driver_id)")
-        .in("route_id", routeIds)
+      const routeOrdersData = await fetchAllRows(({ from, to }) =>
+        this.supabase
+          .from("route_orders")
+          .select("order_id, route_id, routes!inner(driver_id)")
+          .in("route_id", routeIds)
+          .range(from, to),
+      )
 
       // Create a map of order_id -> driver_id
       const orderToDriverMap = new Map<string, string>()
-      routeOrdersData?.forEach((ro: any) => {
+      routeOrdersData.forEach((ro: any) => {
         if (ro.routes?.driver_id) {
           orderToDriverMap.set(ro.order_id, ro.routes.driver_id)
         }
@@ -323,11 +334,14 @@ class ReportsService {
       // Get ratings for these orders
       const orderIds = Array.from(orderToDriverMap.keys())
       if (orderIds.length > 0) {
-        const { data: ratingsData } = await this.supabase
-          .from("order_ratings")
-          .select("order_id, driver_rating")
-          .in("order_id", orderIds)
-          .not("driver_rating", "is", null)
+        const ratingsData = await fetchAllRows(({ from, to }) =>
+          this.supabase
+            .from("order_ratings")
+            .select("order_id, driver_rating")
+            .in("order_id", orderIds)
+            .not("driver_rating", "is", null)
+            .range(from, to),
+        )
 
         // Map ratings to drivers
         ratingsData?.forEach((rating: any) => {
@@ -385,19 +399,22 @@ class ReportsService {
       actualMonthEnd.setDate(0)
       actualMonthEnd.setHours(23, 59, 59, 999)
 
-      const { data: orders } = await this.supabase
-        .from("orders")
-        .select("total, status")
-        .gte("created_at", monthStart.toISOString())
-        .lte("created_at", actualMonthEnd.toISOString())
+      const orders = await fetchAllRows(({ from, to }) =>
+        this.supabase
+          .from("orders")
+          .select("total, status")
+          .gte("created_at", monthStart.toISOString())
+          .lte("created_at", actualMonthEnd.toISOString())
+          .range(from, to),
+      )
 
       // Format month name in Spanish
       const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
       const monthKey = `${monthNames[monthStart.getMonth()]} ${monthStart.getFullYear().toString().slice(-2)}`
-      
+
       monthlyDataMap.set(monthKey, {
-        orders: orders?.length || 0,
-        revenue: orders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0,
+        orders: orders.length,
+        revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
       })
     }
 
@@ -414,57 +431,71 @@ class ReportsService {
     const repartidores = allUsers?.filter((u) => u.role === "repartidor") || []
 
     // Calculate orders created by preventistas
-    const { data: preventistaOrders } = await this.supabase
-      .from("orders")
-      .select("id, created_by")
-      .in(
-        "created_by",
-        preventistas.map((p) => p.id),
-      )
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
+    const preventistaOrders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("id, created_by")
+        .in(
+          "created_by",
+          preventistas.map((p) => p.id),
+        )
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
-    const avgPreventista = preventistas.length > 0 ? (preventistaOrders?.length || 0) / preventistas.length : 0
+    const avgPreventista = preventistas.length > 0 ? preventistaOrders.length / preventistas.length : 0
 
     // Calculate orders assembled by armadores
-    const { data: armadoresOrders } = await this.supabase
-      .from("orders")
-      .select("id, assembled_by")
-      .not("assembled_by", "is", null)
-      .in(
-        "assembled_by",
-        armadores.map((a) => a.id),
-      )
-      .gte("assembly_started_at", startDate.toISOString())
-      .lte("assembly_started_at", endDate.toISOString())
+    const armadoresOrders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("id, assembled_by")
+        .not("assembled_by", "is", null)
+        .in(
+          "assembled_by",
+          armadores.map((a) => a.id),
+        )
+        .gte("assembly_started_at", startDate.toISOString())
+        .lte("assembly_started_at", endDate.toISOString())
+        .range(from, to),
+    )
 
-    const avgArmador = armadores.length > 0 ? (armadoresOrders?.length || 0) / armadores.length : 0
+    const avgArmador = armadores.length > 0 ? armadoresOrders.length / armadores.length : 0
 
     // Calculate deliveries by repartidores
-    const { data: repartidorRoutes } = await this.supabase
-      .from("routes")
-      .select("id, driver_id, route_orders(order_id)")
-      .in(
-        "driver_id",
-        repartidores.map((r) => r.id),
-      )
-      .eq("status", "COMPLETADO")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
+    const repartidorRoutes = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("routes")
+        .select("id, driver_id, route_orders(order_id)")
+        .in(
+          "driver_id",
+          repartidores.map((r) => r.id),
+        )
+        .eq("status", "COMPLETADO")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
-    const totalDeliveries =
-      repartidorRoutes?.reduce((sum, route) => sum + ((route.route_orders as any)?.length || 0), 0) || 0
+    const totalDeliveries = repartidorRoutes.reduce(
+      (sum, route) => sum + ((route.route_orders as any)?.length || 0),
+      0,
+    )
     const avgRepartidor = repartidores.length > 0 ? totalDeliveries / repartidores.length : 0
 
     // Calculate efficiency (% of completed vs total)
-    const { data: allOrders } = await this.supabase
-      .from("orders")
-      .select("status")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
+    const allOrders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("status")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
-    const totalOrders = allOrders?.length || 0
-    const completedOrders = allOrders?.filter((o) => o.status === "ENTREGADO").length || 0
+    const totalOrders = allOrders.length
+    const completedOrders = allOrders.filter((o) => o.status === "ENTREGADO").length
     const overallEfficiency = totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0
 
     const teamStats: TeamStats[] = [
@@ -500,16 +531,14 @@ class ReportsService {
     paymentMethods: PaymentMethod[]
   }> {
     // Get orders with customer data for zones
-    const { data: orders, error } = await this.supabase
-      .from("orders")
-      .select("*, customers(zone_id, zones:zone_id(name))")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-
-    if (error) {
-      console.error("Error fetching orders for financial report:", error)
-      throw error
-    }
+    const orders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("*, customers(zone_id, zones:zone_id(name))")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
+        .range(from, to),
+    )
 
     // Calculate previous period
     const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -517,11 +546,14 @@ class ReportsService {
     previousStartDate.setDate(previousStartDate.getDate() - daysDiff)
     const previousEndDate = new Date(startDate)
 
-    const { data: previousOrders } = await this.supabase
-      .from("orders")
-      .select("total, status")
-      .gte("created_at", previousStartDate.toISOString())
-      .lt("created_at", previousEndDate.toISOString())
+    const previousOrders = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("orders")
+        .select("total, status")
+        .gte("created_at", previousStartDate.toISOString())
+        .lt("created_at", previousEndDate.toISOString())
+        .range(from, to),
+    )
 
     // Calculate stats
     const totalRevenue = orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
@@ -577,22 +609,21 @@ class ReportsService {
 
   async getAccountsReceivableReport(): Promise<AccountsReceivableData> {
     // Get customers with debt
-    const { data: customersWithDebt, error: customersError } = await this.supabase
-      .from("customers")
-      .select("id, commercial_name, current_balance")
-      .gt("current_balance", 0)
-      .order("current_balance", { ascending: false })
+    const customersWithDebt = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("customers")
+        .select("id, commercial_name, current_balance")
+        .gt("current_balance", 0)
+        .order("current_balance", { ascending: false })
+        .range(from, to),
+    )
 
-    if (customersError) {
-      console.error("Error fetching customers with debt:", customersError)
-    }
-
-    const totalDebt = customersWithDebt?.reduce((sum, c) => sum + (c.current_balance || 0), 0) || 0
-    const customersCount = customersWithDebt?.length || 0
+    const totalDebt = customersWithDebt.reduce((sum, c) => sum + (c.current_balance || 0), 0)
+    const customersCount = customersWithDebt.length
     const avgDebtPerCustomer = customersCount > 0 ? totalDebt / customersCount : 0
 
     // Top 5 debtors
-    const topDebtors = (customersWithDebt || []).slice(0, 5).map(c => ({
+    const topDebtors = customersWithDebt.slice(0, 5).map(c => ({
       customerId: c.id,
       customerName: c.commercial_name,
       debt: c.current_balance || 0,
@@ -602,33 +633,42 @@ class ReportsService {
     const today = getLocalDateString()
     // ⚠️ Excluir pedidos CANCELADOS: su order_payments queda por historial y si
     // se cuenta acá infla la deuda vencida con plata que nadie debe.
-    const { data: overduePayments } = await this.supabase
-      .from("order_payments")
-      .select("balance_due, due_date, orders!inner(status)")
-      .lt("due_date", today)
-      .gt("balance_due", 0)
-      .neq("orders.status", "CANCELADO")
+    const overduePayments = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("order_payments")
+        .select("balance_due, due_date, orders!inner(status)")
+        .lt("due_date", today)
+        .gt("balance_due", 0)
+        .neq("orders.status", "CANCELADO")
+        .range(from, to),
+    )
 
-    const overdueDebt = overduePayments?.reduce((sum, p) => sum + (Number(p.balance_due) || 0), 0) || 0
+    const overdueDebt = overduePayments.reduce((sum, p) => sum + (Number(p.balance_due) || 0), 0)
 
     // Get recent payments (last 30 days)
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const { data: recentPaymentMovements } = await this.supabase
-      .from("customer_account_movements")
-      .select("credit_amount")
-      .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE", "PAGO_CUENTA_CORRIENTE", "PAGO_OTRO"])
-      .gte("created_at", thirtyDaysAgo.toISOString())
+    const recentPaymentMovements = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("customer_account_movements")
+        .select("credit_amount")
+        .in("movement_type", ["PAGO_EFECTIVO", "PAGO_TRANSFERENCIA", "PAGO_TARJETA", "PAGO_CHEQUE", "PAGO_CUENTA_CORRIENTE", "PAGO_OTRO"])
+        .gte("created_at", thirtyDaysAgo.toISOString())
+        .range(from, to),
+    )
 
-    const recentPayments = recentPaymentMovements?.reduce((sum, m) => sum + (m.credit_amount || 0), 0) || 0
+    const recentPayments = recentPaymentMovements.reduce((sum, m) => sum + (m.credit_amount || 0), 0)
 
     // Debt by age (based on movement creation date)
-    const { data: debtMovements } = await this.supabase
-      .from("customer_account_movements")
-      .select("debit_amount, created_at, customer_id")
-      .eq("movement_type", "DEUDA_PEDIDO")
-      .gt("debit_amount", 0)
+    const debtMovements = await fetchAllRows(({ from, to }) =>
+      this.supabase
+        .from("customer_account_movements")
+        .select("debit_amount, created_at, customer_id")
+        .eq("movement_type", "DEUDA_PEDIDO")
+        .gt("debit_amount", 0)
+        .range(from, to),
+    )
 
     // Calculate debt age ranges
     const now = new Date()
