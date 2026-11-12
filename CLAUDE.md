@@ -237,6 +237,42 @@ Todas las tablas tienen `USING (true) WITH CHECK (true)` para `authenticated`. L
 
 **⚠️ Al construir `orderForReceipt` en el armador** (PDF local antes de guardar): el mapeo DEBE incluir `assembled_weight_kg: assembled.assembledWeightKg` o no aparece el peso en el remito. Ver `handleDownloadPDF` y `handleSendWhatsAppAssembly` en `assembly-form.tsx`.
 
+## Clean code y buenas prácticas
+
+Reglas concretas para este repo, no genéricas. Aplicar siempre, no solo cuando se pide explícitamente.
+
+### Paginar queries a Supabase
+PostgREST corta en 1000 filas cuando una query no pide un rango explícito. Cualquier tabla que pueda superar esa cantidad (`orders`, `customers`, `customer_account_movements`, `route_cash_closures`, etc.) **tiene que paginar** con `fetchAllRows` (`lib/utils/supabase-pagination.ts`) en vez de `.select()` suelto. Ya pasó en producción: reportes mensuales subcontando pedidos, el selector de clientes sin los que empiezan con Y/Z. Antes de escribir una query nueva sobre una tabla de alto volumen, preguntarse "¿esto puede superar 1000 filas alguna vez?" — si la respuesta no es un "no" seguro, paginar.
+
+### No reusar un query builder de Supabase entre páginas de paginación
+```ts
+// ❌ MAL — el builder se reusa, el filtro puede arrastrar estado entre llamadas
+let q = supabase.from("orders").select("*").eq("status", x)
+const rows = await fetchAllRows(({ from, to }) => q.range(from, to))
+
+// ✅ BIEN — se reconstruye la query completa en cada página
+const buildQuery = () => supabase.from("orders").select("*").eq("status", x)
+const rows = await fetchAllRows(({ from, to }) => buildQuery().range(from, to))
+```
+
+### No hardcodear fallbacks que enmascaran un dato mal configurado
+Si algo depende de una configuración (depósito, API key, feature flag) y esa configuración puede faltar, **no** caer silenciosamente en una constante fija — eso generó el bug de rutas saliendo "desde Córdoba" cuando el depósito real estaba en otro lado. Mejor: bloquear la acción con un mensaje claro, o mostrar un aviso visible, nunca fallar en silencio hacia un valor que parece válido pero no lo es.
+
+### Verificar contra datos reales antes de dar por terminado
+No alcanza con que compile o pase el typecheck. Antes de reportar una feature o fix como lista:
+- Si toca una query o un cálculo, correrlo contra la base real (con `node`/`tsx` y la service role key, o levantando el dev server) y mirar los números — no asumir que el código "debería" andar.
+- Si genera un PDF/CSV, medir anchos reales (`doc.getStringUnitWidth`) o abrir el archivo generado en vez de calcular a ojo.
+- Reproducir el bug reportado con datos reales de la cuenta antes de asumir la causa — varias veces la causa real no era la más obvia a primera vista.
+
+### Alcance de los cambios
+- No tocar código no relacionado al pedido "de paso", salvo que sea el mismo bug en el mismo archivo que ya se está editando (ahí sí, mencionarlo).
+- Si al investigar aparece un bug sistémico más grande que lo pedido (ej. un problema que se repite en 5 archivos), avisar y preguntar alcance antes de arreglar todo — no asumir que "arreglalo" significa "arreglalo en todos lados" sin confirmar.
+- Preferir extender/reusar un patrón ya existente en el repo (helper, componente, service) antes que escribir uno nuevo que hace lo mismo distinto.
+
+### Nombres y comentarios
+- Comentarios solo para el *por qué* no obvio (una constante mágica, un workaround, un orden de ejecución no evidente) — nunca para describir qué hace el código línea por línea.
+- Nombres de variables/funciones en español o inglés, pero consistentes con el archivo que se está tocando (el repo mezcla ambos según el módulo; no forzar un idioma sobre el otro dentro del mismo archivo).
+
 ## Errores TS pre-existentes (ignorables)
 
 - `TS2786 'X cannot be used as a JSX component'` — async server components, es bug del compilador, runtime ok
@@ -259,6 +295,8 @@ add_presencial_order_radius.sql
 add_route_reorder_log.sql
 add_invoice_type_to_orders.sql
 add_early_assembly_allowed.sql
+add_debt_age_to_customer_stats.sql
+add_sales_targets.sql
 ```
 
 ## Convenciones del usuario

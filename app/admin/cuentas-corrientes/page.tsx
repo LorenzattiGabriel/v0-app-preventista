@@ -25,6 +25,7 @@ import { AdjustBalanceDialog } from "@/components/admin/adjust-balance-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { PrintAccountsReportButton } from "@/components/admin/print-accounts-report-button"
 import { fetchAllRows } from "@/lib/utils/supabase-pagination"
+import { DEBT_AGE_OPTIONS, parseDebtAgeDays } from "@/lib/services/customerStatsService"
 
 const PER_PAGE = 25
 
@@ -36,7 +37,14 @@ const toNum = (v: any) => {
 export default async function AdminCuentasCorrientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; type?: string; balance?: string; locality?: string; page?: string }>
+  searchParams: Promise<{
+    search?: string
+    type?: string
+    balance?: string
+    locality?: string
+    debtDays?: string
+    page?: string
+  }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -50,11 +58,26 @@ export default async function AdminCuentasCorrientesPage({
   const page = Math.max(1, parseInt(params.page || "1") || 1)
   const from = (page - 1) * PER_PAGE
   const to = from + PER_PAGE - 1
+  const debtDays = parseDebtAgeDays(params.debtDays)
 
-  let query = supabase
-    .from("customers")
-    .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit", { count: "exact" })
-    .eq("is_active", true)
+  // Sin filtro de antigüedad: sigue sobre "customers" (sin cambios, no
+  // depende de la migración add_debt_age_to_customer_stats). Con el filtro
+  // activo, se arma sobre la vista customer_stats, que agrega days_with_debt
+  // (antigüedad de la deuda, independiente del vencimiento de crédito).
+  let query = debtDays
+    ? supabase
+        .from("customer_stats")
+        .select(
+          "id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit, days_with_debt",
+          { count: "exact" },
+        )
+        .gte("days_with_debt", debtDays)
+    : supabase
+        .from("customers")
+        .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit", {
+          count: "exact",
+        })
+        .eq("is_active", true)
 
   if (params.type && params.type !== "all") {
     query = query.eq("customer_type", params.type)
@@ -78,10 +101,15 @@ export default async function AdminCuentasCorrientesPage({
     query = query.or("current_balance.eq.0,current_balance.is.null")
   }
 
-  const orderColumn = params.balance === "credit" ? "current_balance" : "current_balance"
   const orderAsc = params.balance === "credit"
+  // Con el filtro de antigüedad de deuda activo, lo útil es ver primero al
+  // deudor más viejo — no al de mayor saldo.
+  if (debtDays) {
+    query = query.order("days_with_debt", { ascending: false, nullsFirst: false })
+  } else {
+    query = query.order("current_balance", { ascending: orderAsc, nullsFirst: false })
+  }
   const { data: customers, count } = await query
-    .order(orderColumn, { ascending: orderAsc, nullsFirst: false })
     .order("commercial_name", { ascending: true })
     .range(from, to)
 
@@ -118,10 +146,15 @@ export default async function AdminCuentasCorrientesPage({
   // Mismos filtros que la tabla, pero sin paginar — para el PDF del reporte
   // general. fetchAllRows: puede haber más de 1000 clientes activos.
   const buildReportQuery = () => {
-    let q = supabase
-      .from("customers")
-      .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
-      .eq("is_active", true)
+    let q = debtDays
+      ? supabase
+          .from("customer_stats")
+          .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
+          .gte("days_with_debt", debtDays)
+      : supabase
+          .from("customers")
+          .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
+          .eq("is_active", true)
 
     if (params.type && params.type !== "all") {
       q = q.eq("customer_type", params.type)
@@ -151,6 +184,7 @@ export default async function AdminCuentasCorrientesPage({
   const reportFilterParts = [
     params.type && params.type !== "all" ? `Tipo: ${params.type === "mayorista" ? "Mayorista" : "Minorista"}` : null,
     params.locality && params.locality !== "all" ? `Localidad: ${params.locality}` : null,
+    debtDays ? `Con deuda hace ≥${debtDays} días` : null,
     params.balance === "debt" ? "Solo con deuda" : params.balance === "credit" ? "Solo saldo a favor" : params.balance === "zero" ? "Solo sin saldo" : null,
     params.search ? `Búsqueda: "${params.search}"` : null,
   ].filter(Boolean)
@@ -302,6 +336,19 @@ export default async function AdminCuentasCorrientesPage({
                       <SelectItem value="zero">⚪ Sin saldo</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select name="debtDays" defaultValue={debtDays ? String(debtDays) : "all"}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <SelectValue placeholder="Antigüedad de deuda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Cualquier antigüedad</SelectItem>
+                      {DEBT_AGE_OPTIONS.map((d) => (
+                        <SelectItem key={d} value={String(d)}>
+                          Deuda hace +{d} días
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button type="submit">
                     <Search className="h-4 w-4 mr-2" />
                     Filtrar
@@ -317,6 +364,7 @@ export default async function AdminCuentasCorrientesPage({
                             <TableHead>Cliente</TableHead>
                             <TableHead>Tipo</TableHead>
                             <TableHead className="text-right">Saldo actual</TableHead>
+                            {debtDays && <TableHead className="text-right">Días con deuda</TableHead>}
                             <TableHead className="text-right">Límite crédito</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                           </TableRow>
@@ -357,6 +405,17 @@ export default async function AdminCuentasCorrientesPage({
                                     <div className="text-xs text-red-600 mt-1">⚠️ Supera límite</div>
                                   )}
                                 </TableCell>
+                                {debtDays && (
+                                  <TableCell className="text-right">
+                                    {c.days_with_debt != null ? (
+                                      <span className={`font-semibold ${c.days_with_debt >= 20 ? "text-red-600" : "text-amber-600"}`}>
+                                        {c.days_with_debt} días
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                )}
                                 <TableCell className="text-right text-muted-foreground">
                                   {creditLimit > 0 ? `$${formatARS(creditLimit)}` : "—"}
                                 </TableCell>

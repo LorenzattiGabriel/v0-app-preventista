@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import { NavButton } from "@/components/shared/action-button"
-import { Package, FileText, Clock, Calendar } from "lucide-react"
+import { Package, FileText, Clock, Calendar, Target } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
+import { createSalesTargetsService, monthToPeriod } from "@/lib/services/salesTargetsService"
 
 export default async function PreventistaDashboardPage() {
   const supabase = await createClient()
@@ -52,6 +54,14 @@ export default async function PreventistaDashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("created_by", user.id)
     .eq("status", "BORRADOR")
+
+  // Objetivo de venta individual del mes en curso, si el admin le asignó uno
+  const salesTargetsService = createSalesTargetsService(supabase)
+  const salesTarget = await salesTargetsService.getIndividualProgress(
+    monthToPeriod(now),
+    "preventista",
+    user.id,
+  )
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -109,6 +119,31 @@ export default async function PreventistaDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {salesTarget && (
+            <Card className={salesTarget.percent >= 100 ? "border-green-300 bg-green-50/60 dark:bg-green-950/20" : ""}>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Mi Objetivo del Mes
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">
+                  ${salesTarget.actual_amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} de $
+                  {salesTarget.target_amount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Progress
+                  value={Math.min(100, salesTarget.percent)}
+                  className={salesTarget.percent >= 100 ? "[&>div]:bg-green-600" : ""}
+                />
+                <p className="text-xs text-muted-foreground mt-2 text-right">
+                  {salesTarget.percent.toFixed(1)}% cumplido
+                  {salesTarget.percent >= 100 ? " 🎉" : ""}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2">
             <Card>

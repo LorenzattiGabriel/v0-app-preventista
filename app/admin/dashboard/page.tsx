@@ -3,10 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock, Target } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
-import { createCustomerStatsService, DEFAULT_INACTIVE_DAYS } from "@/lib/services/customerStatsService"
+import { createCustomerStatsService, DEFAULT_INACTIVE_DAYS, DEFAULT_OLD_DEBT_DAYS } from "@/lib/services/customerStatsService"
 import { getLocalDateString, getLocalTomorrowDateString } from "@/lib/utils/dates"
 import { LogoutButton } from "@/components/logout-button"
 import { RatingsMetrics } from "@/components/admin/ratings-metrics"
@@ -97,9 +97,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     .eq("requires_invoice", true)
     .or("is_invoiced.is.null,is_invoiced.eq.false")
 
-  // Alertas de clientes: inactivos (no piden hace >= umbral) y con deuda
+  // Alertas de clientes: inactivos (no piden hace >= umbral), con deuda y
+  // con deuda antigua (pendiente hace >= DEFAULT_OLD_DEBT_DAYS, sin importar
+  // si venció el plazo de crédito)
   const customerStatsService = createCustomerStatsService(supabase)
-  const customerAlerts = await customerStatsService.getAlerts(DEFAULT_INACTIVE_DAYS)
+  const customerAlerts = await customerStatsService.getAlerts(DEFAULT_INACTIVE_DAYS, DEFAULT_OLD_DEBT_DAYS)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -126,7 +128,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
           </div>
 
           {/* Alertas de seguimiento de clientes */}
-          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <Link href={`/admin/customers/estadisticas?inactiveDays=${DEFAULT_INACTIVE_DAYS}`}>
               <Card className={`h-full transition-colors hover:bg-muted/50 ${customerAlerts.inactiveCount > 0 ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/20" : ""}`}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -157,6 +159,24 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   <p className="text-xs text-muted-foreground">
                     ${customerAlerts.totalDebt.toLocaleString("es-AR", { maximumFractionDigits: 0 })} a cobrar
                     {customerAlerts.overdueCount > 0 ? ` · ${customerAlerts.overdueCount} vencidos` : ""}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href={`/admin/cuentas-corrientes?debtDays=${DEFAULT_OLD_DEBT_DAYS}`}>
+              <Card className={`h-full transition-colors hover:bg-muted/50 ${customerAlerts.oldDebtCount > 0 ? "border-red-400 bg-red-50/80 dark:bg-red-950/30" : ""}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Deudores antiguos</CardTitle>
+                  <AlertTriangle className={`h-4 w-4 ${customerAlerts.oldDebtCount > 0 ? "text-red-600" : "text-muted-foreground"}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${customerAlerts.oldDebtCount > 0 ? "text-red-700" : ""}`}>
+                    {customerAlerts.oldDebtCount}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Hace ≥{DEFAULT_OLD_DEBT_DAYS} días con deuda · $
+                    {customerAlerts.oldDebtAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
                   </p>
                 </CardContent>
               </Card>
@@ -393,6 +413,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <NavButton href="/admin/cuentas-corrientes/movimientos" variant="outline" className="w-full bg-transparent">
                     <ArrowDownRight className="mr-2 h-4 w-4" />
                     Movimientos financieros
+                  </NavButton>
+                <NavButton href="/admin/objetivos-venta" variant="outline" className="w-full bg-transparent">
+                    <Target className="mr-2 h-4 w-4" />
+                    Objetivos de Venta
                   </NavButton>
                 <NavButton href="/admin/credit-notes" variant="outline" className="w-full bg-transparent">
                     <Receipt className="mr-2 h-4 w-4" />

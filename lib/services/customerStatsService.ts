@@ -3,6 +3,16 @@ import { getLocalDateString } from "@/lib/utils/dates"
 
 export const CUSTOMER_STATS_PER_PAGE = 25
 export const DEFAULT_INACTIVE_DAYS = 15
+export const DEFAULT_OLD_DEBT_DAYS = 20
+
+/** Opciones de antigüedad de deuda que ofrece el filtro de cuentas corrientes. */
+export const DEBT_AGE_OPTIONS = [5, 10, 15, 20] as const
+
+/** Sanea la antigüedad que llega por querystring. Sólo se aceptan DEBT_AGE_OPTIONS. */
+export function parseDebtAgeDays(raw: string | undefined): number | undefined {
+  const n = parseInt(raw || "")
+  return (DEBT_AGE_OPTIONS as readonly number[]).includes(n) ? n : undefined
+}
 
 /** Tamaños de ranking que ofrece la UI. */
 export const TOP_N_OPTIONS = [10, 20, 50, 100] as const
@@ -40,6 +50,10 @@ export interface CustomerStatRow {
   days_since_last_order: number | null
   overdue_amount: number
   overdue_count: number
+  /** Días desde el pedido impago más viejo (sin importar si venció el plazo de crédito). */
+  days_with_debt: number | null
+  debt_amount: number
+  debt_count: number
 }
 
 export interface CustomerAlerts {
@@ -49,6 +63,9 @@ export interface CustomerAlerts {
   totalDebt: number
   overdueCount: number
   overdueAmount: number
+  /** Clientes con deuda de más de oldDebtDays (ver getAlerts). */
+  oldDebtCount: number
+  oldDebtAmount: number
 }
 
 export interface CustomerKpis {
@@ -121,14 +138,20 @@ const mapRow = (r: any): CustomerStatRow => ({
   days_since_last_order: r.days_since_last_order == null ? null : toNum(r.days_since_last_order),
   overdue_amount: toNum(r.overdue_amount),
   overdue_count: toNum(r.overdue_count),
+  days_with_debt: r.days_with_debt == null ? null : toNum(r.days_with_debt),
+  debt_amount: toNum(r.debt_amount),
+  debt_count: toNum(r.debt_count),
 })
 
 class CustomerStatsService {
   constructor(private supabase: SupabaseClient) {}
 
-  /** Carteles del dashboard: inactivos, deuda y deuda vencida. */
-  async getAlerts(inactiveDays: number = DEFAULT_INACTIVE_DAYS): Promise<CustomerAlerts> {
-    const [inactive, never, debtRows, overdueRows] = await Promise.all([
+  /** Carteles del dashboard: inactivos, deuda, deuda vencida y deuda antigua. */
+  async getAlerts(
+    inactiveDays: number = DEFAULT_INACTIVE_DAYS,
+    oldDebtDays: number = DEFAULT_OLD_DEBT_DAYS,
+  ): Promise<CustomerAlerts> {
+    const [inactive, never, debtRows, overdueRows, oldDebtRows] = await Promise.all([
       this.supabase
         .from("customer_stats")
         .select("id", { count: "exact", head: true })
@@ -142,10 +165,15 @@ class CustomerStatsService {
         .from("customer_stats")
         .select("overdue_amount")
         .gt("overdue_amount", 0),
+      this.supabase
+        .from("customer_stats")
+        .select("debt_amount")
+        .gte("days_with_debt", oldDebtDays),
     ])
 
     const totalDebt = (debtRows.data || []).reduce((s, r) => s + toNum(r.current_balance), 0)
     const overdueAmount = (overdueRows.data || []).reduce((s, r) => s + toNum(r.overdue_amount), 0)
+    const oldDebtAmount = (oldDebtRows.data || []).reduce((s, r) => s + toNum((r as any).debt_amount), 0)
 
     return {
       inactiveCount: inactive.count || 0,
@@ -154,6 +182,33 @@ class CustomerStatsService {
       totalDebt,
       overdueCount: (overdueRows.data || []).length,
       overdueAmount,
+      oldDebtCount: (oldDebtRows.data || []).length,
+      oldDebtAmount,
+    }
+  }
+
+  /** Deudores más antiguos: clientes con deuda pendiente hace >= minDays, para
+   * la alerta del dashboard y el filtro de /admin/cuentas-corrientes. */
+  async getOldestDebtors(
+    minDays: number = DEFAULT_OLD_DEBT_DAYS,
+    page = 1,
+    perPage = CUSTOMER_STATS_PER_PAGE,
+  ): Promise<{ rows: CustomerStatRow[]; count: number; totalPages: number }> {
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+
+    const { data, count } = await this.supabase
+      .from("customer_stats")
+      .select("*", { count: "exact" })
+      .gte("days_with_debt", minDays)
+      .order("days_with_debt", { ascending: false })
+      .range(from, to)
+
+    const total = count || 0
+    return {
+      rows: (data || []).map(mapRow),
+      count: total,
+      totalPages: Math.max(1, Math.ceil(total / perPage)),
     }
   }
 
