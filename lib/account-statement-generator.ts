@@ -10,6 +10,7 @@ const fmtMoney = (n: number) =>
   `$ ${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export const movementTypeLabels: Record<string, string> = {
+  DEUDA_PEDIDO: "Deuda por pedido",
   VENTA: "Venta",
   PAGO_EFECTIVO: "Pago (efectivo)",
   PAGO_TRANSFERENCIA: "Pago (transferencia)",
@@ -101,12 +102,18 @@ export async function generateAccountStatementPDF(
   y += 25
 
   // ---- COLUMN POSITIONS ----
+  // Debe/Haber/Saldo están alineados a la derecha: el ancla (colX) es el borde
+  // DERECHO del número, que se extiende hacia la izquierda según su propio
+  // ancho (hasta ~18.4mm para "$ -1.234.567,89" en bold 7.5pt, medido con
+  // jsPDF). Si el cap de "Detalle" no deja ese espacio libre antes del ancla,
+  // el texto se superpone con el monto — por eso cada columna de plata
+  // reserva 23mm (20 de ancho + 3 de aire) antes de la siguiente.
   const colDate = ml
-  const colType = ml + 22
-  const colDetail = ml + 60
-  const colDebit = pageW - mr - 62
-  const colCredit = pageW - mr - 38
+  const colType = ml + 19
+  const colDetail = ml + 51
   const colBalance = pageW - mr - 2
+  const colCredit = colBalance - 23
+  const colDebit = colCredit - 23
 
   const drawTableHeader = (yy: number) => {
     doc.setFillColor(50, 50, 50)
@@ -181,14 +188,16 @@ export async function generateAccountStatementPDF(
     doc.text(new Date(m.created_at).toLocaleDateString("es-AR"), colDate + 2, y)
 
     const typeLabel = movementTypeLabels[m.movement_type] || m.movement_type
-    doc.text(fitText(typeLabel, 36), colType + 2, y)
+    doc.text(fitText(typeLabel, colDetail - colType - 4), colType + 2, y)
 
     const detailParts = [
       m.orders?.order_number ? `Pedido ${m.orders.order_number}` : null,
       m.description || null,
     ].filter(Boolean)
     doc.setTextColor(90)
-    doc.text(fitText(detailParts.join(" · "), colDebit - colDetail - 6), colDetail + 2, y)
+    // -23 reserva el espacio que ocupa el número de "Debe" hacia la izquierda
+    // de su propia ancla (ver comentario en COLUMN POSITIONS).
+    doc.text(fitText(detailParts.join(" · "), colDebit - 23 - colDetail - 2), colDetail + 2, y)
 
     doc.setFont("helvetica", "bold")
     doc.setTextColor(debit > 0 ? 180 : 180, debit > 0 ? 0 : 180, debit > 0 ? 0 : 180)
