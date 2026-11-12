@@ -30,7 +30,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // If user is authenticated and on login page, redirect to dashboard
-  if (user && request.nextUrl.pathname === "/auth/login") {
+  if (user && (request.nextUrl.pathname === "/auth/login" || request.nextUrl.pathname === "/cliente/login")) {
     // Get user profile to determine role
     const { data: profile } = await supabase
       .from("profiles")
@@ -51,10 +51,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Allow access to auth routes and API routes
+  // Allow access to auth routes and API routes.
+  // /cliente/login es el login propio del portal de clientes (código de
+  // cuenta + código de acceso, no email/contraseña) — tiene que ser
+  // accesible sin sesión igual que /auth/login.
   if (
-    request.nextUrl.pathname.startsWith("/auth") || 
+    request.nextUrl.pathname.startsWith("/auth") ||
     request.nextUrl.pathname.startsWith("/api") ||
+    request.nextUrl.pathname === "/cliente/login" ||
     request.nextUrl.pathname === "/"
   ) {
     return supabaseResponse

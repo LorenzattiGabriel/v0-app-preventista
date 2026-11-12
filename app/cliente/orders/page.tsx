@@ -21,16 +21,20 @@ export default async function ClienteOrdersPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/cliente/login")
   }
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
   if (!profile || profile.role !== "cliente") {
-    redirect("/auth/login")
+    redirect("/cliente/login")
   }
 
-  const { data: customer } = await supabase.from("customers").select("*").eq("email", profile.email).single()
+  // Portal con código de acceso: el vínculo es profiles.customer_id, no el
+  // email (el profile de un cliente de portal usa un email sintético interno).
+  const { data: customer } = profile.customer_id
+    ? await supabase.from("customers").select("*").eq("id", profile.customer_id).single()
+    : { data: null }
 
   if (!customer) {
     redirect("/cliente/dashboard")

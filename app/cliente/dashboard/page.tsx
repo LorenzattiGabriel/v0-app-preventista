@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
-import { Package, Clock, CheckCircle, Truck, AlertTriangle } from "lucide-react"
+import { Package, Clock, CheckCircle, Truck, AlertTriangle, Wallet } from "lucide-react"
 import { LogoutButton } from "@/components/logout-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { getClientOrderStatusLabel, getClientOrderStatusColor } from "@/lib/utils/client-order-status"
@@ -17,17 +17,21 @@ export default async function ClienteDashboardPage() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/cliente/login")
   }
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
   if (!profile || profile.role !== "cliente") {
-    redirect("/auth/login")
+    redirect("/cliente/login")
   }
 
   // Get customer record
-  const { data: customer } = await supabase.from("customers").select("*").eq("email", profile.email).single()
+  // Portal con código de acceso: el vínculo es profiles.customer_id, no el
+  // email (el profile de un cliente de portal usa un email sintético interno).
+  const { data: customer } = profile.customer_id
+    ? await supabase.from("customers").select("*").eq("id", profile.customer_id).single()
+    : { data: null }
 
   if (!customer) {
     return (
@@ -104,7 +108,24 @@ export default async function ClienteDashboardPage() {
             <p className="text-muted-foreground">Gestiona y rastrea tus pedidos</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <Link href="/cliente/cuenta">
+              <Card className={`h-full transition-colors hover:bg-muted/50 ${Number(customer.current_balance) > 0 ? "border-red-300 bg-red-50/60 dark:bg-red-950/20" : ""}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Mi Cuenta Corriente</CardTitle>
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${Number(customer.current_balance) > 0 ? "text-red-600" : Number(customer.current_balance) < 0 ? "text-green-600" : ""}`}>
+                    ${Math.abs(Number(customer.current_balance) || 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {Number(customer.current_balance) > 0 ? "Saldo a pagar" : Number(customer.current_balance) < 0 ? "Saldo a favor" : "Sin saldo pendiente"}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Pedidos</CardTitle>
