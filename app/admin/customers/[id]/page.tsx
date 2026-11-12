@@ -31,6 +31,9 @@ import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialo
 import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { PrintAccountStatementButton } from "@/components/admin/print-account-statement-button"
+import { fetchAllRows } from "@/lib/utils/supabase-pagination"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 const MOVEMENTS_PER_PAGE = 20
 
@@ -39,13 +42,15 @@ export default async function AdminCustomerDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ movPage?: string }>
+  searchParams: Promise<{ movPage?: string; movDesde?: string; movHasta?: string }>
 }) {
   const { id } = await params
   const sp = await searchParams
   const movPage = Math.max(1, parseInt(sp.movPage || "1") || 1)
   const movFrom = (movPage - 1) * MOVEMENTS_PER_PAGE
   const movTo = movFrom + MOVEMENTS_PER_PAGE - 1
+  const movDesde = sp.movDesde || undefined
+  const movHasta = sp.movHasta || undefined
   const supabase = await createClient()
   const {
     data: { user },
@@ -123,24 +128,33 @@ export default async function AdminCustomerDetailPage({
     .eq("customer_id", customer.id)
     .order("created_at", { ascending: false })
 
-  // Get customer account movements (cuenta corriente) — paginado
-  const { data: accountMovements, count: movementsCount } = await supabase
+  // Get customer account movements (cuenta corriente) — paginado, con filtro
+  // opcional de fecha (desde/hasta)
+  let movementsQuery = supabase
     .from("customer_account_movements")
     .select("*, orders(order_number)", { count: "exact" })
     .eq("customer_id", customer.id)
+  if (movDesde) movementsQuery = movementsQuery.gte("created_at", movDesde)
+  if (movHasta) movementsQuery = movementsQuery.lte("created_at", `${movHasta}T23:59:59`)
+
+  const { data: accountMovements, count: movementsCount } = await movementsQuery
     .order("created_at", { ascending: false })
     .range(movFrom, movTo)
 
   const totalMovements = movementsCount || 0
   const totalMovementsPages = Math.max(1, Math.ceil(totalMovements / MOVEMENTS_PER_PAGE))
 
-  // Historial completo (sin paginar) para el PDF de la cuenta corriente
-  const { data: allAccountMovements } = await supabase
-    .from("customer_account_movements")
-    .select("*, orders(order_number)")
-    .eq("customer_id", customer.id)
-    .order("created_at", { ascending: false })
-    .limit(1000)
+  // Historial completo (sin paginar, mismo filtro de fecha) para el PDF de la
+  // cuenta corriente. fetchAllRows: sin esto, PostgREST corta en 1000 filas.
+  const allAccountMovements = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) => {
+    let q = supabase
+      .from("customer_account_movements")
+      .select("*, orders(order_number)")
+      .eq("customer_id", customer.id)
+    if (movDesde) q = q.gte("created_at", movDesde)
+    if (movHasta) q = q.lte("created_at", `${movHasta}T23:59:59`)
+    return q.order("created_at", { ascending: false }).range(rangeFrom, rangeTo)
+  })
 
   // Get orders with pending debt (for payment registration)
   const { data: ordersWithDebt } = await supabase
@@ -520,10 +534,10 @@ export default async function AdminCustomerDetailPage({
               </Card>
 
               {/* Movimientos de Cuenta Corriente */}
-              {accountMovements && accountMovements.length > 0 && (
+              {((accountMovements && accountMovements.length > 0) || movDesde || movHasta) && (
                 <Card id="movimientos">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <CardTitle className="flex items-center gap-2">
                           <Wallet className="h-5 w-5" />
@@ -531,6 +545,7 @@ export default async function AdminCustomerDetailPage({
                         </CardTitle>
                         <CardDescription>
                           {totalMovements} {totalMovements === 1 ? "movimiento registrado" : "movimientos registrados"}
+                          {(movDesde || movHasta) && " (filtrado)"}
                         </CardDescription>
                       </div>
                       <PrintAccountStatementButton
@@ -543,11 +558,35 @@ export default async function AdminCustomerDetailPage({
                           current_balance: currentBalance,
                           credit_limit: customer.credit_limit,
                         }}
-                        movements={allAccountMovements || []}
+                        movements={allAccountMovements}
                       />
                     </div>
+                    <form className="flex flex-wrap items-end gap-2 pt-2" action={`/admin/customers/${id}`}>
+                      <div className="space-y-1">
+                        <Label htmlFor="movDesde" className="text-xs text-muted-foreground">
+                          Desde
+                        </Label>
+                        <Input id="movDesde" name="movDesde" type="date" defaultValue={movDesde} className="h-9 w-[150px]" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="movHasta" className="text-xs text-muted-foreground">
+                          Hasta
+                        </Label>
+                        <Input id="movHasta" name="movHasta" type="date" defaultValue={movHasta} className="h-9 w-[150px]" />
+                      </div>
+                      <Button type="submit" variant="outline" size="sm">
+                        Filtrar
+                      </Button>
+                      {(movDesde || movHasta) && (
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/admin/customers/${id}#movimientos`}>Limpiar</Link>
+                        </Button>
+                      )}
+                    </form>
                   </CardHeader>
                   <CardContent>
+                    {accountMovements && accountMovements.length > 0 ? (
+                    <>
                     {/* Scroll propio: la paginación queda visible abajo en vez de
                         empujarse fuera de la pantalla con 20 movimientos. */}
                     <div className="max-h-[30rem] overflow-y-auto pr-1 space-y-2">
@@ -619,6 +658,12 @@ export default async function AdminCustomerDetailPage({
                       itemLabel="movimientos"
                       scrollToId="movimientos"
                     />
+                    </>
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">
+                        No hay movimientos en el rango de fechas seleccionado
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}

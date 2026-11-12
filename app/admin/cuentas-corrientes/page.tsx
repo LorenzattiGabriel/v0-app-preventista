@@ -24,6 +24,7 @@ import { ArrowLeft, Wallet, Search, AlertTriangle, TrendingDown, TrendingUp, Fil
 import { AdjustBalanceDialog } from "@/components/admin/adjust-balance-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { PrintAccountsReportButton } from "@/components/admin/print-accounts-report-button"
+import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 
 const PER_PAGE = 25
 
@@ -35,7 +36,7 @@ const toNum = (v: any) => {
 export default async function AdminCuentasCorrientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; type?: string; balance?: string; page?: string }>
+  searchParams: Promise<{ search?: string; type?: string; balance?: string; locality?: string; page?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -59,6 +60,10 @@ export default async function AdminCuentasCorrientesPage({
     query = query.eq("customer_type", params.type)
   }
 
+  if (params.locality && params.locality !== "all") {
+    query = query.eq("locality", params.locality)
+  }
+
   if (params.search) {
     query = query.or(
       `commercial_name.ilike.%${params.search}%,contact_name.ilike.%${params.search}%,code.ilike.%${params.search}%`,
@@ -80,43 +85,72 @@ export default async function AdminCuentasCorrientesPage({
     .order("commercial_name", { ascending: true })
     .range(from, to)
 
-  // KPIs globales (sobre TODOS los clientes activos, no solo la página)
-  const { data: allBalances } = await supabase
-    .from("customers")
-    .select("current_balance")
-    .eq("is_active", true)
+  // Localidades para el filtro (de todos los clientes activos, no solo la
+  // página). fetchAllRows: ya hubo más de 1000 clientes activos antes.
+  const localitiesRaw = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+    supabase
+      .from("customers")
+      .select("locality")
+      .eq("is_active", true)
+      .not("locality", "is", null)
+      .range(rangeFrom, rangeTo),
+  )
 
-  const totalDebt = allBalances?.reduce((s, c) => s + Math.max(0, toNum(c.current_balance)), 0) || 0
-  const totalCredit = allBalances?.reduce((s, c) => s + Math.max(0, -toNum(c.current_balance)), 0) || 0
-  const customersWithDebt = allBalances?.filter(c => toNum(c.current_balance) > 0).length || 0
-  const customersWithCredit = allBalances?.filter(c => toNum(c.current_balance) < 0).length || 0
+  const localities = Array.from(
+    new Set(localitiesRaw.map((c) => c.locality).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, "es"))
 
-  // Mismos filtros que la tabla, pero sin paginar — para el PDF del reporte general
-  let reportQuery = supabase
-    .from("customers")
-    .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
-    .eq("is_active", true)
+  // KPIs globales (sobre TODOS los clientes activos, no solo la página).
+  // fetchAllRows: ya hubo más de 1000 clientes activos antes.
+  const allBalances = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+    supabase
+      .from("customers")
+      .select("current_balance")
+      .eq("is_active", true)
+      .range(rangeFrom, rangeTo),
+  )
 
-  if (params.type && params.type !== "all") {
-    reportQuery = reportQuery.eq("customer_type", params.type)
+  const totalDebt = allBalances.reduce((s, c) => s + Math.max(0, toNum(c.current_balance)), 0)
+  const totalCredit = allBalances.reduce((s, c) => s + Math.max(0, -toNum(c.current_balance)), 0)
+  const customersWithDebt = allBalances.filter(c => toNum(c.current_balance) > 0).length
+  const customersWithCredit = allBalances.filter(c => toNum(c.current_balance) < 0).length
+
+  // Mismos filtros que la tabla, pero sin paginar — para el PDF del reporte
+  // general. fetchAllRows: puede haber más de 1000 clientes activos.
+  const buildReportQuery = () => {
+    let q = supabase
+      .from("customers")
+      .select("id, code, commercial_name, contact_name, customer_type, current_balance, credit_limit")
+      .eq("is_active", true)
+
+    if (params.type && params.type !== "all") {
+      q = q.eq("customer_type", params.type)
+    }
+    if (params.locality && params.locality !== "all") {
+      q = q.eq("locality", params.locality)
+    }
+    if (params.search) {
+      q = q.or(
+        `commercial_name.ilike.%${params.search}%,contact_name.ilike.%${params.search}%,code.ilike.%${params.search}%`,
+      )
+    }
+    if (params.balance === "debt") {
+      q = q.gt("current_balance", 0)
+    } else if (params.balance === "credit") {
+      q = q.lt("current_balance", 0)
+    } else if (params.balance === "zero") {
+      q = q.or("current_balance.eq.0,current_balance.is.null")
+    }
+    return q.order("commercial_name", { ascending: true })
   }
-  if (params.search) {
-    reportQuery = reportQuery.or(
-      `commercial_name.ilike.%${params.search}%,contact_name.ilike.%${params.search}%,code.ilike.%${params.search}%`,
-    )
-  }
-  if (params.balance === "debt") {
-    reportQuery = reportQuery.gt("current_balance", 0)
-  } else if (params.balance === "credit") {
-    reportQuery = reportQuery.lt("current_balance", 0)
-  } else if (params.balance === "zero") {
-    reportQuery = reportQuery.or("current_balance.eq.0,current_balance.is.null")
-  }
 
-  const { data: customersForReport } = await reportQuery.order("commercial_name", { ascending: true })
+  const customersForReport = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+    buildReportQuery().range(rangeFrom, rangeTo),
+  )
 
   const reportFilterParts = [
     params.type && params.type !== "all" ? `Tipo: ${params.type === "mayorista" ? "Mayorista" : "Minorista"}` : null,
+    params.locality && params.locality !== "all" ? `Localidad: ${params.locality}` : null,
     params.balance === "debt" ? "Solo con deuda" : params.balance === "credit" ? "Solo saldo a favor" : params.balance === "zero" ? "Solo sin saldo" : null,
     params.search ? `Búsqueda: "${params.search}"` : null,
   ].filter(Boolean)
@@ -242,6 +276,19 @@ export default async function AdminCuentasCorrientesPage({
                       <SelectItem value="all">Todos los tipos</SelectItem>
                       <SelectItem value="minorista">Minorista</SelectItem>
                       <SelectItem value="mayorista">Mayorista</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select name="locality" defaultValue={params.locality || "all"}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Localidad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las localidades</SelectItem>
+                      {localities.map((loc) => (
+                        <SelectItem key={loc} value={loc}>
+                          {loc}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Select name="balance" defaultValue={params.balance || "all"}>
