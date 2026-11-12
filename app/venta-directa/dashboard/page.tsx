@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createDirectSalesService } from "@/lib/services/directSalesService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus } from "lucide-react"
+import { Plus, BarChart3 } from "lucide-react"
 import { DashboardKpis } from "@/components/venta-directa/dashboard-kpis"
 import { SalesTable } from "@/components/venta-directa/sales-table"
 
@@ -31,12 +31,20 @@ export default async function VentaDirectaDashboard() {
             </span>
           </p>
         </div>
-        <Link href="/venta-directa/ventas/nueva">
-          <Button size="lg">
-            <Plus className="h-4 w-4 mr-1" />
-            Nueva venta
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/venta-directa/estadisticas">
+            <Button variant="outline" size="lg">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Estadísticas
+            </Button>
+          </Link>
+          <Link href="/venta-directa/ventas/nueva">
+            <Button size="lg">
+              <Plus className="h-4 w-4 mr-1" />
+              Nueva venta
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <DashboardKpis sales={allSales} />

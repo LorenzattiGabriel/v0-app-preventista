@@ -8,6 +8,7 @@ import { FinancialReport } from "@/components/admin/financial-report"
 import { DriverStats } from "@/components/admin/driver-stats"
 import { ChannelsReport } from "@/components/admin/channels-report"
 import { ExpensesReport } from "@/components/admin/expenses-report"
+import { VentaDirectaReport } from "@/components/admin/venta-directa-report"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -17,7 +18,7 @@ import { subMonths, startOfMonth, endOfMonth } from "date-fns"
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>
+  searchParams: Promise<{ from?: string; to?: string; seller?: string }>
 }) {
   const params = await searchParams
 
@@ -42,7 +43,7 @@ export default async function ReportsPage({
 
       <Tabs defaultValue="orders" className="space-y-6">
         <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-          <TabsList className="grid grid-cols-7 min-w-[680px] w-full">
+          <TabsList className="grid grid-cols-8 min-w-[780px] w-full">
             <TabsTrigger value="orders" className="text-xs sm:text-sm">Pedidos</TabsTrigger>
             <TabsTrigger value="delivery" className="text-xs sm:text-sm">Entregas</TabsTrigger>
             <TabsTrigger value="drivers" className="text-xs sm:text-sm">Repartidores</TabsTrigger>
@@ -50,6 +51,7 @@ export default async function ReportsPage({
             <TabsTrigger value="financial" className="text-xs sm:text-sm">Financiero</TabsTrigger>
             <TabsTrigger value="expenses" className="text-xs sm:text-sm">Egresos</TabsTrigger>
             <TabsTrigger value="channels" className="text-xs sm:text-sm">Canales</TabsTrigger>
+            <TabsTrigger value="venta-directa" className="text-xs sm:text-sm">Venta Directa</TabsTrigger>
           </TabsList>
         </div>
 
@@ -92,6 +94,12 @@ export default async function ReportsPage({
         <TabsContent value="channels" className="space-y-6">
           <Suspense fallback={<ReportSkeleton />}>
             <ChannelsReport startDate={fromDate} endDate={toDate} />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="venta-directa" className="space-y-6">
+          <Suspense fallback={<ReportSkeleton />}>
+            <VentaDirectaReport startDate={fromDate} endDate={toDate} sellerId={params.seller} />
           </Suspense>
         </TabsContent>
       </Tabs>

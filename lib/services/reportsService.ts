@@ -74,6 +74,46 @@ export interface DeliveryReportData {
   avgRating: number
 }
 
+// Balance financiero real de repartos: se arma desde route_cash_closures (el
+// arqueo que hace el repartidor al cerrar la ruta), no desde orders — es la
+// plata que efectivamente se registró como cobrada, con su propio desglose
+// por método de pago, en vez de estimarla sumando totales de pedidos.
+export interface DeliveryBalanceTotals {
+  totalRoutes: number
+  totalExpected: number
+  totalCollected: number
+  debtCollected: number
+  difference: number
+  cash: number
+  transfer: number
+  card: number
+  cheque: number
+  account: number
+  other: number
+}
+
+export interface DeliveryBalanceByDriver {
+  driverId: string
+  driverName: string
+  routes: number
+  expected: number
+  collected: number
+  debtCollected: number
+  difference: number
+}
+
+export interface DeliveryBalanceMonthly {
+  month: string
+  expected: number
+  collected: number
+}
+
+export interface DeliveryBalanceReportData {
+  totals: DeliveryBalanceTotals
+  byDriver: DeliveryBalanceByDriver[]
+  monthlyTrend: DeliveryBalanceMonthly[]
+}
+
 export interface DriverPerformance {
   driverId: string
   driverName: string
@@ -380,6 +420,113 @@ class ReportsService {
       },
       driverPerformance,
     }
+  }
+
+  /**
+   * Balance financiero real de repartos, armado desde route_cash_closures
+   * (el arqueo que hace el repartidor al cerrar la ruta) filtrado por
+   * closure_date. Incluye totales, desglose por método de pago, ranking por
+   * repartidor y tendencia mensual (últimos 6 meses terminando en endDate).
+   */
+  async getDeliveryBalanceReport(startDate: Date, endDate: Date): Promise<DeliveryBalanceReportData> {
+    const from = formatDateLocal(startDate)
+    const to = formatDateLocal(endDate)
+
+    const closures = await fetchAllRows(({ from: rangeFrom, to: rangeTo }) =>
+      this.supabase
+        .from("route_cash_closures")
+        .select(
+          `route_id, driver_id, total_expected, total_collected, total_difference,
+           route_collected, debt_collected,
+           cash_collected, transfer_collected, card_collected,
+           cheque_collected, account_collected, other_collected,
+           closure_date,
+           driver:profiles!route_cash_closures_driver_id_fkey ( full_name )`,
+        )
+        .gte("closure_date", from)
+        .lte("closure_date", to)
+        .range(rangeFrom, rangeTo),
+    )
+
+    const totals: DeliveryBalanceTotals = {
+      totalRoutes: closures.length,
+      totalExpected: 0,
+      totalCollected: 0,
+      debtCollected: 0,
+      difference: 0,
+      cash: 0,
+      transfer: 0,
+      card: 0,
+      cheque: 0,
+      account: 0,
+      other: 0,
+    }
+
+    const byDriverMap = new Map<string, DeliveryBalanceByDriver>()
+
+    for (const c of closures as any[]) {
+      // route_collected no existe en cierres previos a la migración
+      // add_debt_collection_to_cash_closure: ahí todo lo cobrado fue de ruta.
+      const collected = Number(c.route_collected ?? c.total_collected ?? 0)
+      const expected = Number(c.total_expected || 0)
+      const debtCollected = Number(c.debt_collected || 0)
+
+      totals.totalExpected += expected
+      totals.totalCollected += collected
+      totals.debtCollected += debtCollected
+      totals.difference += Number(c.total_difference || 0)
+      totals.cash += Number(c.cash_collected || 0)
+      totals.transfer += Number(c.transfer_collected || 0)
+      totals.card += Number(c.card_collected || 0)
+      totals.cheque += Number(c.cheque_collected || 0)
+      totals.account += Number(c.account_collected || 0)
+      totals.other += Number(c.other_collected || 0)
+
+      const driverId = c.driver_id as string
+      const existing = byDriverMap.get(driverId) || {
+        driverId,
+        driverName: c.driver?.full_name || "Sin nombre",
+        routes: 0,
+        expected: 0,
+        collected: 0,
+        debtCollected: 0,
+        difference: 0,
+      }
+      existing.routes += 1
+      existing.expected += expected
+      existing.collected += collected
+      existing.debtCollected += debtCollected
+      existing.difference += Number(c.total_difference || 0)
+      byDriverMap.set(driverId, existing)
+    }
+
+    const byDriver = Array.from(byDriverMap.values()).sort((a, b) => b.collected - a.collected)
+
+    // Tendencia mensual: últimos 6 meses terminando en endDate
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    const monthlyMap = new Map<string, { expected: number; collected: number }>()
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = new Date(endDate)
+      monthDate.setMonth(monthDate.getMonth() - i)
+      const key = `${monthNames[monthDate.getMonth()]} ${monthDate.getFullYear().toString().slice(-2)}`
+      monthlyMap.set(key, { expected: 0, collected: 0 })
+    }
+
+    for (const c of closures as any[]) {
+      const d = new Date(c.closure_date)
+      const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`
+      const bucket = monthlyMap.get(key)
+      if (!bucket) continue // fuera de los últimos 6 meses, no se grafica
+      bucket.expected += Number(c.total_expected || 0)
+      bucket.collected += Number(c.route_collected ?? c.total_collected ?? 0)
+    }
+
+    const monthlyTrend: DeliveryBalanceMonthly[] = Array.from(monthlyMap.entries()).map(([month, v]) => ({
+      month,
+      ...v,
+    }))
+
+    return { totals, byDriver, monthlyTrend }
   }
 
   async getPerformanceReport(startDate: Date, endDate: Date): Promise<PerformanceReportData> {
