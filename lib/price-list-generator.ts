@@ -189,7 +189,11 @@ export async function generatePriceListPDF(
       doc.text(singleColHeader, colSingle, yy + 4.5, { align: "right" })
     }
     doc.setTextColor(0)
-    return yy + 8
+    // La barra del header mide 6.5mm (yy a yy+6.5). La cebra de cada fila se
+    // dibuja 3.5mm *arriba* de su baseline (ver loop de filas) para quedar
+    // centrada — con solo +8 acá, la cebra de la primera fila arrancaba en
+    // yy+4.5, pisando 2mm del header y arruinando el texto de las columnas.
+    return yy + 10.5
   }
 
   y = drawTableHeader(y)

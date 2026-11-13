@@ -107,7 +107,11 @@ export async function generateRouteSheetPDF(
     doc.text("Cliente / Dirección", colCustomer, yy + 4.5)
     doc.text("Importe", colTotal, yy + 4.5, { align: "right" })
     doc.setTextColor(0)
-    return yy + 8
+    // La barra del header mide 6.5mm (yy a yy+6.5). La cebra de cada fila se
+    // dibuja 4.5mm *arriba* de su baseline (ver loop de filas) para quedar
+    // centrada — con solo +8 acá, la cebra de la primera fila arrancaba en
+    // yy+3.5, pisando 3mm del header y arruinando el texto de las columnas.
+    return yy + 11.5
   }
 
   y = drawTableHeader(y)
