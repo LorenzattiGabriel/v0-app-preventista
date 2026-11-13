@@ -1,9 +1,11 @@
-// Integración con la API pública del BCRA (sin autenticación) para detectar
-// cheques rechazados asociados a un CUIT/CUIL/CDI.
-// Base: https://api.bcra.gob.ar — confirmado contra la API real:
+// Integración con la API pública del BCRA (sin autenticación) para un
+// CUIT/CUIL/CDI: cheques rechazados y situación crediticia (Central de
+// Deudores). Base: https://api.bcra.gob.ar — ambos endpoints confirmados
+// contra la API real:
 //   GET /centraldedeudores/v1.0/Deudas/ChequesRechazados/{identificacion}
+//   GET /centraldedeudores/v1.0/Deudas/{identificacion}
 //   Sin registros → {"status":404,"errorMessages":[...]}
-//   Con registros → {"status":200,"results":{identificacion,denominacion,causales:[...]}}
+//   Con registros → {"status":200,"results":{...}}
 // Siempre llamar desde el server (nunca desde el browser): es una API externa,
 // no tiene CORS pensado para esto y no hay por qué exponer la IP del cliente.
 
@@ -45,6 +47,44 @@ export interface BcraEntidad {
 
 export type BcraChequesLookup =
   | { found: true; data: ChequesRechazadosResult }
+  | { found: false }
+
+// Situación crediticia (Central de Deudores) — códigos estándar del BCRA.
+export const SITUACION_LABELS: Record<number, string> = {
+  1: "Situación normal",
+  2: "Riesgo bajo (seguimiento especial)",
+  3: "Riesgo medio (con problemas)",
+  4: "Riesgo alto (alto riesgo de insolvencia)",
+  5: "Irrecuperable",
+}
+
+export interface DeudaEntidad {
+  entidad: string
+  situacion: number
+  fechaSit1: string
+  monto: number
+  diasAtrasoPago: number
+  refinanciaciones: boolean
+  recategorizacionOblig: boolean
+  situacionJuridica: boolean
+  irrecDisposicionTecnica: boolean
+  enRevision: boolean
+  procesoJud: boolean
+}
+
+export interface DeudaPeriodo {
+  periodo: string
+  entidades: DeudaEntidad[]
+}
+
+export interface DeudasResult {
+  identificacion: number
+  denominacion: string
+  periodos: DeudaPeriodo[]
+}
+
+export type BcraDeudasLookup =
+  | { found: true; data: DeudasResult }
   | { found: false }
 
 export class BcraApiError extends Error {
@@ -101,6 +141,40 @@ export async function getChequesRechazados(cuitRaw: string): Promise<BcraCheques
   }
 
   return { found: true, data: body.results as ChequesRechazadosResult }
+}
+
+/**
+ * Situación crediticia (Central de Deudores del Sistema Financiero) para un
+ * CUIT/CUIL/CDI — en qué entidades tiene deuda, situación 1-5, monto, días
+ * de atraso. Misma semántica de "found: false" que getChequesRechazados.
+ */
+export async function getDeudas(cuitRaw: string): Promise<BcraDeudasLookup> {
+  const cuit = normalizeCuit(cuitRaw)
+  if (!isValidCuit(cuit)) {
+    throw new BcraApiError(`CUIT/CUIL inválido: "${cuitRaw}" (debe tener 11 dígitos)`)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`${BCRA_BASE_URL}/centraldedeudores/v1.0/Deudas/${cuit}`, { cache: "no-store" })
+  } catch (err) {
+    throw new BcraApiError("No se pudo conectar con la API del BCRA. Probá de nuevo en un momento.")
+  }
+
+  if (res.status === 404) {
+    return { found: false }
+  }
+
+  if (!res.ok) {
+    throw new BcraApiError(`La API del BCRA respondió con un error (status ${res.status}).`, res.status)
+  }
+
+  const body = await res.json()
+  if (!body?.results) {
+    return { found: false }
+  }
+
+  return { found: true, data: body.results as DeudasResult }
 }
 
 let entidadesCache: { at: number; data: BcraEntidad[] } | null = null
