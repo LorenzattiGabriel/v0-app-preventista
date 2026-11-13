@@ -85,9 +85,14 @@ export function BcraChequesCheck({ initialCuit, label = "Verificar en BCRA" }: P
       )}
 
       {result.state === "clean" && (
-        <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
-          <ShieldCheck className="h-4 w-4" />
-          Sin cheques rechazados registrados en el BCRA
+        <div className="flex items-start gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 p-3">
+          <ShieldCheck className="h-5 w-5 text-green-700 dark:text-green-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-green-700 dark:text-green-400">Sin novedades</p>
+            <p className="text-xs text-green-700/80 dark:text-green-400/80">
+              No tiene cheques rechazados registrados en el BCRA
+            </p>
+          </div>
         </div>
       )}
 
