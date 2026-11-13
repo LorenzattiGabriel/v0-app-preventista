@@ -47,9 +47,18 @@ export async function generateAccountsReportPDF(
     doc.addImage(logoBase64, fmt, ml, y, 20, 20)
   }
 
+  // El título refleja si hay un filtro activo — antes decía siempre
+  // "Reporte General" aunque se hubiera filtrado por localidad/tipo/saldo,
+  // lo que hacía parecer que el PDF ignoraba el filtro aunque los datos de
+  // adentro sí estuvieran filtrados.
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
-  doc.text("Reporte General de Cuentas Corrientes", pageW / 2, y + 6, { align: "center" })
+  doc.text(
+    filterLabel ? "Reporte de Cuentas Corrientes (filtrado)" : "Reporte General de Cuentas Corrientes",
+    pageW / 2,
+    y + 6,
+    { align: "center" },
+  )
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8)
@@ -67,10 +76,12 @@ export async function generateAccountsReportPDF(
   )
 
   if (filterLabel) {
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(7.5)
-    doc.setTextColor(110)
-    doc.text(filterLabel, pageW / 2, y + 22, { align: "center" })
+    // Más visible que antes (7.5pt gris pasaba desapercibido): el filtro
+    // aplicado es la parte más importante de este reporte cuando existe.
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(180, 40, 40)
+    doc.text(`Filtros: ${filterLabel}`, pageW / 2, y + 22, { align: "center" })
   }
   doc.setTextColor(0)
 

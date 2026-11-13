@@ -27,6 +27,11 @@ import { PrintAccountsReportButton } from "@/components/admin/print-accounts-rep
 import { fetchAllRows } from "@/lib/utils/supabase-pagination"
 import { DEBT_AGE_OPTIONS, parseDebtAgeDays } from "@/lib/services/customerStatsService"
 
+// Evita cualquier ambigüedad de cacheo entre filtros distintos (?locality=X
+// vs sin filtro): esta página siempre se recalcula por request.
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const PER_PAGE = 25
 
 const toNum = (v: any) => {
