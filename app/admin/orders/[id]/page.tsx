@@ -16,6 +16,7 @@ import {
   Star,
   History,
   CircleDollarSign,
+  Receipt,
 } from "lucide-react"
 import { CancelOrderButton } from "@/components/admin/cancel-order-button"
 import { VoidSaleButton } from "@/components/admin/void-sale-button"
@@ -418,6 +419,17 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                           <p className="text-xs text-yellow-600">
                             Quedó deuda: ${(Number(order.total || 0) - Number(order.amount_paid || 0)).toFixed(2)}
                           </p>
+                        )}
+                        {order.transfer_proof_url && (
+                          <a
+                            href={order.transfer_proof_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-blue-600 hover:underline text-xs"
+                          >
+                            <Receipt className="h-3 w-3" />
+                            Ver comprobante de transferencia
+                          </a>
                         )}
                       </>
                     ) : (

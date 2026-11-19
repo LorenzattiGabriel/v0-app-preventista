@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CheckCircle, Clock, Info, MapPin, Package, Search } from "lucide-react"
+import { CheckCircle, Clock, Info, MapPin, Package, Receipt, Search } from "lucide-react"
 
 type StopFilter = "pendientes" | "entregados" | "todos"
 
@@ -209,6 +209,20 @@ export function RouteStopsList({ orders, statusLabels }: RouteStopsListProps) {
                             className="text-blue-600 hover:underline inline-block"
                           >
                             📸 Ver foto de entrega
+                          </a>
+                        )}
+                        {/* Comprobante de transferencia: mismo dato que ve el admin en
+                            la cuenta corriente del cliente (orders.transfer_proof_url),
+                            antes solo se mostraba ahí y no en el resumen de la ruta. */}
+                        {order.transfer_proof_url && (
+                          <a
+                            href={order.transfer_proof_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-blue-600 hover:underline"
+                          >
+                            <Receipt className="h-3 w-3" />
+                            Ver comprobante de transferencia
                           </a>
                         )}
                       </div>
