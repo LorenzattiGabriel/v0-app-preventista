@@ -4,7 +4,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { createDirectSalesService } from "@/lib/services/directSalesService"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trophy, Package } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Trophy, Package, Wallet, ArrowRight } from "lucide-react"
+import Link from "next/link"
 import { SaleKpiCards } from "@/components/venta-directa/sale-kpi-cards"
 import { VentaDirectaTrendChart } from "./venta-directa-trend-chart"
 import { ReportDateFilter } from "./report-date-filter"
@@ -42,6 +44,29 @@ export async function VentaDirectaReport({ startDate, endDate, sellerId }: Props
 
   return (
     <div className="space-y-6">
+      {/* Esto es un reporte de tendencias/rankings, no un cierre de caja del
+          día — el cierre (total a rendir, desglose por método de pago, por
+          vendedor) está en su propia pantalla, pensada para eso. */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="flex items-center justify-between flex-wrap gap-3 pt-6">
+          <div className="flex items-center gap-3">
+            <Wallet className="h-5 w-5 text-primary shrink-0" />
+            <div>
+              <p className="font-medium">¿Buscás cerrar la caja de hoy?</p>
+              <p className="text-sm text-muted-foreground">
+                Total del día, desglose por método de pago y listado de ventas, para cerrar caja.
+              </p>
+            </div>
+          </div>
+          <Button asChild>
+            <Link href="/admin/venta-directa/cierre-caja">
+              Ir a Cierre de Caja
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-4">
