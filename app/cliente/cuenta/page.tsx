@@ -19,6 +19,7 @@ const movementTypeLabels: Record<string, string> = {
   AJUSTE_CREDITO: "Ajuste a favor",
   AJUSTE_DEBITO: "Ajuste en contra",
   NOTA_CREDITO: "Nota de crédito",
+  NOTA_DEBITO: "Nota de débito",
   PAGO_ADELANTADO: "Pago adelantado",
 }
 

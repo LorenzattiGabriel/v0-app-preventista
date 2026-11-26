@@ -16,6 +16,8 @@ import Link from "next/link"
 import { ArrowLeft, ChevronLeft, ChevronRight, Wallet, Store } from "lucide-react"
 import { getLocalDateString } from "@/lib/utils/dates"
 import { CierreCajaPrintButton } from "@/components/admin/cierre-caja-print-button"
+import { QuickCollectDebtDialog } from "@/components/admin/quick-collect-debt-dialog"
+import { Badge } from "@/components/ui/badge"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -75,6 +77,30 @@ export default async function CierreCajaVentaDirectaPage({
     ? await supabase.from("profiles").select("id, full_name").in("id", sellerIds)
     : { data: [] as { id: string; full_name: string }[] }
   const nameById = new Map((sellerProfiles || []).map((p) => [p.id, p.full_name]))
+
+  // Deuda pendiente real por pedido (order_payments.balance_due), para poder
+  // cobrar una venta "a cuenta corriente" directo desde esta pantalla cuando
+  // en realidad el cliente ya pagó, sin salir a su cuenta corriente.
+  const saleIds = sales.map((s) => s.id)
+  const { data: paymentsRaw } = saleIds.length
+    ? await supabase.from("order_payments").select("order_id, balance_due").in("order_id", saleIds)
+    : { data: [] as { order_id: string; balance_due: number }[] }
+  const balanceDueByOrder = new Map(
+    (paymentsRaw || []).map((p) => [p.order_id, Number(p.balance_due) || 0]),
+  )
+
+  // Monto de la venta que fue "a cuenta corriente" (puede ser todo o una parte,
+  // si hubo pago mixto). Misma lógica que el desglose de KPIs.
+  const accountPortion = (s: (typeof sales)[number]): number => {
+    const lines = Array.isArray(s.payment_methods_json) && s.payment_methods_json.length > 0
+      ? s.payment_methods_json
+      : s.payment_method
+        ? [{ method: s.payment_method, amount: s.total }]
+        : []
+    return lines
+      .filter((l: any) => l.method === "Cuenta Corriente")
+      .reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0)
+  }
 
   const paymentBreakdown = [...kpis.paymentBreakdown].sort((a, b) => b.amount - a.amount)
 
@@ -251,7 +277,26 @@ export default async function CierreCajaVentaDirectaPage({
                           </TableCell>
                           <TableCell>{s.customer?.commercial_name || "Consumidor final"}</TableCell>
                           <TableCell>{s.created_by ? nameById.get(s.created_by) || "—" : "—"}</TableCell>
-                          <TableCell>{s.payment_method || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span>{s.payment_method || "—"}</span>
+                              {accountPortion(s) > 0.005 && s.customer?.id && (
+                                (balanceDueByOrder.get(s.id) ?? 0) > 0.005 ? (
+                                  <QuickCollectDebtDialog
+                                    orderId={s.id}
+                                    orderNumber={s.order_number}
+                                    customerId={s.customer.id}
+                                    customerName={s.customer?.commercial_name || "Consumidor final"}
+                                    balanceDue={balanceDueByOrder.get(s.id) ?? accountPortion(s)}
+                                  />
+                                ) : (
+                                  <Badge variant="outline" className="w-fit text-[10px] text-green-600 border-green-300 dark:text-green-400 dark:border-green-800">
+                                    Cobrado
+                                  </Badge>
+                                )
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right font-medium">{fmtMoney(s.total)}</TableCell>
                         </TableRow>
                       ))}

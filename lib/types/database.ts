@@ -61,6 +61,7 @@ export type AccountMovementType =
   | "AJUSTE_CREDITO"
   | "AJUSTE_DEBITO"
   | "NOTA_CREDITO"
+  | "NOTA_DEBITO"
   | "PAGO_ADELANTADO"
 
 export type PaymentStatus = "PENDIENTE" | "PAGO_PARCIAL" | "PAGADO" | "VENCIDO"
@@ -417,6 +418,20 @@ export interface CreditNote {
   created_by?: string | null
   created_at: string
   items?: CreditNoteItem[]
+}
+
+/** Nota de débito: aumenta la deuda del cliente con un motivo documentado (ej: cheque rechazado). */
+export interface DebitNote {
+  id: string
+  debit_note_number: string
+  customer_id: string
+  order_id?: string | null
+  reason: string
+  amount: number
+  proof_url?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at: string
 }
 
 export interface RouteCashClosure {

@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import { RegisterPaymentDialog } from "@/components/admin/register-payment-dialog"
 import { CreditNoteDialog } from "@/components/admin/credit-note-dialog"
+import { DebitNoteDialog } from "@/components/admin/debit-note-dialog"
 import { AccountsPagination } from "@/components/admin/accounts-pagination"
 import { PrintAccountStatementButton } from "@/components/admin/print-account-statement-button"
 import { BcraChequesCheck } from "@/components/admin/bcra-cheques-check"
@@ -229,6 +230,22 @@ export default async function AdminCustomerDetailPage({
     })),
   }))
 
+  // Pedidos del cliente para vincular opcionalmente una nota de débito (ej:
+  // cheque rechazado que corresponde a tal pedido). No hace falta que estén
+  // entregados: a diferencia de la NC, la ND no depende de devolver productos.
+  const { data: ordersForDebitNoteRaw } = await supabase
+    .from("orders")
+    .select("id, order_number")
+    .eq("customer_id", customer.id)
+    .neq("status", "CANCELADO")
+    .order("created_at", { ascending: false })
+    .limit(50)
+
+  const ordersForDebitNote = (ordersForDebitNoteRaw || []).map((o) => ({
+    id: o.id,
+    order_number: o.order_number,
+  }))
+
   // Estadísticas sobre TODOS los pedidos del cliente.
   // ⚠️ No calcularlas sobre `orders`: esa lista está limitada a los últimos 20
   // para mostrar, así que un cliente con más pedidos mostraba "Total Pedidos 20"
@@ -286,6 +303,7 @@ export default async function AdminCustomerDetailPage({
     AJUSTE_CREDITO: "Ajuste a favor",
     AJUSTE_DEBITO: "Ajuste en contra",
     NOTA_CREDITO: "Nota de crédito",
+    NOTA_DEBITO: "Nota de débito",
     PAGO_ADELANTADO: "Pago adelantado",
   } as const
 
@@ -826,7 +844,7 @@ export default async function AdminCustomerDetailPage({
                   )}
 
                   {/* Nota de crédito / devolución (basada en un pedido entregado) */}
-                  <div className="pt-2 border-t">
+                  <div className="pt-2 border-t flex flex-wrap gap-2">
                     <CreditNoteDialog
                       customerId={customer.id}
                       customerName={customer.commercial_name}
@@ -834,6 +852,13 @@ export default async function AdminCustomerDetailPage({
                       products={productsForCreditNote || []}
                       deliveredOrders={deliveredOrdersForCreditNote}
                       triggerLabel="Nota de crédito"
+                    />
+                    <DebitNoteDialog
+                      customerId={customer.id}
+                      customerName={customer.commercial_name}
+                      customer={customer}
+                      orders={ordersForDebitNote}
+                      triggerLabel="Nota de débito"
                     />
                   </div>
                 </CardContent>

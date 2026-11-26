@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { NavButton } from "@/components/shared/action-button"
 import Link from "next/link"
-import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock, Target, Landmark, Store } from "lucide-react"
+import { BarChart3, MapPin, Package, Truck, Users, FileText, Building2, Settings, AlertTriangle, Receipt, Wallet, ArrowDownRight, Tags, Users2, Clock, Target, Landmark, Store, FilePlus2 } from "lucide-react"
 import { createDelayedOrdersService } from "@/lib/services/delayedOrdersService"
 import { createProductsService } from "@/lib/services/productsService"
 import { createCustomerStatsService, DEFAULT_INACTIVE_DAYS, DEFAULT_OLD_DEBT_DAYS } from "@/lib/services/customerStatsService"
@@ -429,6 +429,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <NavButton href="/admin/credit-notes" variant="outline" className="w-full bg-transparent">
                     <Receipt className="mr-2 h-4 w-4" />
                     Notas de Crédito
+                  </NavButton>
+                <NavButton href="/admin/debit-notes" variant="outline" className="w-full bg-transparent">
+                    <FilePlus2 className="mr-2 h-4 w-4" />
+                    Notas de Débito
                   </NavButton>
               </CardContent>
             </Card>

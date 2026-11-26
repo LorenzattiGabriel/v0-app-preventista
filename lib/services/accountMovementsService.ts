@@ -165,7 +165,7 @@ export class AccountMovementsService {
     const { customerId, movementType, description, amount, orderId, routeId, createdBy, notes, proofUrl } = params
 
     // Determinar si es débito o crédito según el tipo
-    const isDebit = ["DEUDA_PEDIDO", "AJUSTE_DEBITO"].includes(movementType)
+    const isDebit = ["DEUDA_PEDIDO", "AJUSTE_DEBITO", "NOTA_DEBITO"].includes(movementType)
     const debitAmount = isDebit ? Number(amount) || 0 : 0
     const creditAmount = isDebit ? 0 : Number(amount) || 0
 
